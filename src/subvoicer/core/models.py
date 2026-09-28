@@ -81,6 +81,12 @@ class OcrResult:
 
 
 @dataclass(frozen=True, slots=True)
+class OcrCapabilities:
+    languages: tuple[str, ...]
+    returns_confidence: bool  # False -> every line reports confidence 1.0
+
+
+@dataclass(frozen=True, slots=True)
 class Voice:
     id: str
     gender: Gender
