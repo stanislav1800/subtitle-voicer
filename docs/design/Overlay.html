@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Отладочный оверлей</title>
+<link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@500;600;700&amp;family=Golos+Text:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0e141b;font-family:'Golos Text',system-ui,sans-serif;color:#e6edf3;-webkit-font-smoothing:antialiased}
+</style>
+</head>
+<body>
+<div style="width: 1440px; height: 810px; position: relative; overflow: hidden; background: #0a0d14">
+<div aria-hidden="true" style="position: absolute; left: 0; top: 0; width: 1440px; height: 810px; background: linear-gradient(180deg, #121829 0%, #221a36 50%, #3a2140 78%, #1a1220 100%)"></div>
+<div aria-hidden="true" style="position: absolute; left: 0; bottom: 0; width: 180px; height: 520px; background: #0b0f18"></div>
+<div aria-hidden="true" style="position: absolute; left: 150px; bottom: 0; width: 120px; height: 380px; background: #0e1320"></div>
+<div aria-hidden="true" style="position: absolute; left: 250px; bottom: 0; width: 200px; height: 600px; background: #090d15"></div>
+<div aria-hidden="true" style="position: absolute; left: 430px; bottom: 0; width: 140px; height: 440px; background: #0d1220"></div>
+<div aria-hidden="true" style="position: absolute; left: 560px; bottom: 0; width: 260px; height: 330px; background: #0a0e17"></div>
+<div aria-hidden="true" style="position: absolute; left: 800px; bottom: 0; width: 150px; height: 560px; background: #0c111c"></div>
+<div aria-hidden="true" style="position: absolute; left: 930px; bottom: 0; width: 220px; height: 420px; background: #090d15"></div>
+<div aria-hidden="true" style="position: absolute; left: 1130px; bottom: 0; width: 130px; height: 640px; background: #0d1220"></div>
+<div aria-hidden="true" style="position: absolute; left: 1250px; bottom: 0; width: 190px; height: 470px; background: #0a0e17"></div>
+<div aria-hidden="true" style="position: absolute; left: 285px; bottom: 430px; width: 90px; height: 6px; background: #ff4fa3; opacity: 0.8"></div>
+<div aria-hidden="true" style="position: absolute; left: 840px; bottom: 390px; width: 70px; height: 4px; background: #2fe0d0; opacity: 0.8"></div>
+<div aria-hidden="true" style="position: absolute; left: 1160px; bottom: 520px; width: 60px; height: 5px; background: #ffb347; opacity: 0.8"></div>
+<div aria-hidden="true" style="position: absolute; left: 470px; bottom: 300px; width: 40px; height: 90px; background: #ff4fa3; opacity: 0.25"></div>
+<div aria-hidden="true" style="position: absolute; left: 0; bottom: 0; width: 1440px; height: 140px; background: linear-gradient(180deg, rgba(5, 7, 11, 0) 0%, #05070b 100%)"></div>
+<div aria-hidden="true" style="position: absolute; left: 0; top: 686px; width: 1440px; text-align: center; font-size: 30px; font-weight: 500; text-shadow: 0 2px 4px #000000, 0 0 2px #000000"><span style="color: #ff8a5c">Джуди: </span><span style="color: #9ef3ff">Ви, ты вообще меня слушаешь?</span></div>
+
+<div style="position: absolute; left: 300px; top: 670px; width: 840px; height: 80px; box-sizing: border-box; border: 1px solid rgba(63, 180, 255, 0.7); border-radius: 3px">
+<span style="position: absolute; left: -1px; top: -22px; padding: 2px 8px; border-radius: 4px; background: rgba(11, 16, 22, 0.85); color: #8fd3ff; font-family: 'JetBrains Mono', monospace; font-size: 11px">dialog · SHOWN</span>
+</div>
+
+<div style="position: absolute; left: 20px; top: 20px; width: 340px; box-sizing: border-box; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; background: rgba(11, 16, 22, 0.86); border: 1px solid #2e3b4b; border-radius: 10px">
+<div style="display: flex; align-items: center; justify-content: space-between">
+<span style="font-family: 'Exo 2', sans-serif; font-weight: 700; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #cfd9e3">Subtitle Voicer · отладка</span>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #8fe0ad"><span style="width: 7px; height: 7px; border-radius: 50%; background: #5fd38d"></span>работает</span>
+</div>
+<div style="display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 5px 10px; font-family: 'JetBrains Mono', monospace; font-size: 12px">
+<span style="color: #7d8fa3">профиль</span><span>Cyberpunk 2077 · 16:9</span>
+<span style="color: #7d8fa3">зона</span><span>dialog · SHOWN</span>
+<span style="color: #7d8fa3">OCR</span><span>41 мс · 0.94</span>
+<span style="color: #7d8fa3">задержка</span><span style="color: #8fe0ad">560 мс</span>
+<span style="color: #7d8fa3">скорость</span><span>1.0×</span>
+</div>
+<div style="height: 1px; background: #263241"></div>
+<div style="display: flex; align-items: center; gap: 10px">
+<div aria-hidden="true" style="display: flex; align-items: center; gap: 3px; height: 20px">
+<span style="width: 3px; height: 8px; border-radius: 2px; background: #3fb4ff"></span>
+<span style="width: 3px; height: 16px; border-radius: 2px; background: #3fb4ff"></span>
+<span style="width: 3px; height: 11px; border-radius: 2px; background: #3fb4ff"></span>
+<span style="width: 3px; height: 19px; border-radius: 2px; background: #3fb4ff"></span>
+<span style="width: 3px; height: 7px; border-radius: 2px; background: #3fb4ff"></span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 2px; min-width: 0">
+<span style="font-size: 12px; color: #9fb0c2">Звучит: <span style="color: #e6edf3; font-weight: 600">Джуди</span> · Голос 06</span>
+<span style="font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Ви, ты вообще меня слушаешь?</span>
+</div>
+</div>
+</div>
+</div>
+</body>
+</html>

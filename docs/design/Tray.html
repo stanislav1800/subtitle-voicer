@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Меню трея и уведомление</title>
+<link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@500;600;700&amp;family=Golos+Text:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0e141b;font-family:'Golos Text',system-ui,sans-serif;color:#e6edf3;-webkit-font-smoothing:antialiased}
+button{font:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible{outline:2px solid #3fb4ff;outline-offset:2px}
+.tg{appearance:none;-webkit-appearance:none;width:40px;height:22px;border-radius:11px;background:#2e3b4b;position:relative;margin:0;cursor:pointer;flex-shrink:0}
+.tg::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#9fb0c2}
+.tg:checked{background:#3fb4ff}
+.tg:checked::after{left:21px;background:#0b1520}
+</style>
+</head>
+<body>
+<div style="width: 860px; height: 700px; box-sizing: border-box; position: relative; background: #0e141b">
+<div role="menu" aria-label="Subtitle Voicer" style="position: absolute; left: 24px; top: 24px; width: 310px; box-sizing: border-box; padding: 8px; display: flex; flex-direction: column; background: #171d25; border: 1px solid #2e3b4b; border-radius: 12px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5)">
+<div style="display: flex; align-items: center; gap: 10px; padding: 10px 10px 12px">
+<span style="width: 28px; height: 28px; border-radius: 7px; background: #3fb4ff; color: #0b1520; display: flex; align-items: center; justify-content: center; flex-shrink: 0"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M3 12h2M7 8v8M11 5v14M15 9v6M19 11v2"></path></svg></span>
+<div style="display: flex; flex-direction: column; gap: 2px">
+<span style="font-family: 'Exo 2', sans-serif; font-weight: 700; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase">Subtitle Voicer</span>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #9fb0c2"><span style="width: 7px; height: 7px; border-radius: 50%; background: #5fd38d"></span>Cyberpunk 2077</span>
+</div>
+</div>
+<div style="height: 1px; margin: 0 6px 6px; background: #263241"></div>
+<label for="tray-auto" role="menuitemcheckbox" aria-checked="true" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 10px; border-radius: 7px; font-size: 14px; cursor: pointer">Автоозвучка<input id="tray-auto" class="tg" type="checkbox" checked></label>
+<button type="button" role="menuitem" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 10px; border: 0; border-radius: 7px; background: transparent; color: #e6edf3; font-size: 14px; text-align: left">Повторить последнюю<span style="font-size: 12px; color: #7d8fa3">Ctrl+Alt+R</span></button>
+<button type="button" role="menuitem" aria-haspopup="menu" aria-expanded="true" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 10px; border: 0; border-radius: 7px; background: #1f2a37; color: #e6edf3; font-size: 14px; text-align: left">Последние реплики<svg style="color: #9fb0c2" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 6l6 6-6 6"></path></svg></button>
+<button type="button" role="menuitem" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 10px; border: 0; border-radius: 7px; background: transparent; color: #e6edf3; font-size: 14px; text-align: left">Настроить зоны<span style="font-size: 12px; color: #7d8fa3">Ctrl+Alt+Z</span></button>
+<div style="height: 1px; margin: 6px; background: #263241"></div>
+<button type="button" role="menuitem" style="display: flex; align-items: center; padding: 9px 10px; border: 0; border-radius: 7px; background: transparent; color: #e6edf3; font-size: 14px; text-align: left">Настройки…</button>
+<div style="height: 1px; margin: 6px; background: #263241"></div>
+<button type="button" role="menuitem" style="display: flex; align-items: center; padding: 9px 10px; border: 0; border-radius: 7px; background: transparent; color: #cfd9e3; font-size: 14px; text-align: left">Выход</button>
+</div>
+
+<div role="menu" aria-label="Последние реплики" style="position: absolute; left: 328px; top: 158px; width: 380px; box-sizing: border-box; padding: 6px; display: flex; flex-direction: column; background: #171d25; border: 1px solid #2e3b4b; border-radius: 10px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5)">
+
+<button type="button" role="menuitem" style="display: flex; align-items: center; gap: 8px; padding: 9px 10px; border: 0; border-radius: 7px; font-size: 13px; text-align: left; min-width: 0; color: #e6edf3; background: transparent"><span style="font-weight: 600; color: #cfd9e3; flex-shrink: 0">Джуди</span><span style="color: #9fb0c2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Ви, ты вообще меня слушаешь?</span></button>
+
+<button type="button" role="menuitem" style="display: flex; align-items: center; gap: 8px; padding: 9px 10px; border: 0; border-radius: 7px; font-size: 13px; text-align: left; min-width: 0; color: #e6edf3; background: transparent"><span style="font-weight: 600; color: #cfd9e3; flex-shrink: 0">Ви</span><span style="color: #9fb0c2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Прости, задумался. Что ты говорила про брейнданс?</span></button>
+
+<button type="button" role="menuitem" style="display: flex; align-items: center; gap: 8px; padding: 9px 10px; border: 0; border-radius: 7px; font-size: 13px; text-align: left; min-width: 0; color: #e6edf3; background: #1f2a37"><span style="font-weight: 600; color: #cfd9e3; flex-shrink: 0">Джонни</span><span style="color: #9fb0c2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Арасака ещё хуже, чем Милитех, пацан.</span></button>
+
+<button type="button" role="menuitem" style="display: flex; align-items: center; gap: 8px; padding: 9px 10px; border: 0; border-radius: 7px; font-size: 13px; text-align: left; min-width: 0; color: #e6edf3; background: transparent"><span style="font-weight: 600; color: #cfd9e3; flex-shrink: 0">Рассказчик</span><span style="color: #9fb0c2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Код от двери — 4417. Не забудь стереть сообщение.</span></button>
+
+<button type="button" role="menuitem" style="display: flex; align-items: center; gap: 8px; padding: 9px 10px; border: 0; border-radius: 7px; font-size: 13px; text-align: left; min-width: 0; color: #e6edf3; background: transparent"><span style="font-weight: 600; color: #cfd9e3; flex-shrink: 0">Панам</span><span style="color: #9fb0c2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Встретимся у заправки за городом.</span></button>
+
+</div>
+
+<div role="alert" style="position: absolute; left: 24px; bottom: 24px; width: 412px; box-sizing: border-box; padding: 16px; display: flex; flex-direction: column; gap: 12px; background: #1b232d; border: 1px solid #2e3b4b; border-radius: 12px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5)">
+<div style="display: flex; align-items: center; justify-content: space-between">
+<div style="display: flex; align-items: center; gap: 8px">
+<span style="width: 20px; height: 20px; border-radius: 5px; background: #3fb4ff; color: #0b1520; display: flex; align-items: center; justify-content: center"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M3 12h2M7 8v8M11 5v14M15 9v6M19 11v2"></path></svg></span>
+<span style="font-size: 12px; color: #9fb0c2">Subtitle Voicer</span>
+</div>
+<button type="button" aria-label="Закрыть уведомление" style="width: 28px; height: 28px; border: 0; border-radius: 6px; background: transparent; color: #7d8fa3; display: flex; align-items: center; justify-content: center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 4px">
+<span style="font-family: 'Exo 2', sans-serif; font-weight: 700; font-size: 16px">Похоже, это новая игра</span>
+<span style="font-size: 13px; line-height: 1.5; color: #cfd9e3"><span style="font-family: 'JetBrains Mono', monospace; color: #8fd3ff">stalker2.exe</span> — создать профиль, чтобы озвучивать её субтитры?</span>
+</div>
+<div style="display: flex; gap: 8px">
+<button type="button" style="flex-grow: 1; height: 38px; border-radius: 8px; border: 0; background: #3fb4ff; color: #0b1520; font-size: 14px; font-weight: 600">Создать профиль</button>
+<button type="button" style="flex-grow: 1; height: 38px; border-radius: 8px; border: 1px solid #2e3b4b; background: #263241; color: #e6edf3; font-size: 14px">Не спрашивать</button>
+</div>
+</div>
+</div>
+</body>
+</html>

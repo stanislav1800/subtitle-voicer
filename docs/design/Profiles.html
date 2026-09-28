@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Настройки — профили и голоса</title>
+<link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@500;600;700&amp;family=Golos+Text:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0e141b;font-family:'Golos Text',system-ui,sans-serif;color:#e6edf3;-webkit-font-smoothing:antialiased}
+a{color:#3fb4ff}a:hover{color:#8fd3ff}
+button{font:inherit;cursor:pointer}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #3fb4ff;outline-offset:2px}
+.sel{appearance:none;-webkit-appearance:none;width:100%;box-sizing:border-box;background:#121820;border:1px solid #2e3b4b;border-radius:8px;color:#e6edf3;padding:8px 30px 8px 10px;font:inherit;font-size:13px}
+</style>
+</head>
+<body>
+<div style="width: 1100px; height: 900px; display: flex; flex-direction: column; background: #171d25; overflow: hidden">
+<div style="height: 40px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 8px 0 16px; background: #0b1016; border-bottom: 1px solid #1c252f">
+<div style="display: flex; align-items: center; gap: 10px">
+<span style="width: 24px; height: 24px; border-radius: 6px; background: #3fb4ff; color: #0b1520; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M3 12h2M7 8v8M11 5v14M15 9v6M19 11v2"></path></svg></span>
+<span style="font-family: 'Exo 2', sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.06em; text-transform: uppercase">Subtitle Voicer</span>
+</div>
+<div style="display: flex; gap: 2px">
+<button type="button" aria-label="Свернуть" style="width: 40px; height: 32px; border: 0; background: transparent; color: #9fb0c2; border-radius: 6px; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"></path></svg></button>
+<button type="button" aria-label="Закрыть в трей" style="width: 40px; height: 32px; border: 0; background: transparent; color: #9fb0c2; border-radius: 6px; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+</div>
+</div>
+<div style="flex-grow: 1; display: flex; min-height: 0">
+<nav aria-label="Разделы настроек" style="width: 240px; flex-shrink: 0; box-sizing: border-box; padding: 20px 14px; background: #121820; border-right: 1px solid #1c252f; display: flex; flex-direction: column; gap: 4px">
+<a href="Main.html" style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 8px; color: #9fb0c2; text-decoration: none; font-size: 14px; font-weight: 500"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"></path><circle cx="15" cy="6" r="2"></circle><circle cx="9" cy="12" r="2"></circle><circle cx="17" cy="18" r="2"></circle></svg>Общие</a>
+<a href="Profiles.html" aria-current="page" style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 8px; background: #1f2a37; color: #e6edf3; text-decoration: none; font-size: 14px; font-weight: 600"><svg style="color: #3fb4ff" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="8" r="3.5"></circle><path d="M2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5"></path><path d="M16 4.5a3.5 3.5 0 0 1 0 7"></path><path d="M18 14.8c1.9.7 3.1 2.5 3.5 5.2"></path></svg>Профили и голоса</a>
+<a href="Hotkeys.html" style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 8px; color: #9fb0c2; text-decoration: none; font-size: 14px; font-weight: 500"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2.5" y="6" width="19" height="12" rx="2"></rect><path d="M6.5 10h.01M10.5 10h.01M14.5 10h.01M18 10h.01M7.5 14h9"></path></svg>Горячие клавиши</a>
+<div style="margin-top: auto; padding: 14px; border-radius: 10px; background: #1a222c; border: 1px solid #263241; display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; align-items: center; gap: 8px"><span style="width: 8px; height: 8px; border-radius: 50%; background: #5fd38d"></span><span style="font-size: 13px; font-weight: 600">Озвучка работает</span></div>
+<div style="font-size: 12px; color: #9fb0c2; line-height: 1.55">Профиль: Cyberpunk 2077<br>Раскладка 16:9 · 2560×1440</div>
+</div>
+</nav>
+<main style="flex-grow: 1; box-sizing: border-box; padding: 28px 32px; display: flex; gap: 20px; min-width: 0">
+<div style="width: 270px; flex-shrink: 0; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; align-items: flex-end; justify-content: space-between">
+<h1 style="margin: 0; font-family: 'Exo 2', sans-serif; font-weight: 700; font-size: 26px">Игры</h1>
+<button type="button" aria-label="Обновить список игр" style="width: 34px; height: 34px; border-radius: 8px; border: 1px solid #2e3b4b; background: transparent; color: #9fb0c2; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 11a8 8 0 0 0-14.5-4.5L4 8"></path><path d="M4 4v4h4"></path><path d="M4 13a8 8 0 0 0 14.5 4.5L20 16"></path><path d="M20 20v-4h-4"></path></svg></button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+
+<button type="button" aria-pressed="true" style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px; color: #e6edf3; width: 100%; box-sizing: border-box; border: 1px solid #3fb4ff; background: #1f2a37">
+<span style="width: 38px; height: 38px; flex-shrink: 0; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-family: 'Exo 2', sans-serif; font-weight: 700; font-size: 13px; background: #3a3020; color: #f0c674">CP</span>
+<span style="display: flex; flex-direction: column; gap: 3px; min-width: 0; text-align: left">
+<span style="font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Cyberpunk 2077</span>
+<span style="font-size: 11px; color: #8fe0ad">Настроено · 16:9 · Steam</span>
+</span>
+</button>
+
+<button type="button" aria-pressed="false" style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px; color: #e6edf3; width: 100%; box-sizing: border-box; border: 1px solid #263241; background: #1b232d">
+<span style="width: 38px; height: 38px; flex-shrink: 0; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-family: 'Exo 2', sans-serif; font-weight: 700; font-size: 13px; background: #243a2d; color: #8fe0ad">GTA</span>
+<span style="display: flex; flex-direction: column; gap: 3px; min-width: 0; text-align: left">
+<span style="font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Grand Theft Auto V</span>
+<span style="font-size: 11px; color: #8fe0ad">Настроено · 16:9</span>
+</span>
+</button>
+
+<button type="button" aria-pressed="false" style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px; color: #e6edf3; width: 100%; box-sizing: border-box; border: 1px solid #263241; background: #1b232d">
+<span style="width: 38px; height: 38px; flex-shrink: 0; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-family: 'Exo 2', sans-serif; font-weight: 700; font-size: 13px; background: #3a2433; color: #f3a6cf">W3</span>
+<span style="display: flex; flex-direction: column; gap: 3px; min-width: 0; text-align: left">
+<span style="font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">The Witcher 3</span>
+<span style="font-size: 11px; color: #f0c674">Не настроено · Steam</span>
+</span>
+</button>
+
+<button type="button" aria-pressed="false" style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px; color: #e6edf3; width: 100%; box-sizing: border-box; border: 1px solid #263241; background: #1b232d">
+<span style="width: 38px; height: 38px; flex-shrink: 0; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-family: 'Exo 2', sans-serif; font-weight: 700; font-size: 13px; background: #1d2f40; color: #8fd3ff">DE</span>
+<span style="display: flex; flex-direction: column; gap: 3px; min-width: 0; text-align: left">
+<span style="font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Disco Elysium</span>
+<span style="font-size: 11px; color: #f0c674">Не настроено · GOG</span>
+</span>
+</button>
+
+</div>
+<button type="button" style="display: flex; align-items: center; justify-content: center; gap: 6px; height: 38px; border-radius: 8px; border: 1px dashed #3a4a5d; background: transparent; color: #cfd9e3; font-size: 13px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>Добавить игру по exe</button>
+<section style="flex-grow: 1; background: #1b232d; border: 1px solid #263241; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 10px">
+<h2 style="margin: 0; font-family: 'Exo 2', sans-serif; font-weight: 600; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: #cfd9e3">Произношение</h2>
+<p style="margin: 0; font-size: 12px; color: #7d8fa3; line-height: 1.45">«+» — ударение, «*» — все формы слова</p>
+<div style="display: flex; flex-direction: column; gap: 6px; font-family: 'JetBrains Mono', monospace; font-size: 12px">
+
+<div style="display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 10px; border-radius: 6px; background: #121820">
+<span style="flex-grow: 1; display: flex; gap: 6px; min-width: 0"><span>Ви</span><span style="color: #7d8fa3">→</span><span style="color: #3fb4ff">В+и</span></span>
+<button type="button" aria-label="Прослушать В+и" style="width: 26px; height: 26px; flex-shrink: 0; border-radius: 50%; border: 1px solid #2e3b4b; background: #263241; color: #3fb4ff; display: flex; align-items: center; justify-content: center"><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5l12 7-12 7z"></path></svg></button>
+</div>
+
+<div style="display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 10px; border-radius: 6px; background: #121820">
+<span style="flex-grow: 1; display: flex; gap: 6px; min-width: 0"><span>Арасак*</span><span style="color: #7d8fa3">→</span><span style="color: #3fb4ff">Арас+ак*</span></span>
+<button type="button" aria-label="Прослушать Арас+ак*" style="width: 26px; height: 26px; flex-shrink: 0; border-radius: 50%; border: 1px solid #2e3b4b; background: #263241; color: #3fb4ff; display: flex; align-items: center; justify-content: center"><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5l12 7-12 7z"></path></svg></button>
+</div>
+
+<div style="display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 10px; border-radius: 6px; background: #121820">
+<span style="flex-grow: 1; display: flex; gap: 6px; min-width: 0"><span>NCPD</span><span style="color: #7d8fa3">→</span><span style="color: #3fb4ff">эн си пи ди</span></span>
+<button type="button" aria-label="Прослушать эн си пи ди" style="width: 26px; height: 26px; flex-shrink: 0; border-radius: 50%; border: 1px solid #2e3b4b; background: #263241; color: #3fb4ff; display: flex; align-items: center; justify-content: center"><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5l12 7-12 7z"></path></svg></button>
+</div>
+
+</div>
+<button type="button" style="margin-top: auto; display: flex; align-items: center; justify-content: center; gap: 6px; height: 34px; border-radius: 8px; border: 1px dashed #3a4a5d; background: transparent; color: #9fb0c2; font-size: 13px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>Добавить замену</button>
+</section>
+</div>
+<div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; align-items: center; gap: 14px; padding: 14px 16px; background: #1b232d; border: 1px solid #263241; border-radius: 12px">
+<span style="width: 48px; height: 48px; flex-shrink: 0; border-radius: 10px; background: #3a3020; color: #f0c674; display: flex; align-items: center; justify-content: center; font-family: 'Exo 2', sans-serif; font-weight: 700; font-size: 16px">CP</span>
+<div style="flex-grow: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0">
+<h2 style="margin: 0; font-family: 'Exo 2', sans-serif; font-weight: 700; font-size: 20px">Cyberpunk 2077</h2>
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #9fb0c2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Cyberpunk2077.exe · D:\Games\Steam\…\Cyberpunk 2077</span>
+</div>
+<button type="button" style="display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 14px; border-radius: 8px; border: 1px solid #2e3b4b; background: #263241; color: #e6edf3; font-size: 13px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="14" rx="2"></rect><circle cx="9" cy="10" r="1.5"></circle><path d="M21 16l-5-5-8 8"></path></svg>По скриншоту</button>
+<button type="button" style="display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 14px; border-radius: 8px; border: 0; background: #3fb4ff; color: #0b1520; font-size: 13px; font-weight: 600"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"></path></svg>Настроить в игре</button>
+</div>
+<section style="background: #1b232d; border: 1px solid #263241; border-radius: 12px; overflow: hidden">
+<div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px">
+<h3 style="margin: 0; font-family: 'Exo 2', sans-serif; font-weight: 600; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: #cfd9e3">Зоны · 16:9</h3>
+<span style="font-size: 12px; color: #7d8fa3">Изменяются в редакторе зон</span>
+</div>
+
+<div style="display: grid; grid-template-columns: 12px minmax(0, 1.2fr) minmax(0, 1.6fr) minmax(0, 1.2fr); gap: 12px; align-items: center; padding: 10px 16px; border-top: 1px solid #222c38; font-size: 13px">
+<span style="width: 10px; height: 10px; border-radius: 3px; background: #3fb4ff"></span>
+<span style="font-weight: 600">Диалоги</span>
+<span style="color: #cfd9e3">Авто · высокий приоритет</span>
+<span style="color: #9fb0c2">По говорящему</span>
+</div>
+
+<div style="display: grid; grid-template-columns: 12px minmax(0, 1.2fr) minmax(0, 1.6fr) minmax(0, 1.2fr); gap: 12px; align-items: center; padding: 10px 16px; border-top: 1px solid #222c38; font-size: 13px">
+<span style="width: 10px; height: 10px; border-radius: 3px; background: #c5b8ff"></span>
+<span style="font-weight: 600">Записка</span>
+<span style="color: #cfd9e3">По клавише Ctrl+Alt+1</span>
+<span style="color: #9fb0c2">Рассказчик</span>
+</div>
+
+<div style="display: grid; grid-template-columns: 12px minmax(0, 1.2fr) minmax(0, 1.6fr) minmax(0, 1.2fr); gap: 12px; align-items: center; padding: 10px 16px; border-top: 1px solid #222c38; font-size: 13px">
+<span style="width: 10px; height: 10px; border-radius: 3px; background: #f0c674"></span>
+<span style="font-weight: 600">Цель задания</span>
+<span style="color: #cfd9e3">Авто · низкий · не повторять 10 мин</span>
+<span style="color: #9fb0c2">Голос 07</span>
+</div>
+
+</section>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px">
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="narr" style="font-size: 13px; color: #9fb0c2">Рассказчик</label><div style="position: relative"><select id="narr" class="sel"><option>Голос 01 · муж.</option></select><svg style="position: absolute; right: 8px; top: 50%; margin-top: -7px; pointer-events: none; color: #7d8fa3" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6"></path></svg></div></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="defm" style="font-size: 13px; color: #9fb0c2">Мужской по умолчанию</label><div style="position: relative"><select id="defm" class="sel"><option>Голос 04 · муж.</option></select><svg style="position: absolute; right: 8px; top: 50%; margin-top: -7px; pointer-events: none; color: #7d8fa3" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6"></path></svg></div></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="deff" style="font-size: 13px; color: #9fb0c2">Женский по умолчанию</label><div style="position: relative"><select id="deff" class="sel"><option>Голос 02 · жен.</option></select><svg style="position: absolute; right: 8px; top: 50%; margin-top: -7px; pointer-events: none; color: #7d8fa3" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6"></path></svg></div></div>
+</div>
+<section style="flex-grow: 1; min-height: 0; background: #1b232d; border: 1px solid #263241; border-radius: 12px; display: flex; flex-direction: column; overflow: hidden">
+<div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px 10px 16px">
+<h3 style="margin: 0; font-family: 'Exo 2', sans-serif; font-weight: 600; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: #cfd9e3">Персонажи · 7</h3>
+<div style="display: flex; gap: 6px">
+<button type="button" style="height: 32px; padding: 0 12px; border-radius: 7px; border: 1px solid #2e3b4b; background: #263241; color: #e6edf3; font-size: 12px">Импорт списка</button>
+<button type="button" style="height: 32px; padding: 0 12px; border-radius: 7px; border: 1px solid #2e3b4b; background: #263241; color: #e6edf3; font-size: 12px">Добавить</button>
+</div>
+</div>
+<div style="display: grid; grid-template-columns: minmax(0, 1.7fr) 0.7fr minmax(0, 1.2fr) 0.9fr 76px; gap: 12px; align-items: center; padding: 8px 16px; background: #1f2833; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #9fb0c2"><span>Персонаж</span><span>Пол</span><span>Голос</span><span>Назначен</span><span></span></div>
+
+<div style="display: grid; grid-template-columns: minmax(0, 1.7fr) 0.7fr minmax(0, 1.2fr) 0.9fr 76px; gap: 12px; align-items: center; padding: 8px 16px; border-top: 1px solid #222c38; font-size: 14px">
+<span style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span style="font-weight: 600">Джуди Альварес</span><span style="font-size: 11px; color: #7d8fa3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">также: Джуди</span></span>
+<span style="color: #cfd9e3; font-size: 13px">жен.</span>
+<span style="font-size: 13px; color: #cfd9e3">Голос 06 · жен.</span>
+<span style="justify-self: start; padding: 3px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; background: #243a2d; color: #8fe0ad">вручную</span>
+<span style="display: flex; gap: 6px; justify-content: flex-end">
+<button type="button" aria-label="Прослушать голос Джуди Альварес" style="width: 32px; height: 32px; border-radius: 50%; border: 1px solid #2e3b4b; background: #263241; color: #3fb4ff; display: flex; align-items: center; justify-content: center"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5l12 7-12 7z"></path></svg></button>
+<button type="button" aria-label="Действия: Джуди Альварес" style="width: 32px; height: 32px; border-radius: 8px; border: 0; background: transparent; color: #9fb0c2; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="19" cy="12" r="1.8"></circle></svg></button>
+</span>
+</div>
+
+<div style="display: grid; grid-template-columns: minmax(0, 1.7fr) 0.7fr minmax(0, 1.2fr) 0.9fr 76px; gap: 12px; align-items: center; padding: 8px 16px; border-top: 1px solid #222c38; font-size: 14px">
+<span style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span style="font-weight: 600">Джонни Сильверхенд</span><span style="font-size: 11px; color: #7d8fa3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">также: Джонни, Сильверхенд</span></span>
+<span style="color: #cfd9e3; font-size: 13px">муж.</span>
+<span style="font-size: 13px; color: #cfd9e3">Голос 11 · муж.</span>
+<span style="justify-self: start; padding: 3px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; background: #2c2a44; color: #c5b8ff">из списка</span>
+<span style="display: flex; gap: 6px; justify-content: flex-end">
+<button type="button" aria-label="Прослушать голос Джонни Сильверхенд" style="width: 32px; height: 32px; border-radius: 50%; border: 1px solid #2e3b4b; background: #263241; color: #3fb4ff; display: flex; align-items: center; justify-content: center"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5l12 7-12 7z"></path></svg></button>
+<button type="button" aria-label="Действия: Джонни Сильверхенд" style="width: 32px; height: 32px; border-radius: 8px; border: 0; background: transparent; color: #9fb0c2; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="19" cy="12" r="1.8"></circle></svg></button>
+</span>
+</div>
+
+<div style="display: grid; grid-template-columns: minmax(0, 1.7fr) 0.7fr minmax(0, 1.2fr) 0.9fr 76px; gap: 12px; align-items: center; padding: 8px 16px; border-top: 1px solid #222c38; font-size: 14px">
+<span style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span style="font-weight: 600">Панам</span><span style="font-size: 11px; color: #7d8fa3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis"></span></span>
+<span style="color: #cfd9e3; font-size: 13px">жен.</span>
+<span style="font-size: 13px; color: #cfd9e3">Голос 09 · жен.</span>
+<span style="justify-self: start; padding: 3px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; background: #1d2f40; color: #8fd3ff">авто</span>
+<span style="display: flex; gap: 6px; justify-content: flex-end">
+<button type="button" aria-label="Прослушать голос Панам" style="width: 32px; height: 32px; border-radius: 50%; border: 1px solid #2e3b4b; background: #263241; color: #3fb4ff; display: flex; align-items: center; justify-content: center"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5l12 7-12 7z"></path></svg></button>
+<button type="button" aria-label="Действия: Панам" style="width: 32px; height: 32px; border-radius: 8px; border: 0; background: transparent; color: #9fb0c2; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="19" cy="12" r="1.8"></circle></svg></button>
+</span>
+</div>
+
+<div style="display: grid; grid-template-columns: minmax(0, 1.7fr) 0.7fr minmax(0, 1.2fr) 0.9fr 76px; gap: 12px; align-items: center; padding: 8px 16px; border-top: 1px solid #222c38; font-size: 14px">
+<span style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span style="font-weight: 600">Виктор Вектор</span><span style="font-size: 11px; color: #7d8fa3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">также: Виктор, Вик</span></span>
+<span style="color: #cfd9e3; font-size: 13px">муж.</span>
+<span style="font-size: 13px; color: #cfd9e3">Голос 04 · муж.</span>
+<span style="justify-self: start; padding: 3px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; background: #1d2f40; color: #8fd3ff">авто</span>
+<span style="display: flex; gap: 6px; justify-content: flex-end">
+<button type="button" aria-label="Прослушать голос Виктор Вектор" style="width: 32px; height: 32px; border-radius: 50%; border: 1px solid #2e3b4b; background: #263241; color: #3fb4ff; display: flex; align-items: center; justify-content: center"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5l12 7-12 7z"></path></svg></button>
+<button type="button" aria-label="Действия: Виктор Вектор" style="width: 32px; height: 32px; border-radius: 8px; border: 0; background: transparent; color: #9fb0c2; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="19" cy="12" r="1.8"></circle></svg></button>
+</span>
+</div>
+
+<div style="display: grid; grid-template-columns: minmax(0, 1.7fr) 0.7fr minmax(0, 1.2fr) 0.9fr 76px; gap: 12px; align-items: center; padding: 8px 16px; border-top: 1px solid #222c38; font-size: 14px">
+<span style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span style="font-weight: 600">Такэмура</span><span style="font-size: 11px; color: #7d8fa3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis"></span></span>
+<span style="color: #cfd9e3; font-size: 13px">—</span>
+<span style="font-size: 13px; color: #cfd9e3">ещё не звучал</span>
+<span style="justify-self: start; padding: 3px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; background: #3a3020; color: #f0c674">уточнить пол</span>
+<span style="display: flex; gap: 6px; justify-content: flex-end">
+<button type="button" aria-label="Прослушать голос Такэмура" style="width: 32px; height: 32px; border-radius: 50%; border: 1px solid #2e3b4b; background: #263241; color: #3fb4ff; display: flex; align-items: center; justify-content: center"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5l12 7-12 7z"></path></svg></button>
+<button type="button" aria-label="Действия: Такэмура" style="width: 32px; height: 32px; border-radius: 8px; border: 0; background: transparent; color: #9fb0c2; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="19" cy="12" r="1.8"></circle></svg></button>
+</span>
+</div>
+
+<div style="margin-top: auto; display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-top: 1px solid #222c38; font-size: 12px; color: #9fb0c2">
+<span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Не считать именами: Совет, Задание, Цель, Внимание, Подсказка…</span>
+<a href="#stoplist" style="flex-shrink: 0; margin-left: auto; font-size: 12px">Изменить</a>
+</div>
+</section>
+</div>
+</main>
+</div>
+</div>
+</body>
+</html>

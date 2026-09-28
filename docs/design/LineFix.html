@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Реплика и исправление произношения</title>
+<link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@500;600;700&amp;family=Golos+Text:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0e141b;font-family:'Golos Text',system-ui,sans-serif;color:#e6edf3;-webkit-font-smoothing:antialiased}
+button{font:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible{outline:2px solid #3fb4ff;outline-offset:2px}
+.tg{appearance:none;-webkit-appearance:none;width:40px;height:22px;border-radius:11px;background:#2e3b4b;position:relative;margin:0;cursor:pointer;flex-shrink:0}
+.tg::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#9fb0c2}
+.tg:checked{background:#3fb4ff}
+.tg:checked::after{left:21px;background:#0b1520}
+</style>
+</head>
+<body>
+<div style="width: 620px; height: 640px; display: flex; flex-direction: column; background: #171d25; overflow: hidden">
+<div style="height: 40px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 8px 0 16px; background: #0b1016; border-bottom: 1px solid #1c252f">
+<span style="font-family: 'Exo 2', sans-serif; font-weight: 700; font-size: 14px">Реплика</span>
+<button type="button" aria-label="Закрыть" style="width: 40px; height: 32px; border: 0; background: transparent; color: #9fb0c2; border-radius: 6px; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+</div>
+<div style="flex-grow: 1; box-sizing: border-box; padding: 20px 24px 24px; display: flex; flex-direction: column; gap: 18px">
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; align-items: center; gap: 10px">
+<span style="padding: 4px 10px; border-radius: 999px; background: #3a3020; color: #f0c674; font-size: 12px; font-weight: 600">Джонни</span>
+<span style="font-size: 12px; color: #7d8fa3">Голос 11 · 21:13:41</span>
+</div>
+<p style="margin: 0; font-size: 17px; line-height: 1.5">Арасака ещё хуже, чем Милитех, пацан.</p>
+<div style="display: flex; gap: 8px">
+<button type="button" style="display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 14px; border-radius: 8px; border: 1px solid #2e3b4b; background: #263241; color: #e6edf3; font-size: 13px"><svg style="color: #3fb4ff" width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5l12 7-12 7z"></path></svg>Повторить</button>
+<button type="button" aria-pressed="true" style="height: 38px; padding: 0 14px; border-radius: 8px; border: 1px solid #3fb4ff; background: #1f2a37; color: #e6edf3; font-size: 13px; font-weight: 600">Исправить произношение</button>
+</div>
+</div>
+<section style="flex-grow: 1; background: #1b232d; border: 1px solid #263241; border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 13px; color: #9fb0c2">Нажмите на слово, которое звучит неправильно</span>
+<div style="display: flex; flex-wrap: wrap; gap: 6px">
+<button type="button" aria-pressed="true" style="height: 32px; padding: 0 10px; border-radius: 7px; border: 1px solid #3fb4ff; background: #1d2f40; color: #e6edf3; font-size: 14px; font-weight: 600">Арасака</button>
+<button type="button" aria-pressed="false" style="height: 32px; padding: 0 10px; border-radius: 7px; border: 1px solid #2e3b4b; background: #121820; color: #cfd9e3; font-size: 14px">ещё</button>
+<button type="button" aria-pressed="false" style="height: 32px; padding: 0 10px; border-radius: 7px; border: 1px solid #2e3b4b; background: #121820; color: #cfd9e3; font-size: 14px">хуже</button>
+<button type="button" aria-pressed="false" style="height: 32px; padding: 0 10px; border-radius: 7px; border: 1px solid #2e3b4b; background: #121820; color: #cfd9e3; font-size: 14px">чем</button>
+<button type="button" aria-pressed="false" style="height: 32px; padding: 0 10px; border-radius: 7px; border: 1px solid #2e3b4b; background: #121820; color: #cfd9e3; font-size: 14px">Милитех</button>
+<button type="button" aria-pressed="false" style="height: 32px; padding: 0 10px; border-radius: 7px; border: 1px solid #2e3b4b; background: #121820; color: #cfd9e3; font-size: 14px">пацан</button>
+</div>
+</div>
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border-radius: 8px; background: #121820">
+<div style="display: flex; flex-direction: column; gap: 2px"><label for="forms" style="font-size: 14px">Все формы слова</label><span style="font-size: 12px; color: #7d8fa3">Арасаки, Арасакой, Арасаку — тоже</span></div>
+<input id="forms" class="tg" type="checkbox" checked>
+</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="from" style="font-size: 13px; color: #9fb0c2">Как написано</label><input id="from" type="text" value="Арасак*" style="box-sizing: border-box; height: 40px; padding: 0 12px; background: #121820; border: 1px solid #2e3b4b; border-radius: 8px; color: #e6edf3; font-family: 'JetBrains Mono', monospace; font-size: 14px"></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="to" style="font-size: 13px; color: #9fb0c2">Как читать</label><input id="to" type="text" value="Арас+ак*" style="box-sizing: border-box; height: 40px; padding: 0 12px; background: #121820; border: 1px solid #3fb4ff; border-radius: 8px; color: #e6edf3; font-family: 'JetBrains Mono', monospace; font-size: 14px"></div>
+</div>
+<p style="margin: 0; font-size: 12px; line-height: 1.5; color: #7d8fa3">«+» ставится перед ударной гласной. «*» — любое окончание слова.</p>
+<div style="margin-top: auto; display: flex; justify-content: flex-end; gap: 8px">
+<button type="button" style="display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; border-radius: 8px; border: 1px solid #2e3b4b; background: #263241; color: #e6edf3; font-size: 14px"><svg style="color: #3fb4ff" width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5l12 7-12 7z"></path></svg>Прослушать</button>
+<button type="button" style="height: 40px; padding: 0 18px; border-radius: 8px; border: 0; background: #3fb4ff; color: #0b1520; font-size: 14px; font-weight: 600">Сохранить в Cyberpunk 2077</button>
+</div>
+</section>
+</div>
+</div>
+</body>
+</html>

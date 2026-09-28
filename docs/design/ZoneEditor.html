@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Редактор зон</title>
+<link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@500;600;700&amp;family=Golos+Text:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0e141b;font-family:'Golos Text',system-ui,sans-serif;color:#e6edf3;-webkit-font-smoothing:antialiased}
+a{color:#3fb4ff}a:hover{color:#8fd3ff}
+button{font:inherit;cursor:pointer}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #3fb4ff;outline-offset:2px}
+.sel{appearance:none;-webkit-appearance:none;width:100%;box-sizing:border-box;background:#0e141b;border:1px solid #2e3b4b;border-radius:8px;color:#e6edf3;padding:7px 28px 7px 10px;font:inherit;font-size:13px}
+.tg{appearance:none;-webkit-appearance:none;width:40px;height:22px;border-radius:11px;background:#2e3b4b;position:relative;margin:0;cursor:pointer;flex-shrink:0}
+.tg::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#9fb0c2}
+.tg:checked{background:#3fb4ff}
+.tg:checked::after{left:21px;background:#0b1520}
+</style>
+</head>
+<body>
+<div style="width: 1440px; height: 810px; position: relative; overflow: hidden; background: #0a0d14">
+<div aria-hidden="true" style="position: absolute; left: 0; top: 0; width: 1440px; height: 810px; background: linear-gradient(180deg, #121829 0%, #221a36 50%, #3a2140 78%, #1a1220 100%)"></div>
+<div aria-hidden="true" style="position: absolute; left: 0; bottom: 0; width: 180px; height: 520px; background: #0b0f18"></div>
+<div aria-hidden="true" style="position: absolute; left: 150px; bottom: 0; width: 120px; height: 380px; background: #0e1320"></div>
+<div aria-hidden="true" style="position: absolute; left: 250px; bottom: 0; width: 200px; height: 600px; background: #090d15"></div>
+<div aria-hidden="true" style="position: absolute; left: 430px; bottom: 0; width: 140px; height: 440px; background: #0d1220"></div>
+<div aria-hidden="true" style="position: absolute; left: 560px; bottom: 0; width: 260px; height: 330px; background: #0a0e17"></div>
+<div aria-hidden="true" style="position: absolute; left: 800px; bottom: 0; width: 150px; height: 560px; background: #0c111c"></div>
+<div aria-hidden="true" style="position: absolute; left: 930px; bottom: 0; width: 220px; height: 420px; background: #090d15"></div>
+<div aria-hidden="true" style="position: absolute; left: 1130px; bottom: 0; width: 130px; height: 640px; background: #0d1220"></div>
+<div aria-hidden="true" style="position: absolute; left: 1250px; bottom: 0; width: 190px; height: 470px; background: #0a0e17"></div>
+<div aria-hidden="true" style="position: absolute; left: 285px; bottom: 430px; width: 90px; height: 6px; background: #ff4fa3; opacity: 0.8"></div>
+<div aria-hidden="true" style="position: absolute; left: 840px; bottom: 390px; width: 70px; height: 4px; background: #2fe0d0; opacity: 0.8"></div>
+<div aria-hidden="true" style="position: absolute; left: 1160px; bottom: 520px; width: 60px; height: 5px; background: #ffb347; opacity: 0.8"></div>
+<div aria-hidden="true" style="position: absolute; left: 470px; bottom: 300px; width: 40px; height: 90px; background: #ff4fa3; opacity: 0.25"></div>
+<div aria-hidden="true" style="position: absolute; left: 0; bottom: 0; width: 1440px; height: 140px; background: linear-gradient(180deg, rgba(5, 7, 11, 0) 0%, #05070b 100%)"></div>
+<div aria-hidden="true" style="position: absolute; left: 44px; top: 112px; font-size: 15px; font-weight: 600; color: #ffd27a; text-shadow: 0 1px 3px #000000">Цель: встретиться с Джуди в «Лиззис»</div>
+<div aria-hidden="true" style="position: absolute; left: 0; top: 686px; width: 1440px; text-align: center; font-size: 30px; font-weight: 500; text-shadow: 0 2px 4px #000000, 0 0 2px #000000"><span style="color: #ff8a5c">Джуди: </span><span style="color: #9ef3ff">Ви, ты вообще меня слушаешь?</span></div>
+<div aria-hidden="true" style="position: absolute; left: 0; top: 0; width: 1440px; height: 810px; background: rgba(5, 8, 12, 0.45)"></div>
+
+<div style="position: absolute; left: 32px; top: 100px; width: 360px; height: 44px; box-sizing: border-box; border: 2px dashed #f0c674; border-radius: 4px">
+<span style="position: absolute; left: -2px; bottom: -30px; padding: 4px 10px; border-radius: 6px; background: #3a3020; color: #f0c674; font-size: 12px; font-weight: 600; white-space: nowrap">Цель задания · авто, низкий</span>
+</div>
+
+<div style="position: absolute; left: 330px; top: 190px; width: 580px; height: 380px; box-sizing: border-box; border: 2px dashed #c5b8ff; border-radius: 4px; opacity: 0.85">
+<span style="position: absolute; left: -2px; top: -30px; padding: 4px 10px; border-radius: 6px; background: #2c2a44; color: #c5b8ff; font-size: 12px; font-weight: 600">Записка · Ctrl+Alt+1</span>
+</div>
+
+<div style="position: absolute; left: 200px; top: 670px; width: 800px; height: 80px; box-sizing: border-box; border: 2px solid #3fb4ff; border-radius: 4px; background: rgba(63, 180, 255, 0.08)">
+<span style="position: absolute; left: -2px; top: -32px; display: flex; align-items: center; gap: 8px; padding: 5px 10px; border-radius: 6px; background: #3fb4ff; color: #0b1520; font-size: 12px; font-weight: 700">Диалоги<span style="font-family: 'JetBrains Mono', monospace; font-weight: 500">0.14, 0.83 → 0.69, 0.93</span></span>
+<span style="position: absolute; left: -6px; top: -6px; width: 10px; height: 10px; background: #e6edf3; border: 2px solid #3fb4ff"></span>
+<span style="position: absolute; right: -6px; top: -6px; width: 10px; height: 10px; background: #e6edf3; border: 2px solid #3fb4ff"></span>
+<span style="position: absolute; left: -6px; bottom: -6px; width: 10px; height: 10px; background: #e6edf3; border: 2px solid #3fb4ff"></span>
+<span style="position: absolute; right: -6px; bottom: -6px; width: 10px; height: 10px; background: #e6edf3; border: 2px solid #3fb4ff"></span>
+</div>
+
+<div style="position: absolute; left: 20px; top: 20px; width: 980px; box-sizing: border-box; display: flex; align-items: center; gap: 14px; padding: 10px 12px 10px 18px; background: #121820; border: 1px solid #2e3b4b; border-radius: 12px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45)">
+<div style="display: flex; flex-direction: column; gap: 2px">
+<span style="font-family: 'Exo 2', sans-serif; font-weight: 700; font-size: 16px">Редактор зон</span>
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #9fb0c2">Cyberpunk2077.exe · 16:9 · 2560×1440</span>
+</div>
+<span style="padding: 4px 10px; border-radius: 999px; background: #1d2f40; color: #8fd3ff; font-size: 12px; font-weight: 600">Поверх игры</span>
+<div style="flex-grow: 1"></div>
+<span style="font-size: 12px; color: #7d8fa3">Выделите прямоугольник мышью, чтобы добавить зону</span>
+<button type="button" style="height: 38px; padding: 0 16px; border-radius: 8px; border: 1px solid #2e3b4b; background: transparent; color: #cfd9e3; font-size: 14px">Отмена</button>
+<button type="button" style="height: 38px; padding: 0 18px; border-radius: 8px; border: 0; background: #3fb4ff; color: #0b1520; font-size: 14px; font-weight: 600">Сохранить</button>
+</div>
+
+<aside aria-label="Зоны профиля" style="position: absolute; right: 20px; top: 20px; width: 400px; height: 770px; box-sizing: border-box; padding: 16px; display: flex; flex-direction: column; gap: 12px; background: #121820; border: 1px solid #2e3b4b; border-radius: 12px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45)">
+<div style="display: flex; align-items: center; justify-content: space-between">
+<h1 style="margin: 0; font-family: 'Exo 2', sans-serif; font-weight: 700; font-size: 16px">Зоны · 16:9</h1>
+<button type="button" style="display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2e3b4b; background: #263241; color: #e6edf3; font-size: 12px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>Из шаблона</button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 4px">
+<button type="button" aria-pressed="true" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; border: 1px solid #3fb4ff; background: #1f2a37; color: #e6edf3; text-align: left"><span style="width: 10px; height: 10px; border-radius: 3px; background: #3fb4ff"></span><span style="flex-grow: 1; font-size: 13px; font-weight: 600">Диалоги</span><span style="font-size: 11px; color: #9fb0c2">авто · высокий</span></button>
+<button type="button" aria-pressed="false" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; border: 1px solid transparent; background: transparent; color: #e6edf3; text-align: left"><span style="width: 10px; height: 10px; border-radius: 3px; background: #c5b8ff"></span><span style="flex-grow: 1; font-size: 13px">Записка</span><span style="font-size: 11px; color: #9fb0c2">Ctrl+Alt+1</span></button>
+<button type="button" aria-pressed="false" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; border: 1px solid transparent; background: transparent; color: #e6edf3; text-align: left"><span style="width: 10px; height: 10px; border-radius: 3px; background: #f0c674"></span><span style="flex-grow: 1; font-size: 13px">Цель задания</span><span style="font-size: 11px; color: #9fb0c2">авто · низкий</span></button>
+</div>
+<div style="height: 1px; background: #263241"></div>
+<div style="display: flex; gap: 8px; align-items: flex-end">
+<div style="flex-grow: 1; display: flex; flex-direction: column; gap: 5px"><label for="zname" style="font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #9fb0c2">Название</label><input id="zname" type="text" value="Диалоги" style="box-sizing: border-box; height: 34px; padding: 0 10px; background: #0e141b; border: 1px solid #2e3b4b; border-radius: 8px; color: #e6edf3; font: inherit; font-size: 13px"></div>
+<button type="button" aria-label="Удалить зону" style="width: 34px; height: 34px; border-radius: 8px; border: 1px solid #2e3b4b; background: transparent; color: #9fb0c2; display: flex; align-items: center; justify-content: center"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"></path></svg></button>
+</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+<div style="display: flex; flex-direction: column; gap: 5px">
+<span id="trg" style="font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #9fb0c2">Когда читать</span>
+<div role="group" aria-labelledby="trg" style="display: flex; padding: 3px; gap: 3px; background: #0e141b; border: 1px solid #263241; border-radius: 8px">
+<button type="button" aria-pressed="true" style="flex-grow: 1; height: 28px; border: 0; border-radius: 5px; background: #263241; color: #e6edf3; font-size: 12px; font-weight: 600">Авто</button>
+<button type="button" aria-pressed="false" style="flex-grow: 1; height: 28px; border: 0; border-radius: 5px; background: transparent; color: #9fb0c2; font-size: 12px">Клавиша</button>
+<button type="button" aria-pressed="false" style="flex-grow: 1; height: 28px; border: 0; border-radius: 5px; background: transparent; color: #9fb0c2; font-size: 12px">Выкл</button>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 5px">
+<span id="prio" style="font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #9fb0c2">Приоритет</span>
+<div role="group" aria-labelledby="prio" style="display: flex; padding: 3px; gap: 3px; background: #0e141b; border: 1px solid #263241; border-radius: 8px">
+<button type="button" aria-pressed="true" style="flex-grow: 1; height: 28px; border: 0; border-radius: 5px; background: #263241; color: #e6edf3; font-size: 12px; font-weight: 600">Высокий</button>
+<button type="button" aria-pressed="false" style="flex-grow: 1; height: 28px; border: 0; border-radius: 5px; background: transparent; color: #9fb0c2; font-size: 12px">Обычн.</button>
+<button type="button" aria-pressed="false" style="flex-grow: 1; height: 28px; border: 0; border-radius: 5px; background: transparent; color: #9fb0c2; font-size: 12px">Низкий</button>
+</div>
+</div>
+</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+<div style="display: flex; flex-direction: column; gap: 5px"><label for="zvoice" style="font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #9fb0c2">Голос</label><div style="position: relative"><select id="zvoice" class="sel"><option>По говорящему</option><option>Рассказчик</option><option>Выбранный голос</option></select><svg style="position: absolute; right: 8px; top: 50%; margin-top: -7px; pointer-events: none; color: #7d8fa3" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6"></path></svg></div></div>
+<div style="display: flex; flex-direction: column; gap: 5px"><label for="zspk" style="font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #9fb0c2">Кто говорит</label><div style="position: relative"><select id="zspk" class="sel"><option>По цвету имени</option><option>Имя перед текстом</option><option>Отдельная зона</option><option>Не определять</option></select><svg style="position: absolute; right: 8px; top: 50%; margin-top: -7px; pointer-events: none; color: #7d8fa3" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6"></path></svg></div></div>
+</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; align-items: center">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 8px"><label for="zrep" style="font-size: 13px">Не повторять</label><div style="position: relative; width: 96px"><select id="zrep" class="sel"><option>нет</option><option>2 мин</option><option>10 мин</option></select><svg style="position: absolute; right: 8px; top: 50%; margin-top: -7px; pointer-events: none; color: #7d8fa3" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6"></path></svg></div></div>
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 8px"><label for="zduck" style="font-size: 13px">Приглушать игру</label><input id="zduck" class="tg" type="checkbox" checked></div>
+</div>
+<div style="height: 1px; background: #263241"></div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 8px">
+<label for="preset" style="font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #9fb0c2">Выделение текста</label>
+<div style="position: relative; width: 190px"><select id="preset" class="sel"><option>По цвету</option><option>Светлый на тёмном</option><option>Тёмный на светлом</option><option>Адаптивный порог</option></select><svg style="position: absolute; right: 8px; top: 50%; margin-top: -7px; pointer-events: none; color: #7d8fa3" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6"></path></svg></div>
+</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+<div style="display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 8px; border-radius: 8px; background: #0e141b; border: 1px solid #263241">
+<span style="width: 18px; height: 18px; border-radius: 4px; background: #9ef3ff; flex-shrink: 0"></span>
+<span style="flex-grow: 1; font-size: 12px">Текст</span>
+<button type="button" aria-label="Цвет текста пипеткой" style="width: 28px; height: 28px; border-radius: 6px; border: 1px solid #2e3b4b; background: #263241; color: #e6edf3; display: flex; align-items: center; justify-content: center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4l6 6"></path><path d="M17 7l-9.5 9.5L5 19l-1-1 2.5-2.5L16 6"></path></svg></button>
+</div>
+<div style="display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 8px; border-radius: 8px; background: #0e141b; border: 1px solid #263241">
+<span style="width: 18px; height: 18px; border-radius: 4px; background: #ff8a5c; flex-shrink: 0"></span>
+<span style="flex-grow: 1; font-size: 12px">Имя</span>
+<button type="button" aria-label="Цвет имени пипеткой" style="width: 28px; height: 28px; border-radius: 6px; border: 1px solid #2e3b4b; background: #263241; color: #e6edf3; display: flex; align-items: center; justify-content: center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4l6 6"></path><path d="M17 7l-9.5 9.5L5 19l-1-1 2.5-2.5L16 6"></path></svg></button>
+</div>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<span style="font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #9fb0c2">Маска (что видит OCR)</span>
+<div style="height: 44px; border-radius: 8px; background: #000000; border: 1px solid #263241; display: flex; align-items: center; justify-content: center; padding: 0 10px; font-size: 14px; font-weight: 500; color: #ffffff; white-space: nowrap; overflow: hidden">Ви, ты вообще меня слушаешь?</div>
+</div>
+<div style="padding: 10px 12px; border-radius: 8px; background: #0e141b; border: 1px solid #263241; display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; align-items: center; justify-content: space-between">
+<span style="display: flex; align-items: center; gap: 6px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8fe0ad"><span style="width: 7px; height: 7px; border-radius: 50%; background: #5fd38d"></span>распознано · 0.94 · 41 мс</span>
+<button type="button" style="display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 7px; border: 1px solid #2e3b4b; background: #263241; color: #e6edf3; font-size: 12px"><svg style="color: #3fb4ff" width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5l12 7-12 7z"></path></svg>Прослушать</button>
+</div>
+<div style="display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 6px 10px; font-size: 13px">
+<span style="color: #7d8fa3">Говорящий</span><span style="font-weight: 600">Джуди <span style="font-weight: 400; color: #9fb0c2">→ Голос 06</span></span>
+<span style="color: #7d8fa3">Текст</span><span>Ви, ты вообще меня слушаешь?</span>
+</div>
+</div>
+</aside>
+</div>
+</body>
+</html>
