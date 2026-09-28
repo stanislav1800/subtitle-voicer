@@ -13,4 +13,9 @@
 ```bash
 uv sync
 uv run pytest
+uv run ruff check .
+uv run lint-imports
+uv run python tools/smoke_stack.py   # проверка стека: OCR + синтез в smoke.wav
 ```
+
+Первый запуск `smoke_stack.py` скачивает модели OCR и TTS (около 100 МБ).

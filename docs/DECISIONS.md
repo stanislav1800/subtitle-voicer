@@ -4,6 +4,34 @@
 
 ---
 
+## Этап 0 — каркас (2026-09-28)
+
+**Стек ставится на Python 3.12 без замен.** `uv sync` на 3.12.14 прошёл; все библиотеки раздела 7 ТЗ импортируются (`tools/smoke_stack.py`). Замен и понижений версий не понадобилось.
+
+**`opencv-python` исключён из разрешения зависимостей (`[tool.uv] exclude-dependencies`).**
+Почему: `rapidocr` и `windows-capture` объявляют зависимость на полный `opencv-python`, а он ставится в тот же каталог `cv2/`, что и `opencv-python-headless`: какой пакет встал последним, тот и работает, а удаление одного ломает другой. ТЗ требует headless (Qt внутри OpenCV конфликтует с PySide6). Обеим библиотекам нужен только API `cv2`, который headless даёт целиком — smoke-тест OCR проходит.
+Отброшено: оставить оба пакета — недетерминированная установка; `override-dependencies` с невыполнимым маркером — обходной приём, `exclude-dependencies` делает то же явно.
+
+**`torch` берётся с PyPI, отдельный индекс PyTorch не подключён.** На Windows колесо `torch` с PyPI — CPU-сборка (`2.14.0+cpu`, `torch.version.cuda = None`). Условие ТЗ «если тянет CUDA — подключить индекс» не сработало. Если на другой платформе (Linux) приедет CUDA-вариант — вернуться к индексу `https://download.pytorch.org/whl/cpu`.
+
+**Контракты `import-linter` (6 шт., `pyproject.toml`).** Слои `ui|cli → app → services → sources → pipeline → config → core`; `engines` импортирует только `core`; сами `engines` импортирует только `app`; `ui`/`cli` не ходят в `services`/`sources`/`pipeline`; Windows-модули (`win32*`, `pywintypes`, `comtypes`, `pycaw`, `winrt`, `windows_capture`, `dxcam`, `winreg`) только в `engines`; `PySide6`/`shiboken6` только в `ui`. Проверено: временные импорты `PySide6` в `pipeline`, `winreg` и `windows_capture` в `services`, `pipeline` из `engines`, `services` из `pipeline` и `cli` — ловятся, после отката всё зелёное.
+Отложено: контракт «`engines/hook/host.py` импортирует только `core`» — появится на этапе 11 вместе с модулем (import-linter не принимает контракт на несуществующий модуль).
+Названия контрактов — без символа «→»: import-linter печатает их через `rich`, и на консоли cp1251 он падает с `UnicodeEncodeError`. В CI для кириллицы выставлен `PYTHONUTF8=1`.
+
+**Логирование — `app/log.py`** (файла не было в дереве `ARCHITECTURE.md`, добавлен). `RotatingFileHandler` 2 МБ × 5 файлов в `%APPDATA%/SubtitleVoicer/logs/subvoicer.log`, UTF-8, консоль по флагу, `sys.excepthook` и `threading.excepthook` пишут необработанные исключения в лог. Пути — `config/paths.py` (`platformdirs.user_data_path(..., roaming=True)`).
+
+**ruff:** `ruff format` не трогает `*.md` — ruff 0.16 форматирует блоки Python в Markdown и переписал бы примеры интерфейсов в ТЗ. Отключены `RUF001–003` (кириллица в строках и комментариях — норма проекта).
+
+**CI:** `pytest -m "not windows and not models"` — ТЗ требует и пропуск Windows-тестов, и пропуск тестов с моделями; в одной команде это одно выражение маркеров.
+
+**Наблюдения для следующих этапов (решения не приняты):**
+- `silero_tts()` скачивает `latest_silero_models.yml` в **текущую папку** (добавлен в `.gitignore`), а модель — в папку пакета `silero/model/`. Учесть в движке на этапе 3 и при переносе моделей в `models/` на этапе 8.
+- В RapidOCR 3.9 для PP-OCRv5 есть, кроме `cyrillic`, модель `eslav` (восточнославянские языки). Предлагаю добавить её в бенчмарк этапа 1 как кандидата — нужно согласие (ТЗ фиксирует `cyrillic`).
+- Smoke: OCR кропа 1200×120 после прогрева — ~570 мс, цель этапа 1 — ≤ 100 мс. Предположительно причина в настройках детектора по умолчанию (`Det.limit_type = min`, `limit_side_len = 736` — короткая сторона 120 px растягивается до 736). Разбираться на этапе 1.
+- Silero `v5_cis_base` отдаёт 60 голосов, из них 29 с префиксом `ru_` — совпадает с ТЗ.
+
+---
+
 ## Решения этапа планирования (2026-09-28)
 
 Приняты при обсуждении, до начала реализации. Подробности — в ТЗ.

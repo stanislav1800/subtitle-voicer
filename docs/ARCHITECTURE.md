@@ -233,6 +233,7 @@ subtitle-voicer/
 │   │   ├── container.py           # сборка: движки из реестров по настройкам → сервисы
 │   │   ├── runtime.py             # запуск/остановка, один экземпляр, смена профиля, восстановление громкости,
 │   │   │                          # перехват необработанных исключений, пересоздание захвата
+│   │   ├── log.py                 # логирование: файл с ротацией, консоль, sys/threading.excepthook (4.14 ТЗ)
 │   │   └── facade.py              # команды для UI и CLI: pause, repeat, skip, save_profile, preview_voice …
 │   │
 │   ├── ui/                        # только здесь PySide6
@@ -375,7 +376,7 @@ TTS: dict[str, str] = {
 
 | Этап | Что создаётся |
 |---|---|
-| 0 | Весь каркас пакетов (пустые `__init__.py`), `core/` с моделями и портами-заготовками, `app/bus.py`, `engines/registry.py`, контракты `import-linter`, `tests/fakes/FakeClock`, CI, `uv.lock` |
+| 0 | Весь каркас пакетов (пустые `__init__.py`), `core/` с моделями и портами-заготовками, `app/bus.py`, `app/log.py`, `config/paths.py`, `engines/registry.py`, заготовка `cli.py`, контракты `import-linter`, `tests/fakes/FakeClock`, `tools/smoke_stack.py`, CI, `uv.lock` |
 | 1 | `pipeline/vision/`, `pipeline/ocr/`, `engines/ocr/rapid.py`, `winrt.py` |
 | 2 | `engines/capture/`, `pipeline/vision/stability.py`, `pipeline/dedup.py`, `pipeline/speaker/extract.py`, `validate.py`, `sources/zone_ocr.py`, `services/capture_service.py`, `zone_service.py`, `cli.py watch` |
 | 3 | `engines/tts/`, `engines/audio/output.py`, `pipeline/text/`, `pipeline/speech/`, `services/speech_service.py`, `resources/voices/` |
