@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: windows-latest
+    env:
+      # Кириллица в выводе import-linter и тестов на консоли cp1252 раннера
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Установка зависимостей
+        run: uv sync --locked
+
+      - name: ruff check
+        run: uv run ruff check .
+
+      - name: ruff format --check
+        run: uv run ruff format --check .
+
+      - name: lint-imports
+        run: uv run lint-imports
+
+      # Модели в CI не скачиваются; тесты Windows-частей и тесты с моделями пропускаются
+      - name: pytest
+        run: uv run pytest -m "not windows and not models"
