@@ -96,6 +96,7 @@ core      → (ничего из проекта)
 ```
 
 - **Проверяются автоматически** инструментом `import-linter` (dev-зависимость; контракты в `pyproject.toml`, секция `[tool.importlinter]`). Запуск: `uv run lint-imports`. Нарушение контракта = красная проверка перед коммитом и незакрытый этап.
+- Правила — про **прямые** импорты. `app` как точка сборки импортирует всё, поэтому косвенные цепочки через него (`cli → app → pipeline`) допустимы (`allow_indirect_imports`); слои, `engines → core` и PySide6 проверяются строго.
 - Модули, которые трогают Windows (`pywin32`, `comtypes`, `pycaw`, `winrt`, `windows_capture`, `winreg`), допустимы **только** в `engines/`. Это тоже контракт `import-linter` (forbidden для остальных слоёв).
 - `PySide6` допустим **только** в `ui/`.
 - `engines/hook/host.py` — отдельная программа: импортирует только `core/` и `lunahook-py`, ничего из остального приложения (отдельный контракт `import-linter`).
@@ -154,11 +155,13 @@ subtitle-voicer/
 │   │   │   ├── inputs.py          # три варианта входа OCR (4.3)
 │   │   │   ├── runner.py          # вызов OcrEngine, варианты при низкой уверенности, порядок строк
 │   │   │   └── junk_filter.py     # фильтр мусора
+│   │   ├── normalize.py           # нормализованный текст для сравнений (4.4) и карта индексов для хвоста
 │   │   ├── dedup.py               # обработка результата 4.4 для ЛЮБОГО источника: новая / продолжение /
 │   │   │                          # та же / недавно звучала / дубль из другого источника
 │   │   ├── speaker/
 │   │   │   ├── extract.py         # prefix / zone / color → кандидат
 │   │   │   ├── validate.py        # проверка имени, стоп-лист
+│   │   │   ├── resolver.py        # SpeakerResolver: режим зоны -> имя и текст без имени
 │   │   │   ├── characters.py      # сопоставление, назначение голосов, уточнение пола, объединение
 │   │   │   └── gender.py          # эвристика пола
 │   │   ├── text/
@@ -265,6 +268,8 @@ subtitle-voicer/
 │   ├── gen_synthetic.py
 │   ├── ocr_bench.py
 │   ├── smoke_stack.py
+│   ├── subtitle_player.py         # тестовое окно с субтитрами для проверки watch
+│   ├── capture_probe.py           # кадр WGC и DXGI со статистикой цвета (проверка HDR)
 │   ├── voice_samples.py
 │   └── latency_report.py
 │
@@ -377,7 +382,7 @@ TTS: dict[str, str] = {
 |---|---|
 | 0 | Весь каркас пакетов (пустые `__init__.py`), `core/` с моделями и портами-заготовками, `app/bus.py`, `app/log.py`, `config/paths.py`, `engines/registry.py`, заготовка `cli.py`, контракты `import-linter`, `tests/fakes/FakeClock`, `tools/smoke_stack.py`, `uv.lock` |
 | 1 | `pipeline/vision/`, `pipeline/ocr/`, `engines/ocr/rapid.py`, `winrt.py` |
-| 2 | `engines/capture/`, `pipeline/vision/stability.py`, `pipeline/dedup.py`, `pipeline/speaker/extract.py`, `validate.py`, `sources/zone_ocr.py`, `services/capture_service.py`, `zone_service.py`, `cli.py watch` |
+| 2 | `engines/capture/`, `engines/system/windows.py` (поиск окна, монитор, DPI), `pipeline/vision/stability.py`, `pipeline/normalize.py`, `pipeline/dedup.py`, `pipeline/speaker/extract.py`, `validate.py`, `resolver.py`, `sources/zone_ocr.py`, `services/base.py`, `capture_service.py`, `zone_service.py`, `app/container.py`, `runtime.py`, `cli.py watch`, `tools/subtitle_player.py`, `capture_probe.py` |
 | 3 | `engines/tts/`, `engines/audio/output.py`, `pipeline/text/`, `pipeline/speech/`, `services/speech_service.py`, `resources/voices/` |
 | 4 | `engines/audio/ducker.py` |
 | 5 | `config/profile*.py`, `config/migrations.py`, `config/characters_csv.py`, `pipeline/speaker/characters.py`, `pipeline/games/`, `engines/system/windows.py`, `services/game_watcher.py`, `cli.py run / characters` |
