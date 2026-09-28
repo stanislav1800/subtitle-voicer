@@ -20,7 +20,6 @@ from pathlib import Path
 # (distribution on PyPI, module to import) — TZ section 7, without `vdf` (stage 9)
 STACK: list[tuple[str, str]] = [
     ("windows-capture", "windows_capture"),
-    ("dxcam", "dxcam"),
     ("opencv-python-headless", "cv2"),
     ("numpy", "numpy"),
     ("pillow", "PIL"),
