@@ -81,8 +81,8 @@ testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-ra --strict-markers --import-mode=importlib"
 markers = [
-    "windows: тест требует настоящую Windows (в CI и на других ОС пропускается)",
-    "models: тест требует скачанных моделей OCR/TTS (в CI пропускается)",
+    "windows: тест требует настоящую Windows (на других ОС пропускается)",
+    "models: тест требует скачанных моделей OCR/TTS (пропуск: -m \"not models\")",
 ]
 
 # ---------------------------------------------------------------- mypy (мягкий режим)

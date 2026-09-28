@@ -20,7 +20,7 @@ Subtitle Voicer — Windows-приложение, которое читает р
 - Тесты: `uv run pytest`
 - Линт: `uv run ruff check .` и `uv run ruff format .`
 - Правила зависимостей между слоями: `uv run lint-imports`
-- Перед коммитом: `ruff check`, `ruff format --check`, `lint-imports`, `pytest` — всё зелёное (то же проверяет CI)
+- Перед коммитом: `ruff check`, `ruff format --check`, `lint-imports`, `pytest` — всё зелёное (CI нет, проверки только локальные)
 - Проверка стека: `uv run python tools/smoke_stack.py`
 - Бенчмарк OCR: `uv run python tools/ocr_bench.py`
 

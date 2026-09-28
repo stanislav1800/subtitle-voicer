@@ -95,7 +95,7 @@ config    → core
 core      → (ничего из проекта)
 ```
 
-- **Проверяются автоматически** инструментом `import-linter` (dev-зависимость; контракты в `pyproject.toml`, секция `[tool.importlinter]`). Запуск: `uv run lint-imports`. Нарушение контракта = красный CI и незакрытый этап.
+- **Проверяются автоматически** инструментом `import-linter` (dev-зависимость; контракты в `pyproject.toml`, секция `[tool.importlinter]`). Запуск: `uv run lint-imports`. Нарушение контракта = красная проверка перед коммитом и незакрытый этап.
 - Модули, которые трогают Windows (`pywin32`, `comtypes`, `pycaw`, `winrt`, `windows_capture`, `winreg`), допустимы **только** в `engines/`. Это тоже контракт `import-linter` (forbidden для остальных слоёв).
 - `PySide6` допустим **только** в `ui/`.
 - `engines/hook/host.py` — отдельная программа: импортирует только `core/` и `lunahook-py`, ничего из остального приложения (отдельный контракт `import-linter`).
@@ -111,7 +111,6 @@ subtitle-voicer/
 ├── pyproject.toml                 # зависимости, extras, ruff, pytest, import-linter
 ├── uv.lock                        # коммитится
 ├── .gitattributes                 # LF для текста, бинарные картинки
-├── .github/workflows/ci.yml       # ruff, lint-imports, pytest на windows-latest
 ├── docs/
 │   ├── TZ.md                      # что делаем
 │   ├── ARCHITECTURE.md            # как устроен код (этот файл)
@@ -376,7 +375,7 @@ TTS: dict[str, str] = {
 
 | Этап | Что создаётся |
 |---|---|
-| 0 | Весь каркас пакетов (пустые `__init__.py`), `core/` с моделями и портами-заготовками, `app/bus.py`, `app/log.py`, `config/paths.py`, `engines/registry.py`, заготовка `cli.py`, контракты `import-linter`, `tests/fakes/FakeClock`, `tools/smoke_stack.py`, CI, `uv.lock` |
+| 0 | Весь каркас пакетов (пустые `__init__.py`), `core/` с моделями и портами-заготовками, `app/bus.py`, `app/log.py`, `config/paths.py`, `engines/registry.py`, заготовка `cli.py`, контракты `import-linter`, `tests/fakes/FakeClock`, `tools/smoke_stack.py`, `uv.lock` |
 | 1 | `pipeline/vision/`, `pipeline/ocr/`, `engines/ocr/rapid.py`, `winrt.py` |
 | 2 | `engines/capture/`, `pipeline/vision/stability.py`, `pipeline/dedup.py`, `pipeline/speaker/extract.py`, `validate.py`, `sources/zone_ocr.py`, `services/capture_service.py`, `zone_service.py`, `cli.py watch` |
 | 3 | `engines/tts/`, `engines/audio/output.py`, `pipeline/text/`, `pipeline/speech/`, `services/speech_service.py`, `resources/voices/` |
