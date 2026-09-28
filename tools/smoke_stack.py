@@ -1,6 +1,6 @@
 """Stack smoke test (stage 0): imports, OCR of a generated Russian image, one Silero phrase.
 
-Run: uv run python tools/smoke_stack.py [--out smoke.wav]
+Run: uv run python tools/smoke_stack.py [--out smoke.wav] [--no-play]
 
 Models are fetched by the libraries' own mechanisms (TZ 4.14): RapidOCR caches its
 models inside the package, Silero downloads into the ``silero`` package folder.
@@ -127,7 +127,7 @@ def write_wav(path: Path, samples, sample_rate: int) -> None:
         wav.writeframes(pcm.tobytes())
 
 
-def check_tts(out: Path) -> bool:
+def check_tts(out: Path, play: bool) -> bool:
     section("TTS: silero-stress + Silero v5_cis_base, CPU")
     import torch
     from silero import silero_tts
@@ -157,22 +157,32 @@ def check_tts(out: Path) -> bool:
     duration = len(samples) / SAMPLE_RATE
     write_wav(out, samples, SAMPLE_RATE)
     print(f"  голос {speaker}: {duration:.2f} с звука за {elapsed:.2f} с -> {out.resolve()}")
+    if play:
+        import sounddevice as sd
+
+        device = sd.query_devices(kind="output")["name"]
+        print(f"  воспроизведение на устройстве по умолчанию: {device}")
+        sd.play(samples, SAMPLE_RATE)
+        sd.wait()
     return duration > 0.5
 
 
 def main() -> int:
     if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(errors="replace")
+        # построчный вывод: иначе при запуске не из консоли текст появляется только в конце
+        sys.stdout.reconfigure(errors="replace", line_buffering=True)
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, default=Path("smoke.wav"), help="куда записать wav")
+    parser.add_argument("--no-play", action="store_true", help="не проигрывать фразу")
     args = parser.parse_args()
 
     print(f"Python {sys.version}")
+    print("Первый запуск скачивает модели (~100 МБ), дальше — около 10 секунд.")
     results: dict[str, bool] = {}
     for name, check in [
         ("импорт", check_imports),
         ("OCR", check_ocr),
-        ("TTS", lambda: check_tts(args.out)),
+        ("TTS", lambda: check_tts(args.out, play=not args.no_play)),
     ]:
         try:
             results[name] = check()
