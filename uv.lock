@@ -252,19 +252,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/a2/55/8f8cab2afd404cf578136ef2cc5dfb50baa1761b68c9da1fb1e4eed343c9/docopt-0.6.2.tar.gz", hash = "sha256:49b3a825280bd66b3aa83585ef59c4a8c82f2c8a522dbe754a8bc8d08c85c491", size = 25901, upload-time = "2014-06-16T11:18:57.406Z" }
 
 [[package]]
-name = "dxcam"
-version = "0.3.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "comtypes" },
-    { name = "numpy" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/de/b7/b3d3e3fa42f347ac4b37fd639634935b4eefff1d5d61bdf72a6d8b906919/dxcam-0.3.0.tar.gz", hash = "sha256:d524da45adf70e044865e7d4e9098e655d6734951781155dda50c1292e20d8bd", size = 48742, upload-time = "2026-03-12T02:52:17.298Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/32/3c/6aca1d8a906ccb5d7b5993b99822dbd60ac18470e88eee845afd927d678f/dxcam-0.3.0-cp312-cp312-win_amd64.whl", hash = "sha256:ab75b16529b8bd7337dfcb663525c338233a24b4c5b76193ced82a70e16edf49", size = 339445, upload-time = "2026-03-12T02:52:13.037Z" },
-]
-
-[[package]]
 name = "evdev"
 version = "2.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1259,7 +1246,6 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "comtypes" },
-    { name = "dxcam" },
     { name = "num2words" },
     { name = "numpy" },
     { name = "onnxruntime" },
@@ -1299,7 +1285,6 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "comtypes" },
-    { name = "dxcam" },
     { name = "num2words" },
     { name = "numpy" },
     { name = "onnxruntime" },
