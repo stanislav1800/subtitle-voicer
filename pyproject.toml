@@ -100,6 +100,9 @@ check_untyped_defs = true
 
 # ---------------------------------------------------------------- import-linter
 # Правила зависимостей между слоями: docs/ARCHITECTURE.md, раздел 3.
+# Правила «кто кого импортирует» — про прямые импорты: app как точка сборки импортирует всё,
+# поэтому косвенные цепочки через app (cli -> app -> pipeline) допустимы
+# (allow_indirect_imports). Строгими остаются слои, engines и PySide6.
 [tool.importlinter]
 root_package = "subvoicer"
 include_external_packages = true
@@ -144,12 +147,14 @@ source_modules = [
     "subvoicer.cli",
 ]
 forbidden_modules = ["subvoicer.engines"]
+allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
 name = "ui и cli работают через app, config, core"
 type = "forbidden"
 source_modules = ["subvoicer.ui", "subvoicer.cli"]
 forbidden_modules = ["subvoicer.services", "subvoicer.sources", "subvoicer.pipeline"]
+allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
 name = "Windows-модули только в engines"
@@ -178,6 +183,7 @@ forbidden_modules = [
     "dxcam",
     "winreg",
 ]
+allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
 name = "PySide6 только в ui"
