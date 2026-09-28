@@ -26,3 +26,6 @@ tests/fixtures/synthetic/
 .idea/
 Thumbs.db
 desktop.ini
+
+# Список моделей, который silero_tts скачивает в текущую папку
+latest_silero_models.yml

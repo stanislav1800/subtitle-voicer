@@ -1,0 +1,190 @@
+[project]
+name = "subtitle-voicer"
+version = "0.1.0"
+description = "Автоозвучка русских субтитров в играх: захват окна, OCR, локальный TTS"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    # Захват
+    "windows-capture>=2.0",
+    "dxcam",
+    # Изображения
+    "opencv-python-headless",
+    "numpy",
+    "pillow",
+    # OCR
+    "rapidocr>=3.5",
+    "onnxruntime",
+    "winrt-Windows.Media.Ocr",
+    # TTS
+    "silero",
+    "silero-stress",
+    "torch",
+    # Текст
+    "rapidfuzz",
+    "num2words",
+    # Аудио
+    "sounddevice",
+    "pycaw",
+    "comtypes",
+    # Процессы, окна, реестр
+    "psutil",
+    "pywin32",
+    # Хоткеи
+    "pynput",
+    # GUI
+    "PySide6",
+    # Конфиги
+    "pydantic>=2",
+    "tomlkit",
+    "platformdirs",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "ruff",
+    "mypy",
+    "import-linter",
+]
+
+[build-system]
+requires = ["uv_build>=0.12,<0.13"]
+build-backend = "uv_build"
+
+[tool.uv]
+# rapidocr и windows-capture требуют opencv-python (с Qt внутри), а он пишет в тот же
+# каталог cv2/, что и opencv-python-headless. Оставляем только headless (ТЗ, раздел 7;
+# docs/DECISIONS.md).
+exclude-dependencies = ["opencv-python"]
+
+[tool.uv.build-backend]
+module-name = "subvoicer"
+
+# ---------------------------------------------------------------- ruff
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.format]
+# Примеры кода в документации — не исходники проекта
+exclude = ["*.md"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+# RUF001–003: кириллица в строках и комментариях — норма для проекта
+ignore = ["RUF001", "RUF002", "RUF003"]
+
+# ---------------------------------------------------------------- pytest
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra --strict-markers --import-mode=importlib"
+markers = [
+    "windows: тест требует настоящую Windows (в CI и на других ОС пропускается)",
+    "models: тест требует скачанных моделей OCR/TTS (в CI пропускается)",
+]
+
+# ---------------------------------------------------------------- mypy (мягкий режим)
+[tool.mypy]
+python_version = "3.12"
+files = ["src"]
+ignore_missing_imports = true
+warn_unused_ignores = true
+check_untyped_defs = true
+
+# ---------------------------------------------------------------- import-linter
+# Правила зависимостей между слоями: docs/ARCHITECTURE.md, раздел 3.
+[tool.importlinter]
+root_package = "subvoicer"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Слои: ui|cli -> app -> services -> sources -> pipeline -> config -> core"
+type = "layers"
+layers = [
+    "subvoicer.ui | subvoicer.cli",
+    "subvoicer.app",
+    "subvoicer.services",
+    "subvoicer.sources",
+    "subvoicer.pipeline",
+    "subvoicer.config",
+    "subvoicer.core",
+]
+
+[[tool.importlinter.contracts]]
+name = "engines импортирует только core"
+type = "forbidden"
+source_modules = ["subvoicer.engines"]
+forbidden_modules = [
+    "subvoicer.config",
+    "subvoicer.pipeline",
+    "subvoicer.sources",
+    "subvoicer.services",
+    "subvoicer.app",
+    "subvoicer.ui",
+    "subvoicer.cli",
+]
+
+[[tool.importlinter.contracts]]
+name = "Конкретные движки импортирует только app"
+type = "forbidden"
+source_modules = [
+    "subvoicer.core",
+    "subvoicer.config",
+    "subvoicer.pipeline",
+    "subvoicer.sources",
+    "subvoicer.services",
+    "subvoicer.ui",
+    "subvoicer.cli",
+]
+forbidden_modules = ["subvoicer.engines"]
+
+[[tool.importlinter.contracts]]
+name = "ui и cli работают через app, config, core"
+type = "forbidden"
+source_modules = ["subvoicer.ui", "subvoicer.cli"]
+forbidden_modules = ["subvoicer.services", "subvoicer.sources", "subvoicer.pipeline"]
+
+[[tool.importlinter.contracts]]
+name = "Windows-модули только в engines"
+type = "forbidden"
+source_modules = [
+    "subvoicer.core",
+    "subvoicer.config",
+    "subvoicer.pipeline",
+    "subvoicer.sources",
+    "subvoicer.services",
+    "subvoicer.app",
+    "subvoicer.ui",
+    "subvoicer.cli",
+]
+forbidden_modules = [
+    "win32api",
+    "win32con",
+    "win32gui",
+    "win32process",
+    "pywintypes",
+    "win32com",
+    "comtypes",
+    "pycaw",
+    "winrt",
+    "windows_capture",
+    "dxcam",
+    "winreg",
+]
+
+[[tool.importlinter.contracts]]
+name = "PySide6 только в ui"
+type = "forbidden"
+source_modules = [
+    "subvoicer.core",
+    "subvoicer.config",
+    "subvoicer.pipeline",
+    "subvoicer.sources",
+    "subvoicer.services",
+    "subvoicer.engines",
+    "subvoicer.app",
+    "subvoicer.cli",
+]
+forbidden_modules = ["PySide6", "shiboken6"]
