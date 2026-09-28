@@ -17,3 +17,7 @@ def read_list(name: str) -> list[str]:
 
 def short_words() -> list[str]:
     return read_list("short_words.txt")
+
+
+def speaker_stoplist() -> list[str]:
+    return read_list("speaker_stoplist.txt")
