@@ -27,6 +27,12 @@ from subvoicer.pipeline.vision.stability import (
 log = logging.getLogger(__name__)
 
 
+def drop_last_word(text: str) -> str:
+    """``"Охрана на входе сме"`` -> ``"Охрана на входе"``; a single word is kept."""
+    head, _, _ = text.rstrip().rpartition(" ")
+    return head.rstrip() if head.strip() else text.strip()
+
+
 @dataclass(frozen=True)
 class ZoneSpec:
     id: str
@@ -91,9 +97,9 @@ class ZoneOcrSource:
         if isinstance(decision, Emptied) or decision is None:
             return None
         assert isinstance(decision, RunOcr)
-        return self._recognize(zone, decision.t_change)
+        return self._recognize(zone, decision)
 
-    def _recognize(self, zone: _ZoneState, t_change: float) -> Utterance | None:
+    def _recognize(self, zone: _ZoneState, decision: RunOcr) -> Utterance | None:
         spec, stabilizer = zone.spec, zone.stabilizer
         assert zone.crop is not None and zone.mask is not None
         started = time.perf_counter()
@@ -107,14 +113,19 @@ class ZoneOcrSource:
             outcome.mean_confidence,
             outcome.text,
         )
-        verdict = self._junk.check(outcome.text, outcome.mean_confidence)
+        text = outcome.text
+        if decision.still_typing:
+            # read before typing ended: the last word is likely cut, it comes with the rest
+            text = drop_last_word(text)
+        verdict = self._junk.check(text, outcome.mean_confidence)
         if not verdict.ok:
             log.debug("Зона %s: отброшено фильтром (%s)", spec.id, verdict.reason)
             return None
 
         now = self._clock.now()
+        t_change = decision.t_change
         result = self._dedup.process(
-            outcome.text,
+            text,
             spec.id,
             was_empty=stabilizer.was_empty,
             now=now,
@@ -139,7 +150,7 @@ class ZoneOcrSource:
             channel=spec.id,
             kind=kind,
             text=text,
-            full_text=outcome.text,
+            full_text=text,
             speaker=zone.speaker,
             t_change=t_change,
             t_detected=now,

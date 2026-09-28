@@ -12,7 +12,7 @@ from subvoicer.pipeline.ocr.junk_filter import JunkFilter
 from subvoicer.pipeline.ocr.runner import OcrRunner
 from subvoicer.pipeline.speaker.resolver import SpeakerMode, SpeakerResolver
 from subvoicer.pipeline.vision.masks import MaskPreset, MaskSpec
-from subvoicer.sources.zone_ocr import ZoneOcrSource, ZoneSpec
+from subvoicer.sources.zone_ocr import ZoneOcrSource, ZoneSpec, drop_last_word
 from tests.fakes.clock import FakeClock
 
 H, W = 80, 400
@@ -93,18 +93,49 @@ def test_typewriter_text_is_one_line() -> None:
     assert s.out[0].kind is UtteranceKind.NEW
 
 
-def test_long_typewriter_text_continues_instead_of_repeating() -> None:
+def test_typewriter_longer_than_max_wait_is_still_one_line() -> None:
     s = Screen()
     line = "Слушай внимательно, я не буду повторять дважды, потому что времени у нас совсем нет."
-    for typed in range(1, len(line) + 1, 2):  # 2 characters per frame: longer than max_wait
+    for typed in range(1, len(line) + 1, 2):  # 2 characters per frame: ~4.3 s of typing
+        s.show(line, typed=typed)
+        s.tick()
+    s.show(line)
+    s.run(1)
+    assert [(u.kind, u.text) for u in s.out] == [(UtteranceKind.NEW, line)]
+    assert s.ocr.calls == 1
+
+
+def test_very_long_typing_is_forced_and_continued() -> None:
+    s = Screen()
+    line = "Раз два три четыре пять шесть семь восемь девять десять одиннадцать двенадцать."
+    for typed in range(1, len(line) + 1):  # 1 character per frame: ~8 s of typing
         s.show(line, typed=typed)
         s.tick()
     s.show(line)
     s.run(1)
     assert s.out[0].kind is UtteranceKind.NEW
-    assert all(u.kind is UtteranceKind.CONTINUATION for u in s.out[1:])
-    spoken = " ".join(u.text for u in s.out)
-    assert spoken.replace(" ", "") == line.replace(" ", "")
+    assert [u.kind for u in s.out[1:]] == [UtteranceKind.CONTINUATION]
+    assert " ".join(u.text for u in s.out) == line  # cut at a word boundary
+
+
+def test_short_last_word_after_forced_read_is_not_lost() -> None:
+    """Forced at 5 s mid-word: the cut word is dropped and comes back whole in the tail,
+    which is then long enough to count as a continuation (> 3 characters)."""
+    s = Screen()
+    line = "Охрана на входе сменится через двадцать минут, у нас будет окно, не опаздывай."
+    for typed in range(1, len(line) + 1):  # ~5.1 s of typing: the 5 s cap hits at the end
+        s.show(line, typed=typed)
+        s.tick(0.065)
+    s.show(line)
+    s.run(1)
+    assert " ".join(u.text for u in s.out) == line
+    assert s.out[-1].text.endswith("опаздывай.")
+
+
+def test_drop_last_word() -> None:
+    assert drop_last_word("Охрана на входе сме") == "Охрана на входе"
+    assert drop_last_word("Охрана ") == "Охрана"
+    assert drop_last_word("Охрана") == "Охрана"
 
 
 def test_same_line_twice_through_empty_zone_is_printed_twice() -> None:
