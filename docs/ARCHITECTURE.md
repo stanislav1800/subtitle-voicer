@@ -109,10 +109,15 @@ subtitle-voicer/
 ├── CLAUDE.md
 ├── README.md
 ├── pyproject.toml                 # зависимости, extras, ruff, pytest, import-linter
+├── uv.lock                        # коммитится
+├── .gitattributes                 # LF для текста, бинарные картинки
+├── .github/workflows/ci.yml       # ruff, lint-imports, pytest на windows-latest
 ├── docs/
 │   ├── TZ.md                      # что делаем
 │   ├── ARCHITECTURE.md            # как устроен код (этот файл)
 │   ├── UI.md                      # как выглядит
+│   ├── STATUS.md                  # где остановились: этап, готово, отклонения, вопросы
+│   ├── DECISIONS.md               # журнал решений по ходу реализации
 │   └── design/                    # HTML-макеты экранов
 ├── src/subvoicer/
 │   ├── __init__.py
@@ -134,7 +139,9 @@ subtitle-voicer/
 │   │   ├── settings.py            # Settings (pydantic) + чтение/запись settings.toml
 │   │   ├── profile.py             # Profile, Layout, Zone, VoicingPolicy, SpeakerConfig, VoiceConfig,
 │   │   │                          # Character, PronunciationEntry, HookSettings, HookChannel (5.4, 4.17 ТЗ)
-│   │   ├── profile_store.py       # файлы профилей, сопоставление процесса с профилем (4.11), импорт/экспорт
+│   │   ├── profile_store.py       # файлы профилей, атомарная запись, резервные копии, сопоставление
+│   │   │                          # процесса с профилем (4.11), импорт/экспорт
+│   │   ├── migrations.py          # миграции schema_version: цепочка чистых функций vN → vN+1
 │   │   ├── characters_csv.py      # импорт персонажей из CSV (4.6)
 │   │   └── resources.py           # загрузка файлов из resources/
 │   │
@@ -204,6 +211,7 @@ subtitle-voicer/
 │   │   │   ├── anticheat.py       # проверка запущенных античитов (4.17 ТЗ)
 │   │   │   ├── hotkeys.py         # pynput (HotkeyService)
 │   │   │   ├── autostart.py       # ключ реестра Run
+│   │   │   ├── single_instance.py # именованный мьютекс, вывод окна первого экземпляра
 │   │   │   └── icons.py           # иконка из exe
 │   │   └── library/               # этап 9
 │   │       ├── __init__.py        # LIBRARY = {"steam": …, "epic": …, "gog": …}
@@ -223,7 +231,8 @@ subtitle-voicer/
 │   ├── app/
 │   │   ├── bus.py                 # потокобезопасная шина событий (publish/subscribe)
 │   │   ├── container.py           # сборка: движки из реестров по настройкам → сервисы
-│   │   ├── runtime.py             # запуск/остановка, смена профиля, аварийное восстановление громкости
+│   │   ├── runtime.py             # запуск/остановка, один экземпляр, смена профиля, восстановление громкости,
+│   │   │                          # перехват необработанных исключений, пересоздание захвата
 │   │   └── facade.py              # команды для UI и CLI: pause, repeat, skip, save_profile, preview_voice …
 │   │
 │   ├── ui/                        # только здесь PySide6
@@ -366,13 +375,13 @@ TTS: dict[str, str] = {
 
 | Этап | Что создаётся |
 |---|---|
-| 0 | Весь каркас пакетов (пустые `__init__.py`), `core/` с моделями и портами-заготовками, `app/bus.py`, `engines/registry.py`, контракты `import-linter`, `tests/fakes/FakeClock` |
+| 0 | Весь каркас пакетов (пустые `__init__.py`), `core/` с моделями и портами-заготовками, `app/bus.py`, `engines/registry.py`, контракты `import-linter`, `tests/fakes/FakeClock`, CI, `uv.lock` |
 | 1 | `pipeline/vision/`, `pipeline/ocr/`, `engines/ocr/rapid.py`, `winrt.py` |
 | 2 | `engines/capture/`, `pipeline/vision/stability.py`, `pipeline/dedup.py`, `pipeline/speaker/extract.py`, `validate.py`, `sources/zone_ocr.py`, `services/capture_service.py`, `zone_service.py`, `cli.py watch` |
 | 3 | `engines/tts/`, `engines/audio/output.py`, `pipeline/text/`, `pipeline/speech/`, `services/speech_service.py`, `resources/voices/` |
 | 4 | `engines/audio/ducker.py` |
-| 5 | `config/profile*.py`, `config/characters_csv.py`, `pipeline/speaker/characters.py`, `pipeline/games/`, `engines/system/windows.py`, `services/game_watcher.py`, `cli.py run / characters` |
-| 6 | `ui/`, `app/facade.py`, `services/history.py` |
+| 5 | `config/profile*.py`, `config/migrations.py`, `config/characters_csv.py`, `pipeline/speaker/characters.py`, `pipeline/games/`, `engines/system/windows.py`, `services/game_watcher.py`, `cli.py run / characters` |
+| 6 | `ui/`, `app/facade.py`, `services/history.py`, `engines/system/single_instance.py` |
 | 7 | `sources/manual.py`, `engines/system/hotkeys.py` целиком, `services/hotkey_service.py` |
 | 8 | загрузка моделей в `config/` + `engines/`, `engines/system/autostart.py` |
 | 9 | `engines/library/`, `engines/system/icons.py` |
