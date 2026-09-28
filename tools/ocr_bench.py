@@ -43,8 +43,8 @@ from subvoicer.pipeline.vision.masks import (
 )
 
 ROOT = Path(__file__).resolve().parent.parent
-PRESETS = (MaskPreset.COLOR, MaskPreset.BRIGHT_ON_DARK)
-VARIANTS = tuple(OcrInput)
+PRESETS: tuple[MaskPreset, ...] = (MaskPreset.COLOR, MaskPreset.BRIGHT_ON_DARK)
+VARIANTS: tuple[OcrInput, ...] = tuple(OcrInput)
 BGS = ["dark", "light", "gradient", "noise", "motley", "neon"]
 BACKINGS = ["none", "a50", "a80"]
 LOW_CONFIDENCE = OcrSettings().low_confidence
@@ -115,9 +115,15 @@ def mask_spec(preset: MaskPreset, meta: dict[str, object]) -> MaskSpec:
     return MaskSpec(preset)
 
 
-def run_model(model: str, samples: list[Sample], junk: JunkFilter) -> Records:
+def run_model(
+    model: str,
+    samples: list[Sample],
+    junk: JunkFilter,
+    presets: tuple[MaskPreset, ...],
+    merge_rows: bool,
+) -> Records:
     """(sample, preset, variant) -> Record."""
-    engine = RapidOcrEngine(model=model)
+    engine = RapidOcrEngine(model=model, merge_rows=merge_rows)
     engine.load()
     runner = OcrRunner(engine)
     # warm-up: the first calls allocate onnxruntime buffers
@@ -130,7 +136,7 @@ def run_model(model: str, samples: list[Sample], junk: JunkFilter) -> Records:
     started = time.perf_counter()
     for index, sample in enumerate(samples, 1):
         truth = normalize(sample.truth)
-        for preset in PRESETS:
+        for preset in presets:
             mask = build_mask(sample.image, mask_spec(preset, sample.meta))
             for variant in VARIANTS:
                 t0 = time.perf_counter()
@@ -268,9 +274,19 @@ def main() -> int:
     parser.add_argument("--data", type=Path, default=ROOT / "tests" / "fixtures" / "synthetic")
     parser.add_argument("--models", nargs="+", default=list(MODELS), choices=MODELS)
     parser.add_argument("--limit", type=int, default=None, help="взять только первые N изображений")
+    parser.add_argument(
+        "--presets",
+        nargs="+",
+        default=[p.value for p in PRESETS],
+        choices=[p.value for p in PRESETS],
+    )
+    parser.add_argument(
+        "--no-merge-rows", action="store_true", help="распознавать куски детектора по отдельности"
+    )
     parser.add_argument("--out", type=Path, default=ROOT / "reports")
     args = parser.parse_args()
 
+    presets = tuple(MaskPreset(p) for p in args.presets)
     samples = load_samples(args.data, args.limit)
     if not samples:
         print(f"Нет изображений в {args.data}. Сначала: uv run python tools/gen_synthetic.py")
@@ -279,7 +295,12 @@ def main() -> int:
     print(f"Изображений: {len(samples)}; модели: {', '.join(args.models)}")
 
     stamp = datetime.now().strftime("%Y-%m-%d_%H%M")
-    report = [f"# Бенчмарк OCR — {stamp}", "", f"Изображений: {len(samples)} ({args.data})", ""]
+    report = [
+        f"# Бенчмарк OCR — {stamp}",
+        "",
+        f"Изображений: {len(samples)} ({args.data}); склейка строк: {not args.no_merge_rows}",
+        "",
+    ]
     raw: dict[str, dict[str, object]] = {}
     summary: list[str] = ["## Сводка: CER по вариантам входа (все изображения)", ""]
     summary.append("| модель | пресет | " + " | ".join(v.value for v in VARIANTS) + " |")
@@ -287,10 +308,10 @@ def main() -> int:
 
     for model in args.models:
         print(f"Модель {model}...")
-        records = run_model(model, samples, junk)
+        records = run_model(model, samples, junk, presets, merge_rows=not args.no_merge_rows)
         raw[model] = {"|".join(k): vars(r) for k, r in records.items()}
         report += [f"## Модель `{model}`", ""]
-        for preset in PRESETS:
+        for preset in presets:
             cers = []
             for variant in VARIANTS:
                 get = fixed_input(records, preset, variant)
