@@ -38,6 +38,11 @@ dependencies = [
     "pydantic>=2",
     "tomlkit",
     "platformdirs",
+    "winrt-windows-graphics-imaging>=3.2.1",
+    "winrt-windows-globalization>=3.2.1",
+    "winrt-windows-storage-streams>=3.2.1",
+    "winrt-windows-foundation>=3.2.1",
+    "winrt-windows-foundation-collections>=3.2.1",
 ]
 
 [dependency-groups]

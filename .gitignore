@@ -29,3 +29,6 @@ desktop.ini
 
 # Список моделей, который silero_tts скачивает в текущую папку
 latest_silero_models.yml
+
+# Отчёты бенчмарков
+reports/
