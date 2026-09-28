@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from subvoicer.core.models import Utterance
+
 
 @dataclass(frozen=True, slots=True)
 class Event:
@@ -17,3 +19,34 @@ class EngineUnavailable(Event):
     family: str
     engine_id: str
     reason: str
+
+
+@dataclass(frozen=True, slots=True)
+class UtteranceDetected(Event):
+    utterance: Utterance
+
+
+@dataclass(frozen=True, slots=True)
+class CaptureFailed(Event):
+    """Capture could not be restored after the allowed attempts; retries continue slower."""
+
+    hwnd: int
+    attempts: int
+
+
+@dataclass(frozen=True, slots=True)
+class CaptureRestored(Event):
+    hwnd: int
+
+
+@dataclass(frozen=True, slots=True)
+class CaptureStopped(Event):
+    """The captured window is gone (the game was closed)."""
+
+    hwnd: int
+
+
+@dataclass(frozen=True, slots=True)
+class CaptureModeChanged(Event):
+    hwnd: int
+    mode: str  # "wgc" | "dxgi"

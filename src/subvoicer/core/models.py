@@ -1,7 +1,6 @@
 """Shared typed data models used by all layers and engines.
 
-Stage 0 contains only the models referenced by the ports in ``core/ports.py``;
-the rest (Utterance, SpeechRequest, Mask, ...) are added by the stages that need them.
+Models are added by the stages that need them.
 """
 
 from __future__ import annotations
@@ -54,7 +53,10 @@ class Rect:
 
 @dataclass(frozen=True, slots=True)
 class Frame:
-    """A captured frame: BGRA pixels in physical pixels, and the monotonic receive time."""
+    """A captured frame in physical pixels and the monotonic time it was received.
+
+    ``image`` is BGRA (WGC) or BGR (DXGI fallback); consumers go through ``to_bgr``.
+    """
 
     image: npt.NDArray[np.uint8]
     timestamp: float
@@ -101,6 +103,43 @@ class AudioClip:
     @property
     def duration(self) -> float:
         return len(self.samples) / self.sample_rate
+
+
+@dataclass(frozen=True, slots=True)
+class CaptureCapabilities:
+    window_capture: bool  # captures the window itself (not what is on the monitor)
+
+
+@dataclass(frozen=True, slots=True)
+class WindowRef:
+    """A top-level window; sizes are the client area in physical pixels."""
+
+    hwnd: int
+    pid: int
+    exe: str
+    title: str
+    width: int
+    height: int
+
+
+class UtteranceKind(StrEnum):
+    NEW = "new"
+    CONTINUATION = "continuation"  # the tail of a line that kept growing (TZ 4.4, step 4)
+
+
+@dataclass(frozen=True, slots=True)
+class Utterance:
+    """A line of text ready for voicing, from any source (zone OCR now, hooks later)."""
+
+    channel: str  # zone id or hook channel
+    kind: UtteranceKind
+    text: str  # what to voice: without the speaker name; only the new tail for a continuation
+    full_text: str  # the whole recognised line
+    speaker: str | None
+    t_change: float  # monotonic time the zone mask first changed (latency start, TZ 6)
+    t_detected: float  # monotonic time the line was accepted
+    confidence: float = 1.0
+    ocr_input: str = ""
 
 
 @dataclass(frozen=True, slots=True)

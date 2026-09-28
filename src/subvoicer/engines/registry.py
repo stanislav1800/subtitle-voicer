@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import importlib
 from collections.abc import Mapping
+from typing import Any
 
 from subvoicer.core.errors import UnknownEngineError
 
@@ -31,7 +32,7 @@ def entries(family: str) -> Mapping[str, str]:
     return registry
 
 
-def load_class(path: str) -> type:
+def load_class(path: str) -> type[Any]:
     """Import ``"package.module:Class"`` and return the class."""
     module_name, sep, class_name = path.partition(":")
     if not sep or not module_name or not class_name:
@@ -42,7 +43,7 @@ def load_class(path: str) -> type:
     return cls
 
 
-def resolve(family: str, engine_id: str) -> type:
+def resolve(family: str, engine_id: str) -> type[Any]:
     """Return the engine class registered as ``engine_id`` in ``family``."""
     registry = entries(family)
     try:

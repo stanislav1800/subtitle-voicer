@@ -26,8 +26,18 @@ class Clock(Protocol):
 
 
 class FrameSource(Protocol):
-    def start(self, hwnd: int) -> None: ...
-    def latest(self) -> Frame | None: ...
+    def start(self, hwnd: int) -> None:
+        """Start capturing the window; raises on failure."""
+        ...
+
+    def latest(self) -> Frame | None:
+        """The most recent frame (older ones are dropped), or None before the first one."""
+        ...
+
+    def is_alive(self) -> bool:
+        """False once the capture session closed or failed and must be recreated."""
+        ...
+
     def stop(self) -> None: ...
 
 
