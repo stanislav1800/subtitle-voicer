@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Модели и данные
+models/
+*.onnx
+*.pt
+*.safetensors
+captures/
+logs/
+*.wav
+
+# Сгенерированные фикстуры (реальные кадры в tests/fixtures/real/ коммитим)
+tests/fixtures/synthetic/
+
+# IDE / ОС
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
