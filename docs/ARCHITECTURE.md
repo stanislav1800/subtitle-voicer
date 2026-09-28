@@ -23,6 +23,7 @@
 | **Мелкие сервисы на каждую заботу**: проверка «похоже ли на текст», кеш-дедупликация | Translumo: `TextValidityPredictor`, `TextResultCacheService` | Фильтр мусора, стабилизатор, сопоставление персонажей — отдельные классы в `pipeline/` |
 | **Данные по умолчанию — файлами, а не в коде** | LunaTranslator: `defaultconfig/*.json` | `resources/`: шаблоны зон, стоп-лист, таблицы транслитерации и т.п. |
 | **Тяжёлые движки — необязательные зависимости** | OwOCR: `[project.optional-dependencies]` на каждый движок | Extras для поздних движков (Qwen3-TTS, хуки) |
+| **Рискованная работа — в отдельном процессе** | LunaTranslator: отдельный модуль подпроцесса (`LunaSubProcess.py`) | Хуки работают во вспомогательном процессе (раздел 6.1) |
 
 **Плохие приёмы — не повторяем:**
 
@@ -97,6 +98,7 @@ core      → (ничего из проекта)
 - **Проверяются автоматически** инструментом `import-linter` (dev-зависимость; контракты в `pyproject.toml`, секция `[tool.importlinter]`). Запуск: `uv run lint-imports`. Нарушение контракта = красный CI и незакрытый этап.
 - Модули, которые трогают Windows (`pywin32`, `comtypes`, `pycaw`, `winrt`, `windows_capture`, `winreg`), допустимы **только** в `engines/`. Это тоже контракт `import-linter` (forbidden для остальных слоёв).
 - `PySide6` допустим **только** в `ui/`.
+- `engines/hook/host.py` — отдельная программа: импортирует только `core/` и `lunahook-py`, ничего из остального приложения (отдельный контракт `import-linter`).
 
 ---
 
@@ -124,14 +126,14 @@ subtitle-voicer/
 │   │   │                          # GameDetected, ZoneStateChanged, EngineUnavailable …
 │   │   ├── ports.py               # FrameSource, OcrEngine, TtsEngine, StressMarker, AudioOutput, Ducker,
 │   │   │                          # HotkeyService, WindowInfo, GameLibrarySource, TextSource, Clock,
-│   │   │                          # EventPublisher
+│   │   │                          # EventPublisher, HookEngine
 │   │   └── errors.py
 │   │
 │   ├── config/
 │   │   ├── paths.py               # %APPDATA%/SubtitleVoicer/… через platformdirs
 │   │   ├── settings.py            # Settings (pydantic) + чтение/запись settings.toml
-│   │   ├── profile.py             # Profile, Layout, Zone, SpeakerConfig, VoiceConfig, Character,
-│   │   │                          # PronunciationEntry (pydantic, 5.4 ТЗ)
+│   │   ├── profile.py             # Profile, Layout, Zone, VoicingPolicy, SpeakerConfig, VoiceConfig,
+│   │   │                          # Character, PronunciationEntry, HookSettings, HookChannel (5.4, 4.17 ТЗ)
 │   │   ├── profile_store.py       # файлы профилей, сопоставление процесса с профилем (4.11), импорт/экспорт
 │   │   ├── characters_csv.py      # импорт персонажей из CSV (4.6)
 │   │   └── resources.py           # загрузка файлов из resources/
@@ -140,12 +142,14 @@ subtitle-voicer/
 │   │   ├── vision/
 │   │   │   ├── crop.py            # вырезка зоны по долям кадра
 │   │   │   ├── masks.py           # пресеты color / bright_on_dark / dark_on_bright / adaptive
-│   │   │   └── change.py          # изменение и пустота маски
+│   │   │   ├── change.py          # изменение и пустота маски
+│   │   │   └── stability.py       # автомат 4.4 по маске: когда звать OCR (только для зон)
 │   │   ├── ocr/
 │   │   │   ├── inputs.py          # три варианта входа OCR (4.3)
 │   │   │   ├── runner.py          # вызов OcrEngine, варианты при низкой уверенности, порядок строк
 │   │   │   └── junk_filter.py     # фильтр мусора
-│   │   ├── stabilizer.py          # автомат 4.4 + память repeat_cooldown
+│   │   ├── dedup.py               # обработка результата 4.4 для ЛЮБОГО источника: новая / продолжение /
+│   │   │                          # та же / недавно звучала / дубль из другого источника
 │   │   ├── speaker/
 │   │   │   ├── extract.py         # prefix / zone / color → кандидат
 │   │   │   ├── validate.py        # проверка имени, стоп-лист
@@ -167,9 +171,9 @@ subtitle-voicer/
 │   │       └── aspect.py          # соотношение сторон кадра
 │   │
 │   ├── sources/                   # откуда берутся реплики (TextSource)
-│   │   ├── zone_ocr.py            # зоны auto: кадр → маска → стабилизатор → OCR → говорящий → Utterance
+│   │   ├── zone_ocr.py            # зоны auto: кадр → маска → stability → OCR → dedup → говорящий → Utterance
 │   │   ├── manual.py              # зоны по хоткею, «выделить и прочитать», «повторить»
-│   │   └── hook.py                # этап 11 (LunaHook)
+│   │   └── hook.py                # этап 11: каналы HookEngine → dedup → говорящий → Utterance
 │   │
 │   ├── engines/                   # адаптеры; только здесь Windows и сторонние движки
 │   │   ├── registry.py            # общий механизм реестров (раздел 5)
@@ -190,8 +194,14 @@ subtitle-voicer/
 │   │   ├── audio/
 │   │   │   ├── output.py          # sounddevice
 │   │   │   └── ducker.py          # pycaw + ducking_state.json
+│   │   ├── hook/                  # этап 11
+│   │   │   ├── __init__.py        # HOOK = {"lunahook": …}
+│   │   │   ├── client.py          # HookEngine: запускает host, обмен JSON по stdin/stdout
+│   │   │   └── host.py            # ВСПОМОГАТЕЛЬНЫЙ ПРОЦЕСС (python -m …engines.hook.host): lunahook-py,
+│   │   │                          # может работать с правами администратора; импортирует только core
 │   │   ├── system/
 │   │   │   ├── windows.py         # окно переднего плана, процессы, мониторы, DPI (WindowInfo)
+│   │   │   ├── anticheat.py       # проверка запущенных античитов (4.17 ТЗ)
 │   │   │   ├── hotkeys.py         # pynput (HotkeyService)
 │   │   │   ├── autostart.py       # ключ реестра Run
 │   │   │   └── icons.py           # иконка из exe
@@ -237,6 +247,7 @@ subtitle-voicer/
 │       ├── translit.toml
 │       ├── excluded_exes.txt
 │       ├── library_ignore.txt     # служебные записи Steam и т.п.
+│       ├── anticheat_games.txt    # игры и процессы античитов, где хуки запрещены
 │       └── voices/
 │           └── silero_v5.toml     # каталог голосов с полом (4.6)
 │
@@ -300,11 +311,31 @@ TTS: dict[str, str] = {
 - История (режим разработчика), оверлей и будущие «выходы» (например, отправка текста куда-то ещё) — просто подписчики шины. **Новый потребитель текста не требует менять конвейер.**
 - Время: всё, что зависит от времени (стабилизатор, TTL очереди, cooldown, ducking), получает `Clock` из `core/ports.py`. В тестах — `FakeClock`, который двигается вручную.
 
+### 6.1 Общий путь для любого источника текста
+
+Всё, что происходит **после** получения текста, не зависит от источника:
+
+```
+ зона (маска → stability → OCR) ─┐
+ хук (канал LunaHook) ───────────┼─► фильтр мусора → dedup → говорящий → VoicingPolicy → подготовка текста → планировщик
+ ручное чтение (хоткей, выделение)┘
+```
+
+- Источник отдаёт: текст, id канала (зона или канал хука), флаг `was_empty`, необязательный кандидат в имя, `VoicingPolicy` канала.
+- `pipeline/dedup.py` помнит тексты всех каналов, поэтому ловит дубль, если одни и те же субтитры пришли и из зоны, и из хука.
+- `VoicingPolicy` (приоритет, голос, способ определения говорящего, повторы, приглушение) — одна модель для зон и каналов хуков. Новый источник не требует новых настроек озвучки.
+
+### 6.2 Вспомогательный процесс для хуков (этап 11)
+
+- `engines/hook/client.py` (в основном процессе) запускает `engines/hook/host.py` отдельным процессом, при необходимости с повышением прав (UAC), и общается с ним строками JSON через stdin/stdout: команды `list_threads`, `attach {pid}`, `select {hook_codes}`, `detach`; события `thread_found`, `text {hook_code, text}`, `error`.
+- Падение хоста или игры → событие `EngineUnavailable`, приложение продолжает работать (зоны OCR не затронуты).
+- Основное приложение **никогда** не запускается с правами администратора целиком.
+
 ---
 
 ## 7. Тесты
 
-- `tests/unit/` зеркалит `src/subvoicer/`: `tests/unit/pipeline/test_stabilizer.py` и т.д.
+- `tests/unit/` зеркалит `src/subvoicer/`: `tests/unit/pipeline/test_dedup.py`, `tests/unit/pipeline/vision/test_stability.py` и т.д.
 - `tests/fakes/` — фейки портов, общие для всех тестов. Фейк реализует тот же `Protocol`, что и настоящий движок.
 - **Контрактные тесты** (`tests/contracts/`): один набор тестов на порт, параметризованный всеми движками семейства, у которых `is_available()` на этой машине. Пример для TTS: синтез непустой строки даёт непустой float32-звук с правильной частотой; неизвестный голос — понятная ошибка; `rate` меняет длительность, если `supports_rate`. Новый движок автоматически проходит те же проверки.
 - `tests/integration/` — сервисы вместе на фейках (например, «две зоны auto с разными приоритетами → порядок озвучки»). Тесты, которым нужна настоящая Windows, — `@pytest.mark.windows`.
@@ -321,7 +352,7 @@ TTS: dict[str, str] = {
 5. Движок проходит контрактные тесты своего семейства.
 6. Больше ничего менять не нужно: UI и сборка берут список из реестра.
 
-**Новый источник реплик** (например, хуки на этапе 11): класс в `sources/`, реализует `TextSource`, выдаёт `Utterance` с приоритетом; подключается в `app/container.py`. Планировщик, TTS и UI не меняются.
+**Новый источник реплик** (например, хуки на этапе 11): класс в `sources/`, реализует `TextSource`, отдаёт текст в общий путь (раздел 6.1) с `VoicingPolicy` своего канала; подключается в `app/container.py`. Фильтр мусора, dedup, говорящий, подготовка текста, планировщик и TTS не меняются. Если источнику нужны особые права или он может упасть вместе с игрой — отдельный процесс по образцу раздела 6.2.
 
 **Новый шаблон зоны:** запись в `resources/zone_templates.toml`.
 
@@ -337,7 +368,7 @@ TTS: dict[str, str] = {
 |---|---|
 | 0 | Весь каркас пакетов (пустые `__init__.py`), `core/` с моделями и портами-заготовками, `app/bus.py`, `engines/registry.py`, контракты `import-linter`, `tests/fakes/FakeClock` |
 | 1 | `pipeline/vision/`, `pipeline/ocr/`, `engines/ocr/rapid.py`, `winrt.py` |
-| 2 | `engines/capture/`, `pipeline/stabilizer.py`, `pipeline/speaker/extract.py`, `validate.py`, `sources/zone_ocr.py`, `services/capture_service.py`, `zone_service.py`, `cli.py watch` |
+| 2 | `engines/capture/`, `pipeline/vision/stability.py`, `pipeline/dedup.py`, `pipeline/speaker/extract.py`, `validate.py`, `sources/zone_ocr.py`, `services/capture_service.py`, `zone_service.py`, `cli.py watch` |
 | 3 | `engines/tts/`, `engines/audio/output.py`, `pipeline/text/`, `pipeline/speech/`, `services/speech_service.py`, `resources/voices/` |
 | 4 | `engines/audio/ducker.py` |
 | 5 | `config/profile*.py`, `config/characters_csv.py`, `pipeline/speaker/characters.py`, `pipeline/games/`, `engines/system/windows.py`, `services/game_watcher.py`, `cli.py run / characters` |
@@ -345,3 +376,4 @@ TTS: dict[str, str] = {
 | 7 | `sources/manual.py`, `engines/system/hotkeys.py` целиком, `services/hotkey_service.py` |
 | 8 | загрузка моделей в `config/` + `engines/`, `engines/system/autostart.py` |
 | 9 | `engines/library/`, `engines/system/icons.py` |
+| 11 | `engines/hook/` (client + host), `engines/system/anticheat.py`, `sources/hook.py`, `config/profile.py: HookSettings`, вкладка «Текст из игры» в `ui/settings/` |
