@@ -1,5 +1,6 @@
-"""Latin letters (TZ 4.7, step 4): abbreviations by English letter names, other words by
-a simple transliteration table. Mixed words are OCR look-alikes and become Cyrillic."""
+"""Latin letters (TZ 4.7, step 4): abbreviations and single capital letters by English
+letter names ("нажмите Q" -> "кью"), other words by a simple transliteration table.
+Mixed words are OCR look-alikes and become Cyrillic."""
 
 from __future__ import annotations
 
@@ -7,6 +8,7 @@ import re
 from collections.abc import Mapping
 
 _ABBREVIATION = re.compile(r"(?<![\w])[A-Z]{2,5}(?![\w])")
+_LETTER = re.compile(r"(?<![\w])[A-Z](?![\w])")  # "нажмите Q"
 _LATIN_WORD = re.compile(r"[A-Za-z]+")
 _WORD = re.compile(r"\w+")
 _HAS_CYRILLIC = re.compile(r"[\u0400-\u04ff]")
@@ -30,6 +32,7 @@ class LatinReader:
         russian = _mostly_cyrillic(text)
         text = _WORD.sub(lambda m: self._fix_lookalikes(m, russian), text)
         text = _ABBREVIATION.sub(self._abbreviation, text)
+        text = _LETTER.sub(self._abbreviation, text)
         return _LATIN_WORD.sub(self._transliterate, text)
 
     def _fix_lookalikes(self, m: re.Match[str], russian: bool) -> str:

@@ -5,12 +5,17 @@ from __future__ import annotations
 import logging
 import sys
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from typing import Protocol
 
 from subvoicer.core.models import WindowRef
-from subvoicer.services.base import Service
 
 log = logging.getLogger(__name__)
+
+
+class Startable(Protocol):
+    def start(self) -> None: ...
+    def stop(self) -> None: ...
 
 
 class MonotonicClock:
@@ -39,15 +44,30 @@ def all_windows() -> list[WindowRef]:
 
 
 class Session:
-    """A set of services started and stopped together (in reverse order)."""
+    """Services (or nested sessions) started together and stopped in reverse order, plus
+    resources to release after them (audio stream, hotkeys)."""
 
-    def __init__(self, services: Sequence[Service]) -> None:
+    def __init__(
+        self,
+        services: Sequence[Startable],
+        closers: Sequence[Callable[[], None]] = (),
+        starters: Sequence[Callable[[], None]] = (),
+    ) -> None:
         self._services = list(services)
+        self._closers = list(closers)
+        self._starters = list(starters)
 
     def start(self) -> None:
         for service in self._services:
             service.start()
+        for start in self._starters:
+            start()
 
     def stop(self) -> None:
         for service in reversed(self._services):
             service.stop()
+        for close in self._closers:
+            try:
+                close()
+            except Exception:
+                log.exception("Ошибка при закрытии")

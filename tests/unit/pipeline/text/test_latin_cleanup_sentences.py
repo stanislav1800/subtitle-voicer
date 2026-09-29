@@ -31,7 +31,8 @@ def test_latin(latin: LatinReader, text: str, spoken: str) -> None:
 
 
 def test_single_capital_and_long_capitals_are_words(latin: LatinReader) -> None:
-    assert latin.read("I") == "И"
+    assert latin.read("Нажмите Q") == "Нажмите кью"
+    assert latin.read("q") == "к"
     assert latin.read("SILVERHAND") == "Силверханд"
 
 

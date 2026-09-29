@@ -1,6 +1,6 @@
 """Command line entry point: ``uv run python -m subvoicer.cli <command>`` (TZ 4.15).
 
-Commands: ``watch`` (stage 2). ``run`` and ``characters`` come with stage 5.
+Commands: ``watch`` (stages 2-3). ``run`` and ``characters`` come with stage 5.
 """
 
 from __future__ import annotations
@@ -11,10 +11,21 @@ import queue
 import sys
 from collections.abc import Sequence
 from datetime import datetime
+from pathlib import Path
 
 from subvoicer.app import runtime
 from subvoicer.app.bus import Bus
-from subvoicer.app.container import MASK_PRESETS, SPEAKER_MODES, WatchConfig, build_watch
+from subvoicer.app.container import (
+    DEFAULT_HOTKEYS,
+    MASK_PRESETS,
+    PRIORITIES,
+    SPEAKER_MODES,
+    TTS_CHAIN,
+    VOICE_MODES,
+    SpeechConfig,
+    WatchConfig,
+    build_watch,
+)
 from subvoicer.app.log import setup_logging
 from subvoicer.config.paths import AppPaths
 from subvoicer.core.events import CaptureFailed, CaptureStopped, Event, UtteranceDetected
@@ -71,6 +82,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     watch.add_argument("--threshold", type=int, help="порог яркости для bright/dark_on_*")
     watch.add_argument("--speaker", choices=SPEAKER_MODES, default="none")
+    speech = watch.add_argument_group("озвучка (этап 3)")
+    speech.add_argument("--speak", action="store_true", help="озвучивать реплики")
+    speech.add_argument("--dict", type=Path, help="словарь произношений: JSON-список записей")
+    speech.add_argument("--voice-mode", choices=VOICE_MODES, default="speaker")
+    speech.add_argument("--voice", help="id голоса для --voice-mode fixed")
+    speech.add_argument("--priority", choices=PRIORITIES, default="high")
+    speech.add_argument("--rate", type=float, default=1.0, help="базовая скорость речи")
+    speech.add_argument("--volume", type=float, default=1.0, help="громкость 0..1")
+    speech.add_argument("--tts", choices=TTS_CHAIN, help="только этот движок (иначе цепочка)")
+    speech.add_argument("--no-hotkeys", action="store_true", help="без горячих клавиш")
     watch.add_argument("--debug", action="store_true", help="подробный лог (DEBUG)")
     return parser
 
@@ -103,6 +124,23 @@ def print_utterance(event: UtteranceDetected) -> None:
     print(f"[{stamp}] [{u.speaker or '-'}] {text}", flush=True)
 
 
+def speech_config(args: argparse.Namespace) -> SpeechConfig | None:
+    if not args.speak:
+        return None
+    if args.voice_mode == "fixed" and not args.voice:
+        raise SystemExit("Для --voice-mode fixed нужен --voice")
+    return SpeechConfig(
+        dictionary_path=args.dict,
+        voice_mode=args.voice_mode,
+        voice_id=args.voice,
+        priority=args.priority,
+        base_rate=args.rate,
+        volume=args.volume,
+        tts=(args.tts,) if args.tts else TTS_CHAIN,
+        hotkeys=not args.no_hotkeys,
+    )
+
+
 def run_watch(args: argparse.Namespace) -> int:
     if args.preset == "color" and not args.color_hsv:
         print("Для пресета color нужен хотя бы один --color-hsv", file=sys.stderr)
@@ -122,11 +160,19 @@ def run_watch(args: argparse.Namespace) -> int:
         colors_hsv=tuple(args.color_hsv),
         threshold=args.threshold,
         speaker=args.speaker,
+        speech=speech_config(args),
     )
-    print("Загрузка OCR…", file=sys.stderr)
+    print("Загрузка OCR и озвучки…" if args.speak else "Загрузка OCR…", file=sys.stderr)
     session = build_watch(config, bus)
     session.start()
     print("Слежу за зоной. Ctrl+C — выход.", file=sys.stderr)
+    if args.speak and not args.no_hotkeys:
+        print(
+            "Горячие клавиши: пауза {pause}, повторить {repeat}, пропустить {skip}".format(
+                **DEFAULT_HOTKEYS
+            ),
+            file=sys.stderr,
+        )
     try:
         while True:
             try:
