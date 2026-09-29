@@ -3,6 +3,7 @@ speaker -> Utterance. No threads here: ZoneService calls ``process`` at poll_hz.
 
 from __future__ import annotations
 
+import itertools
 import logging
 import time
 from collections.abc import Sequence
@@ -68,6 +69,7 @@ class ZoneOcrSource:
         self._junk = junk
         self._dedup = dedup
         self._clock = clock
+        self._ids = itertools.count(1)
 
     def process(self, frame: Frame) -> list[Utterance]:
         """Feed the latest frame (the same frame again is fine: time still moves on, which
@@ -145,7 +147,14 @@ class ZoneOcrSource:
             text, kind = result.text, UtteranceKind.CONTINUATION
         if not text:
             return None
-        log.debug("Реплика %s: t_change=%.3f t_detected=%.3f", spec.id, t_change, now)
+        utterance_id = next(self._ids)
+        log.debug(
+            "LATENCY change id=%d t=%.3f detected=%.3f zone=%s",
+            utterance_id,
+            t_change,
+            now,
+            spec.id,
+        )
         return Utterance(
             channel=spec.id,
             kind=kind,
@@ -156,4 +165,5 @@ class ZoneOcrSource:
             t_detected=now,
             confidence=outcome.mean_confidence,
             ocr_input=str(outcome.input_kind),
+            id=utterance_id,
         )

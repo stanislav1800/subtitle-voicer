@@ -1,0 +1,187 @@
+"""Speech: scheduler + text preparation + synthesis (with cache) + player, in one thread.
+
+Everything reaches the thread through one queue: new lines, player callbacks, hotkeys.
+Long lines are synthesized piece by piece while the first piece already plays (TZ 4.7).
+"""
+
+from __future__ import annotations
+
+import logging
+import queue
+import time
+from dataclasses import dataclass, field
+from enum import StrEnum
+
+from subvoicer.core.events import SpeechDropped, SpeechFinished, SpeechStarted
+from subvoicer.core.models import AudioClip, SpeechRequest
+from subvoicer.core.ports import AudioOutput, Clock, EventPublisher, TtsEngine
+from subvoicer.pipeline.speech.cache import SpeechCache
+from subvoicer.pipeline.speech.scheduler import Command, Dropped, Play, SpeechScheduler, Stop
+from subvoicer.pipeline.text.preparer import TextPreparer
+from subvoicer.services.base import Service
+
+log = logging.getLogger(__name__)
+
+
+@dataclass
+class _Line:
+    request: SpeechRequest
+    rate: float
+    pending: list[str] = field(default_factory=list)  # pieces not synthesized yet
+
+
+@dataclass(frozen=True, slots=True)
+class _Submit:
+    request: SpeechRequest
+
+
+@dataclass(frozen=True, slots=True)
+class _Started:
+    line_id: int
+    t_play: float
+
+
+@dataclass(frozen=True, slots=True)
+class _Finished:
+    line_id: int
+    completed: bool
+
+
+class _Hotkey(StrEnum):
+    SKIP = "skip"
+    REPEAT = "repeat"
+    TOGGLE_PAUSE = "toggle_pause"
+
+
+_Message = _Submit | _Started | _Finished | _Hotkey
+
+
+class SpeechService(Service):
+    def __init__(
+        self,
+        scheduler: SpeechScheduler,
+        preparer: TextPreparer,
+        tts: TtsEngine,
+        output: AudioOutput,
+        cache: SpeechCache,
+        clock: Clock,
+        publisher: EventPublisher,
+        interval_s: float = 0.01,
+    ) -> None:
+        super().__init__("SpeechService", interval_s)
+        self._scheduler = scheduler
+        self._preparer = preparer
+        self._tts = tts
+        self._output = output
+        self._cache = cache
+        self._clock = clock
+        self._publisher = publisher
+        self._inbox: queue.Queue[_Message] = queue.Queue()
+        self._lines: dict[int, _Line] = {}
+        output.set_listeners(self._on_started, self._on_finished)
+
+    # ------------------------------------------------------------------ any thread
+
+    def submit(self, request: SpeechRequest) -> None:
+        self._inbox.put(_Submit(request))
+
+    def skip(self) -> None:
+        self._inbox.put(_Hotkey.SKIP)
+
+    def repeat(self) -> None:
+        self._inbox.put(_Hotkey.REPEAT)
+
+    def toggle_pause(self) -> None:
+        self._inbox.put(_Hotkey.TOGGLE_PAUSE)
+
+    def _on_started(self, line_id: int, t_play: float) -> None:
+        self._inbox.put(_Started(line_id, t_play))
+
+    def _on_finished(self, line_id: int, completed: bool) -> None:
+        self._inbox.put(_Finished(line_id, completed))
+
+    # ------------------------------------------------------------------ service thread
+
+    def step(self) -> None:
+        now = self._clock.now()
+        while True:
+            try:
+                message = self._inbox.get_nowait()
+            except queue.Empty:
+                break
+            self._handle(message, now)
+        self._execute(self._scheduler.tick(now))
+        self._synthesize_next_piece()
+
+    def _handle(self, message: _Message, now: float) -> None:
+        s = self._scheduler
+        match message:
+            case _Submit(request=request):
+                log.debug("Речь: реплика %d (%s) «%s»", request.id, request.priority, request.text)
+                self._execute(s.submit(request, now))
+            case _Hotkey.SKIP:
+                self._execute(s.skip(now))
+            case _Hotkey.REPEAT:
+                self._execute(s.repeat(now))
+            case _Hotkey.TOGGLE_PAUSE:
+                commands = s.set_paused(not s.paused)
+                log.info("Автоозвучка %s", "на паузе" if s.paused else "продолжена")
+                self._execute(commands)
+            case _Started(line_id=line_id, t_play=t_play):
+                line = self._lines.get(line_id)
+                if line is not None:
+                    log.debug("LATENCY play id=%d t=%.3f", line_id, t_play)
+                    self._publisher.publish(SpeechStarted(line.request, line.rate, t_play))
+            case _Finished(line_id=line_id, completed=completed):
+                finished = self._lines.pop(line_id, None)
+                if finished is not None:
+                    self._publisher.publish(SpeechFinished(finished.request, completed))
+                self._execute(s.finished(line_id, completed, now))
+
+    def _execute(self, commands: list[Command]) -> None:
+        for command in commands:
+            match command:
+                case Play(request=request, rate=rate):
+                    self._play(request, rate)
+                case Stop(request=request):
+                    line = self._lines.get(request.id)
+                    if line is not None:
+                        line.pending.clear()
+                    self._output.stop(request.id)
+                case Dropped(request=request, reason=reason):
+                    log.debug("Речь: реплика %d отброшена (%s)", request.id, reason)
+                    self._publisher.publish(SpeechDropped(request, str(reason)))
+
+    def _play(self, request: SpeechRequest, rate: float) -> None:
+        pieces = self._preparer.prepare(request.text)
+        if not pieces:
+            self._execute(self._scheduler.finished(request.id, True, self._clock.now()))
+            return
+        started = time.perf_counter()
+        clip = self._synthesize(pieces[0], request.voice_id, rate)
+        log.debug(
+            "Речь: синтез %d мс, скорость %.2f, «%s»",
+            (time.perf_counter() - started) * 1000,
+            rate,
+            pieces[0],
+        )
+        self._lines[request.id] = _Line(request, rate, pieces[1:])
+        self._output.start_line(request.id, clip)
+        if len(pieces) == 1:
+            self._output.finish_feeding(request.id)
+
+    def _synthesize_next_piece(self) -> None:
+        current = self._scheduler.current
+        line = self._lines.get(current.id) if current is not None else None
+        if line is None or not line.pending:
+            return
+        piece = line.pending.pop(0)
+        clip = self._synthesize(piece, line.request.voice_id, line.rate)
+        self._output.feed(line.request.id, clip, last=not line.pending)
+
+    def _synthesize(self, text: str, voice_id: str, rate: float) -> AudioClip:
+        clip = self._cache.get(text, voice_id, rate)
+        if clip is None:
+            clip = self._tts.synthesize(text, voice_id, rate)
+            self._cache.put(text, voice_id, rate, clip)
+        return clip
