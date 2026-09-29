@@ -89,6 +89,13 @@ class OcrCapabilities:
 
 
 @dataclass(frozen=True, slots=True)
+class TtsCapabilities:
+    supports_rate: bool  # rate changes speed by the engine's own means (TZ 4.9)
+    streaming: bool
+    needs_gpu: bool
+
+
+@dataclass(frozen=True, slots=True)
 class Voice:
     id: str
     gender: Gender

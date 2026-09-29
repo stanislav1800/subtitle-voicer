@@ -1,0 +1,148 @@
+# Каталог голосов Silero v5_cis_base (ТЗ 4.6).
+# id берутся из модели; пол проставляет пользователь:
+# uv run python tools/voice_samples.py --label
+
+[[voice]]
+id = "ru_aigul"
+name = "Aigul"
+gender = "unknown"
+
+[[voice]]
+id = "ru_albina"
+name = "Albina"
+gender = "unknown"
+
+[[voice]]
+id = "ru_alexandr"
+name = "Alexandr"
+gender = "unknown"
+
+[[voice]]
+id = "ru_alfia"
+name = "Alfia"
+gender = "unknown"
+
+[[voice]]
+id = "ru_alfia2"
+name = "Alfia2"
+gender = "unknown"
+
+[[voice]]
+id = "ru_bogdan"
+name = "Bogdan"
+gender = "unknown"
+
+[[voice]]
+id = "ru_dmitriy"
+name = "Dmitriy"
+gender = "unknown"
+
+[[voice]]
+id = "ru_eduard"
+name = "Eduard"
+gender = "unknown"
+
+[[voice]]
+id = "ru_ekaterina"
+name = "Ekaterina"
+gender = "unknown"
+
+[[voice]]
+id = "ru_gamat"
+name = "Gamat"
+gender = "unknown"
+
+[[voice]]
+id = "ru_igor"
+name = "Igor"
+gender = "unknown"
+
+[[voice]]
+id = "ru_karina"
+name = "Karina"
+gender = "unknown"
+
+[[voice]]
+id = "ru_kejilgan"
+name = "Kejilgan"
+gender = "unknown"
+
+[[voice]]
+id = "ru_kermen"
+name = "Kermen"
+gender = "unknown"
+
+[[voice]]
+id = "ru_marat"
+name = "Marat"
+gender = "unknown"
+
+[[voice]]
+id = "ru_miyau"
+name = "Miyau"
+gender = "unknown"
+
+[[voice]]
+id = "ru_nurgul"
+name = "Nurgul"
+gender = "unknown"
+
+[[voice]]
+id = "ru_oksana"
+name = "Oksana"
+gender = "unknown"
+
+[[voice]]
+id = "ru_onaoy"
+name = "Onaoy"
+gender = "unknown"
+
+[[voice]]
+id = "ru_ramilia"
+name = "Ramilia"
+gender = "unknown"
+
+[[voice]]
+id = "ru_roman"
+name = "Roman"
+gender = "unknown"
+
+[[voice]]
+id = "ru_safarhuja"
+name = "Safarhuja"
+gender = "unknown"
+
+[[voice]]
+id = "ru_saida"
+name = "Saida"
+gender = "unknown"
+
+[[voice]]
+id = "ru_sibday"
+name = "Sibday"
+gender = "unknown"
+
+[[voice]]
+id = "ru_vika"
+name = "Vika"
+gender = "unknown"
+
+[[voice]]
+id = "ru_zara"
+name = "Zara"
+gender = "unknown"
+
+[[voice]]
+id = "ru_zhadyra"
+name = "Zhadyra"
+gender = "unknown"
+
+[[voice]]
+id = "ru_zhazira"
+name = "Zhazira"
+gender = "unknown"
+
+[[voice]]
+id = "ru_zinaida"
+name = "Zinaida"
+gender = "unknown"
