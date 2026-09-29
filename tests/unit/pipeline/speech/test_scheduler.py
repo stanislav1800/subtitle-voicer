@@ -11,6 +11,8 @@ from subvoicer.pipeline.speech.scheduler import (
     Command,
     Dropped,
     DropReason,
+    Hurry,
+    OverlapMode,
     Play,
     SpeechScheduler,
     Stop,
@@ -48,7 +50,7 @@ def dropped(commands: list[Command]) -> list[tuple[SpeechRequest, DropReason]]:
 
 @pytest.fixture
 def s() -> SpeechScheduler:
-    return SpeechScheduler(base_rate=1.0, low_priority_ttl_s=5.0)
+    return SpeechScheduler(base_rate=1.0, low_priority_ttl_s=5.0, overlap=OverlapMode.CUT)
 
 
 def test_idle_plays_immediately(s: SpeechScheduler) -> None:
@@ -259,7 +261,7 @@ def test_other_priorities_do_not_change_the_counter(s: SpeechScheduler) -> None:
 
 
 def test_speedup_is_relative_to_base_rate() -> None:
-    s = SpeechScheduler(base_rate=1.1)
+    s = SpeechScheduler(base_rate=1.1, overlap=OverlapMode.CUT)
     for t in range(3):
         s.submit(req(H), t)
     assert s.current_rate == pytest.approx(1.1 * 1.15)
@@ -273,3 +275,107 @@ def test_continuation_keeps_the_rate_of_its_line(s: SpeechScheduler) -> None:
     s.submit(tail, 3)
     s.finished(s.current.id, True, 4)  # type: ignore[union-attr]
     assert s.current is tail and s.current_rate == pytest.approx(1.15)
+
+
+# ------------------------------------------------------------------ overlap modes (TZ 1.14)
+
+
+def hurried(commands: list[Command]) -> list[tuple[SpeechRequest, float]]:
+    return [(c.request, c.rate) for c in commands if isinstance(c, Hurry)]
+
+
+def mode(overlap: OverlapMode) -> SpeechScheduler:
+    return SpeechScheduler(overlap=overlap, hurry_rate=1.5, catchup_rate=1.15, max_lag_s=8.0)
+
+
+def test_default_mode_is_speedup() -> None:
+    assert SpeechScheduler().overlap is OverlapMode.SPEEDUP
+
+
+def test_queue_mode_waits_for_the_current_line() -> None:
+    s = mode(OverlapMode.QUEUE)
+    a, b = req(H), req(H)
+    s.submit(a, 0)
+    assert s.submit(b, 1) == []
+    assert played(s.finished(a.id, True, 3)) == [b]
+    assert s.current_rate == 1.0
+
+
+def test_waiting_modes_drop_lines_that_lag_too_much() -> None:
+    s = mode(OverlapMode.QUEUE)
+    a, b, c = req(H), req(H), req(H)
+    s.submit(a, 0)
+    s.submit(b, 1)
+    s.submit(c, 7)
+    commands = s.finished(a.id, True, 9.5)  # b waited 8.5 s > max_lag_s
+    assert dropped(commands) == [(b, DropReason.EXPIRED)]
+    assert played(commands) == [c]
+
+
+def test_speedup_hurries_the_current_line_and_the_next_catches_up() -> None:
+    s = mode(OverlapMode.SPEEDUP)
+    a, b = req(H), req(H)
+    s.submit(a, 0)
+    commands = s.submit(b, 1)
+    assert hurried(commands) == [(a, 1.5)]
+    assert stopped(commands) == [] and played(commands) == []
+    (play,) = [c for c in s.finished(a.id, True, 2) if isinstance(c, Play)]
+    assert play.request is b and play.rate == pytest.approx(1.15)
+
+
+def test_speedup_hurries_once_and_keeps_hurrying_while_lines_wait() -> None:
+    s = mode(OverlapMode.SPEEDUP)
+    a, b, c = req(H), req(H), req(H)
+    s.submit(a, 0)
+    s.submit(b, 1)
+    assert hurried(s.submit(c, 1.5)) == []  # already hurrying
+    (play,) = [x for x in s.finished(a.id, True, 2) if isinstance(x, Play)]
+    assert play.request is b and play.rate == pytest.approx(1.5)  # c still waits
+    (play,) = [x for x in s.finished(b.id, True, 3) if isinstance(x, Play)]
+    assert play.request is c and play.rate == pytest.approx(1.15)
+
+
+def test_speedup_without_waiting_lines_plays_at_base_rate() -> None:
+    s = mode(OverlapMode.SPEEDUP)
+    a = req(H)
+    assert s.submit(a, 0) == [Play(a, 1.0)]
+
+
+def test_adaptive_speed_grows_with_the_queue() -> None:
+    s = SpeechScheduler(overlap=OverlapMode.ADAPTIVE, adaptive_step=0.2, adaptive_max=1.6)
+    a = req(H)
+    s.submit(a, 0)
+    assert hurried(s.submit(req(H), 1)) == [(a, pytest.approx(1.2))]
+    assert hurried(s.submit(req(H), 1.1)) == [(a, pytest.approx(1.4))]
+    assert hurried(s.submit(req(H), 1.2)) == [(a, pytest.approx(1.6))]
+    assert hurried(s.submit(req(H), 1.3)) == []  # capped at 1.6
+    (play,) = [x for x in s.finished(a.id, True, 2) if isinstance(x, Play)]
+    assert play.rate == pytest.approx(1.6)  # three still waiting
+
+
+def test_higher_priority_still_cuts_in_every_mode() -> None:
+    for overlap in OverlapMode:
+        s = mode(overlap)
+        low, high = req(L, "obj"), req(H)
+        s.submit(low, 0)
+        commands = s.submit(high, 1)
+        assert stopped(commands) == [low] and played(commands) == [high], overlap
+
+
+def test_continuation_goes_before_waiting_lines_and_hurries_with_its_line() -> None:
+    s = mode(OverlapMode.SPEEDUP)
+    a, b = req(H, "dialog"), req(H, "dialog")
+    s.submit(a, 0)
+    s.submit(b, 1)  # a hurries to 1.5
+    tail = req(H, "dialog", continuation=True)
+    s.submit(tail, 1.2)
+    assert s.queued[0] is tail
+    (play,) = [x for x in s.finished(a.id, True, 2) if isinstance(x, Play)]
+    assert play.request is tail and play.rate == pytest.approx(1.5)
+
+
+def test_manual_line_is_not_hurried() -> None:
+    s = mode(OverlapMode.SPEEDUP)
+    s.submit(req(M, "manual"), 0)
+    auto = req(H)
+    assert dropped(s.submit(auto, 1)) == [(auto, DropReason.MANUAL)]

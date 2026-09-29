@@ -1,7 +1,8 @@
 """Speech: scheduler + text preparation + synthesis (with cache) + player, in one thread.
 
 Everything reaches the thread through one queue: new lines, player callbacks, hotkeys.
-Long lines are synthesized piece by piece while the first piece already plays (TZ 4.7).
+Long lines are synthesized piece by piece while the first piece already plays (TZ 4.7);
+a hurried line re-synthesizes its pieces that have not sounded yet at the new rate.
 """
 
 from __future__ import annotations
@@ -16,7 +17,14 @@ from subvoicer.core.events import SpeechDropped, SpeechFinished, SpeechStarted
 from subvoicer.core.models import AudioClip, SpeechRequest
 from subvoicer.core.ports import AudioOutput, Clock, EventPublisher, TtsEngine
 from subvoicer.pipeline.speech.cache import SpeechCache
-from subvoicer.pipeline.speech.scheduler import Command, Dropped, Play, SpeechScheduler, Stop
+from subvoicer.pipeline.speech.scheduler import (
+    Command,
+    Dropped,
+    Hurry,
+    Play,
+    SpeechScheduler,
+    Stop,
+)
 from subvoicer.pipeline.text.preparer import TextPreparer
 from subvoicer.services.base import Service
 
@@ -28,6 +36,7 @@ class _Line:
     request: SpeechRequest
     rate: float
     pending: list[str] = field(default_factory=list)  # pieces not synthesized yet
+    fed: list[str] = field(default_factory=list)  # pieces given to the player, in order
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,6 +152,8 @@ class SpeechService(Service):
             match command:
                 case Play(request=request, rate=rate):
                     self._play(request, rate)
+                case Hurry(request=request, rate=rate):
+                    self._hurry(request, rate)
                 case Stop(request=request):
                     line = self._lines.get(request.id)
                     if line is not None:
@@ -165,7 +176,7 @@ class SpeechService(Service):
             rate,
             pieces[0],
         )
-        self._lines[request.id] = _Line(request, rate, pieces[1:])
+        self._lines[request.id] = _Line(request, rate, pieces[1:], [pieces[0]])
         self._output.start_line(request.id, clip)
         if len(pieces) == 1:
             self._output.finish_feeding(request.id)
@@ -177,7 +188,24 @@ class SpeechService(Service):
             return
         piece = line.pending.pop(0)
         clip = self._synthesize(piece, line.request.voice_id, line.rate)
+        line.fed.append(piece)
         self._output.feed(line.request.id, clip, last=not line.pending)
+
+    def _hurry(self, request: SpeechRequest, rate: float) -> None:
+        line = self._lines.get(request.id)
+        if line is None:
+            return
+        dropped = self._output.drop_unplayed(request.id)
+        if dropped:
+            line.pending = line.fed[-dropped:] + line.pending
+            del line.fed[-dropped:]
+        log.debug(
+            "Речь: реплика %d ускорена до %.2f, пересинтез %d частей",
+            request.id,
+            rate,
+            len(line.pending),
+        )
+        line.rate = rate
 
     def _synthesize(self, text: str, voice_id: str, rate: float) -> AudioClip:
         clip = self._cache.get(text, voice_id, rate)

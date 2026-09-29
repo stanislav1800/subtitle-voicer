@@ -30,7 +30,7 @@ from subvoicer.pipeline.ocr.runner import OcrRunner
 from subvoicer.pipeline.speaker.gender import GenderGuesser
 from subvoicer.pipeline.speaker.resolver import SpeakerMode, SpeakerResolver
 from subvoicer.pipeline.speech.cache import SpeechCache
-from subvoicer.pipeline.speech.scheduler import SpeechScheduler
+from subvoicer.pipeline.speech.scheduler import OverlapMode, SpeechScheduler
 from subvoicer.pipeline.speech.voices import VoiceMode, VoicePicker, default_voices
 from subvoicer.pipeline.text.latin import LatinReader
 from subvoicer.pipeline.text.preparer import TextPreparer
@@ -48,6 +48,7 @@ Hsv = tuple[int, int, int]
 MASK_PRESETS = tuple(p.value for p in MaskPreset)
 SPEAKER_MODES = (SpeakerMode.PREFIX.value, SpeakerMode.NONE.value)
 VOICE_MODES = tuple(m.value for m in VoiceMode)
+OVERLAP_MODES = tuple(m.value for m in OverlapMode)
 PRIORITIES = (Priority.HIGH.value, Priority.NORMAL.value, Priority.LOW.value)
 TTS_CHAIN = ("silero", "sapi5")  # fallback order (TZ 4.8)
 
@@ -67,6 +68,9 @@ class SpeechConfig:
     voice_id: str | None = None  # for voice_mode "fixed"
     priority: str = "high"
     base_rate: float = 1.0
+    overlap: str = "speedup"  # one of OVERLAP_MODES (TZ 4.9)
+    hurry_rate: float = 1.5
+    max_lag_s: float = 8.0
     volume: float = 1.0
     output_device: str = ""
     tts: tuple[str, ...] = TTS_CHAIN
@@ -148,7 +152,13 @@ def build_speech(config: SpeechConfig, bus: EventBus) -> tuple[Session, SpeechSe
     output = SoundDeviceOutput(device=config.output_device or None, volume=config.volume)
     output.load()
     service = SpeechService(
-        SpeechScheduler(config.base_rate, config.low_priority_ttl_s),
+        SpeechScheduler(
+            config.base_rate,
+            config.low_priority_ttl_s,
+            overlap=OverlapMode(config.overlap),
+            hurry_rate=config.hurry_rate,
+            max_lag_s=config.max_lag_s,
+        ),
         preparer,
         tts,
         output,

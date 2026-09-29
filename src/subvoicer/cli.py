@@ -18,6 +18,7 @@ from subvoicer.app.bus import Bus
 from subvoicer.app.container import (
     DEFAULT_HOTKEYS,
     MASK_PRESETS,
+    OVERLAP_MODES,
     PRIORITIES,
     SPEAKER_MODES,
     TTS_CHAIN,
@@ -89,6 +90,19 @@ def build_parser() -> argparse.ArgumentParser:
     speech.add_argument("--voice", help="id голоса для --voice-mode fixed")
     speech.add_argument("--priority", choices=PRIORITIES, default="high")
     speech.add_argument("--rate", type=float, default=1.0, help="базовая скорость речи")
+    speech.add_argument(
+        "--overlap",
+        choices=OVERLAP_MODES,
+        default="speedup",
+        help="новая реплика, пока звучит старая: cut — оборвать, queue — ждать, "
+        "speedup — ускорить старую и дочитать, adaptive — скорость по длине очереди",
+    )
+    speech.add_argument(
+        "--hurry-rate", type=float, default=1.5, help="во сколько раз ускорять в режиме speedup"
+    )
+    speech.add_argument(
+        "--max-lag", type=float, default=8.0, help="реплика, ждущая дольше (с), пропускается"
+    )
     speech.add_argument("--volume", type=float, default=1.0, help="громкость 0..1")
     speech.add_argument("--tts", choices=TTS_CHAIN, help="только этот движок (иначе цепочка)")
     speech.add_argument("--no-hotkeys", action="store_true", help="без горячих клавиш")
@@ -135,6 +149,9 @@ def speech_config(args: argparse.Namespace) -> SpeechConfig | None:
         voice_id=args.voice,
         priority=args.priority,
         base_rate=args.rate,
+        overlap=args.overlap,
+        hurry_rate=args.hurry_rate,
+        max_lag_s=args.max_lag,
         volume=args.volume,
         tts=(args.tts,) if args.tts else TTS_CHAIN,
         hotkeys=not args.no_hotkeys,

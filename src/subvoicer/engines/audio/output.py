@@ -108,6 +108,21 @@ class SoundDeviceOutput:
             if self._line is not None and self._line.id == line_id:
                 self._line.fed_all = True
 
+    def drop_unplayed(self, line_id: int) -> int:
+        """Remove the pieces of ``line_id`` that have not started to sound; the piece that
+        is sounding now plays to its end. Returns how many pieces were removed."""
+        with self._lock:
+            line = self._line
+            if line is None or line.id != line_id or line.fade_total:
+                return 0
+            keep = 1 if line.chunks else 0
+            dropped = len(line.chunks) - keep
+            while len(line.chunks) > keep:
+                line.chunks.pop()
+            if dropped:
+                line.fed_all = False
+            return dropped
+
     def stop(self, line_id: int, fade_ms: int | None = None) -> None:
         with self._lock:
             line = self._line

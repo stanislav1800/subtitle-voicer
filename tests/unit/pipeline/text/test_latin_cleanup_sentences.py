@@ -53,8 +53,24 @@ def test_clean(text: str, cleaned: str) -> None:
     assert clean(text) == cleaned
 
 
-def test_up_to_two_sentences_stay_together() -> None:
-    assert split_sentences("Привет. Как дела?") == ["Привет. Как дела?"]
+def test_every_sentence_is_a_piece() -> None:
+    assert split_sentences("Привет. Как дела?") == ["Привет.", "Как дела?"]
+
+
+def test_long_sentence_is_split_into_clauses() -> None:
+    sentence = (
+        "Охрана на входе сменится через двадцать минут, у нас будет окно, "
+        "так что не опаздывай и возьми с собой всё, что нужно для взлома."
+    )
+    assert split_sentences(sentence) == [
+        "Охрана на входе сменится через двадцать минут,",
+        # a clause shorter than MIN_CLAUSE sticks to its neighbour
+        "у нас будет окно, так что не опаздывай и возьми с собой всё, что нужно для взлома.",
+    ]
+
+
+def test_short_sentence_with_commas_stays_whole() -> None:
+    assert split_sentences("Да, конечно, пойдём.") == ["Да, конечно, пойдём."]
 
 
 def test_long_text_is_split() -> None:

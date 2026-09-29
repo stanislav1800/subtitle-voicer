@@ -8,7 +8,7 @@ from subvoicer.config.resources import letter_names, translit_table
 from subvoicer.core.events import SpeechDropped, SpeechFinished, SpeechStarted
 from subvoicer.core.models import Priority, SpeechRequest
 from subvoicer.pipeline.speech.cache import SpeechCache
-from subvoicer.pipeline.speech.scheduler import SpeechScheduler
+from subvoicer.pipeline.speech.scheduler import OverlapMode, SpeechScheduler
 from subvoicer.pipeline.text.latin import LatinReader
 from subvoicer.pipeline.text.preparer import TextPreparer
 from subvoicer.services.speech_service import SpeechService
@@ -19,13 +19,13 @@ from tests.fakes.stress import FirstVowelStress
 
 
 class Rig:
-    def __init__(self) -> None:
+    def __init__(self, overlap: OverlapMode = OverlapMode.CUT) -> None:
         self.clock = FakeClock(100.0)
         self.tts = FakeTts()
         self.out = FakeOutput()
         self.bus = RecordingBus()
         self.service = SpeechService(
-            SpeechScheduler(),
+            SpeechScheduler(overlap=overlap),
             TextPreparer(FirstVowelStress(), LatinReader(letter_names(), translit_table())),
             self.tts,
             self.out,
@@ -128,3 +128,22 @@ def test_text_that_prepares_to_nothing_finishes_at_once(rig: Rig) -> None:
     rig.service.submit(request(2, "Дальше."))
     rig.step()
     assert rig.out.log == [("start", 2)]
+
+
+def test_speedup_mode_resynthesizes_the_rest_faster() -> None:
+    rig = Rig(OverlapMode.SPEEDUP)
+    rig.service.submit(request(1, "Раз. Два. Три."))
+    for _ in range(3):
+        rig.step()
+    assert rig.out.fed[1] == 3 and [c[2] for c in rig.tts.calls] == [1.0, 1.0, 1.0]
+    rig.service.submit(request(2, "Новая."))
+    rig.step()
+    assert ("drop", 1) in rig.out.log and ("stop", 1) not in rig.out.log
+    rig.step()
+    rates = [(text, rate) for text, _, rate in rig.tts.calls]
+    assert rates[3:] == [("Дв+а.", 1.5), ("Тр+и.", 1.5)]
+    assert rig.out.fed[1] == 3 and 1 in rig.out.done_feeding
+    rig.out.line_ends(1)
+    rig.step()
+    assert rig.out.log[-1] == ("start", 2)
+    assert rig.tts.calls[-1] == ("Н+овая.", "v1", 1.15)

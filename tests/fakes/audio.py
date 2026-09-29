@@ -50,6 +50,15 @@ class FakeOutput:
     def finish_feeding(self, line_id: int) -> None:
         self.done_feeding.add(line_id)
 
+    def drop_unplayed(self, line_id: int) -> int:
+        """Pretends the first piece is sounding and the rest has not started."""
+        pieces = self.fed.get(line_id, 0)
+        dropped = max(0, pieces - 1)
+        self.fed[line_id] = pieces - dropped
+        self.done_feeding.discard(line_id)
+        self.log.append(("drop", line_id))
+        return dropped
+
     def stop(self, line_id: int, fade_ms: int | None = None) -> None:
         self.log.append(("stop", line_id))
 
