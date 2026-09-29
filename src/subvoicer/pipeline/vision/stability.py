@@ -69,8 +69,10 @@ class ZoneStabilizer:
     OCR waits for the typing to stop (``stable_ms``) up to ``typing_max_wait_ms`` instead of
     ``max_wait_ms``, so typed text is read once as a whole. A flickering background adds
     and removes pixels, so it still gets OCR after ``max_wait_ms``. One typed character is
-    far below ``change_ratio`` of a subtitle zone, so growth of ``min_growth_ratio`` also
-    counts as a change; edge jitter adds and removes alike and does not.
+    far below ``change_ratio`` of a subtitle zone, so in CHANGING growth of
+    ``min_growth_ratio`` also counts as a change; edge jitter adds and removes alike and
+    does not. In SHOWN only ``change_ratio`` counts (a live game scene often flashes small
+    bright blobs behind a still subtitle).
     """
 
     def __init__(self, settings: StabilizationSettings | None = None) -> None:
@@ -102,8 +104,9 @@ class ZoneStabilizer:
 
         if self.state is ZoneState.SHOWN:
             assert self._shown is not None
-            big = mask_changed(self._shown, mask, s.change_ratio)
-            if big or self._grew(self._shown, mask):
+            # only a real change (change_ratio) leaves SHOWN: small growth here is usually a
+            # bright blob of the background behind unchanged text, not typing
+            if mask_changed(self._shown, mask, s.change_ratio):
                 self._begin_change(now, growing=self._is_growth(self._shown, mask))
                 return self._maybe_ocr(mask, now)
             return None

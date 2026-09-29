@@ -185,6 +185,20 @@ def test_edge_jitter_is_not_typing() -> None:
     assert s.update(base, 0.2) == RunOcr(t_change=0.0)
 
 
+def test_small_bright_blob_behind_shown_text_is_ignored() -> None:
+    """Live GTA 5 run: headlights behind a still subtitle added 60-100 px (well below 0.5%)
+    and caused repeated OCR while small growth counted in SHOWN."""
+    s = ZoneStabilizer()
+    mask = text(100)
+    s.update(mask, 1.0)
+    s.update(mask, 1.3)
+    blob = mask.copy()
+    blob[42:48, 150:157] = 255  # 42 px appear: growth-shaped, below change_ratio (50 px)
+    assert s.update(blob, 1.4) is None
+    assert s.state is ZoneState.SHOWN
+    assert s.update(mask, 1.5) is None
+
+
 def test_consume_was_empty() -> None:
     s = ZoneStabilizer()
     s.consume_was_empty()
