@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from subvoicer.core.models import Utterance
+from subvoicer.core.models import SpeechRequest, Utterance
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,3 +50,22 @@ class CaptureStopped(Event):
 class CaptureModeChanged(Event):
     hwnd: int
     mode: str  # "wgc" | "dxgi"
+
+
+@dataclass(frozen=True, slots=True)
+class SpeechStarted(Event):
+    request: SpeechRequest
+    rate: float
+    t_play: float  # monotonic time the first audio buffer went out (latency end, TZ 6)
+
+
+@dataclass(frozen=True, slots=True)
+class SpeechFinished(Event):
+    request: SpeechRequest
+    completed: bool  # False: cut (new line, skip, pause, manual line)
+
+
+@dataclass(frozen=True, slots=True)
+class SpeechDropped(Event):
+    request: SpeechRequest
+    reason: str

@@ -147,6 +147,22 @@ class Utterance:
     t_detected: float  # monotonic time the line was accepted
     confidence: float = 1.0
     ocr_input: str = ""
+    id: int = 0  # unique per run; links the latency marks in the log (TZ 6)
+
+
+@dataclass(frozen=True, slots=True)
+class SpeechRequest:
+    """A line to voice, as the speech scheduler sees it (TZ 4.9)."""
+
+    id: int
+    text: str  # prepared by TextPreparer later, right before synthesis
+    voice_id: str
+    priority: Priority
+    continuation: bool = False  # queued right after the current line, never interrupts
+    duck: bool = True
+    channel: str = ""
+    speaker: str | None = None
+    t_change: float | None = None  # latency start, if the line came from a zone
 
 
 @dataclass(frozen=True, slots=True)

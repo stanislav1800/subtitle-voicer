@@ -5,7 +5,7 @@ Stage 0 holds draft ports; signatures are refined by the stages that implement t
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Protocol, TypeVar
 
 import numpy as np
@@ -85,3 +85,27 @@ class EventPublisher(Protocol):
 
 class EventBus(EventPublisher, Protocol):
     def subscribe(self, event_type: type[E], handler: Callable[[E], None]) -> None: ...
+
+
+class AudioOutput(Protocol):
+    """One line at a time; pieces of a line are appended while it plays."""
+
+    def set_listeners(
+        self,
+        on_started: Callable[[int, float], None],
+        on_finished: Callable[[int, bool], None],
+    ) -> None:
+        """``on_started(line_id, t)``: first sound; ``on_finished(line_id, completed)``."""
+        ...
+
+    def start_line(self, line_id: int, clip: AudioClip) -> None: ...
+    def feed(self, line_id: int, clip: AudioClip, last: bool = False) -> None: ...
+    def finish_feeding(self, line_id: int) -> None: ...
+    def stop(self, line_id: int, fade_ms: int | None = None) -> None: ...
+
+
+class HotkeyService(Protocol):
+    """Global hotkeys in pynput format, e.g. ``<ctrl>+<alt>+p``."""
+
+    def start(self, bindings: Mapping[str, Callable[[], None]]) -> None: ...
+    def stop(self) -> None: ...
