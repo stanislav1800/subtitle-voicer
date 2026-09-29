@@ -50,7 +50,7 @@ def write_catalog(voices: list[Voice]) -> None:
     doc.add("voice", table)
     path = catalog_file()
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(tomlkit.dumps(doc), encoding="utf-8")
+    path.write_text(tomlkit.dumps(doc), encoding="utf-8", newline="\n")
 
 
 def write_wav(path: Path, samples: np.ndarray, rate: int) -> None:
