@@ -60,10 +60,42 @@ SCENARIO = [
 ]
 
 
+SPEECH_SCENARIO = [  # stage 3: voicing checks
+    Step("show", "Включи GPS, нам ехать ещё 12 километров, это минут 15.", 4.5),
+    Step("gap", seconds=1),
+    # quick dialogue: each line cuts the previous one -> the 3rd and 4th are sped up
+    Step("show", "Быстрее, они уже здесь, не останавливайся ни на секунду!", 1.0),
+    Step("show", "Сворачивай налево, там переулок и старый склад за углом!", 1.0),
+    Step("show", "Держись крепче, сейчас будет очень резкий поворот направо!", 1.0),
+    Step("show", "Отлично, кажется, мы от них оторвались, можно выдохнуть.", 4.5),
+    Step("gap", seconds=1),
+    # the dictionary entry "Арасак*" in different cases (tools/data/dict_example.json)
+    Step("show", "Арасака снова всех обманула.", 3),
+    Step("show", "Мы больше не работаем на Арасаку.", 3),
+    Step("show", "Я не верю Арасаке и её людям.", 3),
+    Step("gap", seconds=1),
+    # disappears after 1 s, but must be read to the end
+    Step(
+        "show", "Эта фраза исчезнет с экрана раньше, чем её дочитают до конца, и это нормально.", 1
+    ),
+    Step("gap", seconds=5),
+    # typed for longer than 5 s: a line plus a continuation queued after it
+    Step(
+        "type",
+        "Охрана на входе сменится через двадцать минут, у нас будет окно, так что не опаздывай.",
+        3,
+        char_s=0.065,
+    ),
+    Step("gap", seconds=5),
+]
+SCENARIOS = {"watch": SCENARIO, "speech": SPEECH_SCENARIO}
+
+
 class Player:
-    def __init__(self, root: tk.Tk, loop: bool) -> None:
+    def __init__(self, root: tk.Tk, loop: bool, scenario: list[Step], delay_s: float = 0) -> None:
         self.root = root
         self.loop = loop
+        self.scenario = scenario
         self.canvas = tk.Canvas(
             root, width=WIDTH, height=HEIGHT, bg="#101418", highlightthickness=0
         )
@@ -80,7 +112,7 @@ class Player:
         self.text_items: list[int] = []
         self.index = 0
         self.animate()
-        self.next_step()
+        self.root.after(int(delay_s * 1000), self.next_step)
 
     def animate(self) -> None:
         for blob, dx in self.blobs:
@@ -133,12 +165,12 @@ class Player:
         print(f"[{datetime.now().strftime('%H:%M:%S')}] {text}", flush=True)
 
     def next_step(self) -> None:
-        if self.index >= len(SCENARIO):
+        if self.index >= len(self.scenario):
             if not self.loop:
                 self.root.after(500, self.root.destroy)
                 return
             self.index = 0
-        step = SCENARIO[self.index]
+        step = self.scenario[self.index]
         self.index += 1
         if step.kind == "gap":
             self.draw("")
@@ -164,11 +196,17 @@ def main() -> int:
         description=__doc__, formatter_class=argparse.RawTextHelpFormatter
     )
     parser.add_argument("--loop", action="store_true", help="повторять сценарий по кругу")
+    parser.add_argument(
+        "--scenario", choices=SCENARIOS, default="watch", help="watch — этап 2, speech — этап 3"
+    )
+    parser.add_argument(
+        "--delay", type=float, default=0, help="пауза перед сценарием, с (пока грузится watch)"
+    )
     args = parser.parse_args()
     root = tk.Tk()
     root.title("Тестовые субтитры")
     root.resizable(False, False)
-    Player(root, args.loop)
+    Player(root, args.loop, SCENARIOS[args.scenario], args.delay)
     root.mainloop()
     return 0
 
