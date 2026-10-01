@@ -17,6 +17,7 @@ from subvoicer.core.models import CaptureCapabilities, Frame
 log = logging.getLogger(__name__)
 
 MONITOR_CHECK_S = 1.0
+START_TIMEOUT_S = 3.0
 
 
 class DxgiFrameSource:
@@ -38,19 +39,27 @@ class DxgiFrameSource:
         return sys.platform == "win32" and importlib.util.find_spec("windows_capture") is not None
 
     def start(self, hwnd: int) -> None:
-        from windows_capture import DxgiDuplicationSession
-
+        """The duplication object may only be used by the thread that created it
+        (windows-capture panics otherwise), so it is created inside the capture thread;
+        ``start`` waits for that and raises if duplication is unavailable."""
         from subvoicer.engines.system import windows
 
         self._hwnd = hwnd
         monitor = windows.monitor_of_window(hwnd)
-        session = DxgiDuplicationSession(monitor.index)  # raises if duplication is unavailable
+        ready = threading.Event()
+        errors: list[BaseException] = []
         self._failed = False
         self._running.set()
         self._thread = threading.Thread(
-            target=self._run, args=(session, monitor), name="DxgiCapture", daemon=True
+            target=self._run, args=(monitor, ready, errors), name="DxgiCapture", daemon=True
         )
         self._thread.start()
+        if not ready.wait(START_TIMEOUT_S):
+            self.stop()
+            raise RuntimeError("DXGI: захват не запустился вовремя")
+        if errors:
+            self.stop()
+            raise RuntimeError(f"DXGI недоступен: {errors[0]}") from errors[0]
         log.debug("DXGI: захват монитора %s для окна %s", monitor.index, hwnd)
 
     def latest(self) -> Frame | None:
@@ -66,9 +75,20 @@ class DxgiFrameSource:
         if thread is not None and thread is not threading.current_thread():
             thread.join(timeout=1.0)
 
-    def _run(self, session: Any, monitor: Any) -> None:
+    def _run(self, monitor: Any, ready: threading.Event, errors: list[BaseException]) -> None:
+        from windows_capture import DxgiDuplicationSession
+
         from subvoicer.engines.system import windows
 
+        try:
+            session = DxgiDuplicationSession(monitor.index)
+        except BaseException as exc:  # pyo3 panics are BaseException
+            errors.append(exc)
+            self._failed = True
+            self._running.clear()
+            return
+        finally:
+            ready.set()
         checked_at = time.monotonic()
         try:
             while self._running.is_set():
@@ -86,7 +106,7 @@ class DxgiFrameSource:
                     with self._lock:
                         self._latest = Frame(image, time.monotonic())
                 time.sleep(self._interval_ms / 1000)
-        except Exception:
+        except BaseException:  # pyo3 panics are BaseException: the thread must not die silently
             self._failed = True
             log.warning("DXGI: захват прерван", exc_info=True)
 

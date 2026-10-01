@@ -150,7 +150,14 @@ class SpeechService(Service):
         s = self._scheduler
         match message:
             case _Submit(request=request):
-                log.debug("Речь: реплика %d (%s) «%s»", request.id, request.priority, request.text)
+                log.debug(
+                    "Речь: реплика %d (%s, %s, голос %s) «%s»",
+                    request.id,
+                    request.channel,
+                    request.priority,
+                    request.voice_id,
+                    request.text,
+                )
                 self._execute(s.submit(request, now))
             case _Hotkey.SKIP:
                 self._execute(s.skip(now))
