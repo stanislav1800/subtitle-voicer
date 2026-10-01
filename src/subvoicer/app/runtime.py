@@ -139,3 +139,11 @@ def monitor_device(hwnd: int) -> str | None:
         return windows.monitor_of_window(hwnd).device
     except LookupError:
         return None
+
+
+def exe_path(pid: int) -> str | None:
+    if sys.platform != "win32":
+        return None
+    from subvoicer.engines.system import windows
+
+    return windows.exe_path(pid)

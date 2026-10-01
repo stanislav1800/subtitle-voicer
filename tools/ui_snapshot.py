@@ -91,6 +91,21 @@ def main() -> int:
             editor.grab().save(str(args.out / "zone_editor.png"))
             print(args.out / "zone_editor.png")
             editor.hide()
+    from subvoicer.ui.notifications import Notification, mono
+
+    note = Notification(
+        "Похоже, это новая игра",
+        f"{mono('stalker2.exe')} — создать профиль, чтобы озвучивать её субтитры?",
+        ("Создать профиль", lambda: None),
+        ("Не спрашивать", lambda: None),
+        timeout_ms=None,
+    )
+    note.popup()
+    for _ in range(3):
+        qt.processEvents()
+    note.grab().save(str(args.out / "notification.png"))
+    print(args.out / "notification.png")
+    note.close()
     menu = app.tray.contextMenu()
     menu.popup(window.mapToGlobal(window.rect().center()))
     qt.processEvents()

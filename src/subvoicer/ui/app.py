@@ -15,11 +15,20 @@ from subvoicer.app import runtime, zone_tools
 from subvoicer.app.facade import AppFacade
 from subvoicer.app.log import setup_logging
 from subvoicer.config.paths import AppPaths
-from subvoicer.core.events import Event, GameActivated, GameClosed, LayoutMissing, SettingsApplied
-from subvoicer.core.models import HistoryEntry
+from subvoicer.core.events import (
+    Event,
+    GameActivated,
+    GameClosed,
+    LayoutMissing,
+    ProfileBound,
+    ProfileOffered,
+    SettingsApplied,
+)
+from subvoicer.core.models import HistoryEntry, WindowRef
 from subvoicer.ui import theme
 from subvoicer.ui.bridge import Bridge
 from subvoicer.ui.line_window import LineWindow
+from subvoicer.ui.notifications import Notification, Notifier, mono
 from subvoicer.ui.settings.general import GeneralPage
 from subvoicer.ui.settings.hotkeys import HotkeysPage
 from subvoicer.ui.settings.profiles import ProfilesPage
@@ -89,6 +98,7 @@ class Application:
         QLocalServer.removeServer(SERVER_NAME)
         self.server.newConnection.connect(self._on_second_copy)
         self.server.listen(SERVER_NAME)
+        self.notifier = Notifier()
         self.line_window: LineWindow | None = None
         self.editor: ZoneEditor | None = None
         self.hotkey_signals = HotkeySignals()
@@ -183,10 +193,44 @@ class Application:
         if isinstance(event, STATUS_EVENTS):
             self.tray.refresh()
             self.window.refresh_status()
+        match event:
+            case ProfileOffered(window=window):
+                self.notifier.show(
+                    Notification(
+                        "Похоже, это новая игра",
+                        f"{mono(window.exe)} — создать профиль, чтобы озвучивать её субтитры?",
+                        ("Создать профиль", lambda: self._create_profile(window)),
+                        ("Не спрашивать", lambda: self.facade.never_ask(window.exe)),
+                        timeout_ms=None,
+                    )
+                )
+            case LayoutMissing(title=title, aspect=aspect):
+                self.notifier.show(
+                    Notification(
+                        "Настройте зоны для этой игры",
+                        f"{title or 'Игра'}: нет зон для {aspect}. Редактор откроется поверх игры.",
+                        ("Настроить зоны", self.open_zone_editor),
+                        None,
+                        timeout_ms=30_000,
+                    )
+                )
+            case ProfileBound(title=title):
+                self.notifier.show(Notification("Игра привязана", f"{title} — профиль готов."))
+            case _:
+                pass
         if isinstance(event, SettingsApplied):
             self.tray.refresh()
             self.window.refresh_status()
             self.general.sync()
+
+    def _create_profile(self, window: WindowRef) -> None:
+        try:
+            stored = self.facade.create_profile_for(window)
+        except (OSError, ValueError, FileExistsError) as exc:
+            self.notifier.show(Notification("Профиль не создан", str(exc)))
+            return
+        log.info("Создан профиль %s", stored.path.name)
+        self.profiles.refresh()
 
     def _on_second_copy(self) -> None:
         connection = self.server.nextPendingConnection()

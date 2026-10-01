@@ -262,6 +262,19 @@ class AppFacade:
     def create_profile(self, exe: str, title: str | None = None) -> StoredProfile:
         return pc.new_profile(self.store, exe, title)
 
+    def create_profile_for(self, window: WindowRef) -> StoredProfile:
+        """«Создать профиль» from the notification: GameWatcher activates it within a second."""
+        exe_path = runtime.exe_path(window.pid)
+        install_dir = str(Path(exe_path).parent) if exe_path else None
+        title = Path(window.exe).stem if not window.title else window.title[:60]
+        return pc.new_profile(self.store, window.exe, title, install_dir)
+
+    def never_ask(self, exe: str) -> None:
+        """«Не спрашивать» (TZ 4.11): the exe goes to ``never_ask_exes``."""
+        if exe.lower() not in {e.lower() for e in self.settings.never_ask_exes}:
+            exes = [*self.settings.never_ask_exes, exe]
+            self.apply_settings(self.settings.model_copy(update={"never_ask_exes": exes}))
+
     def delete_profile(self, path: Path) -> None:
         """The profile only, never the game; the file goes to backup."""
         self.store.backup_dir.mkdir(parents=True, exist_ok=True)

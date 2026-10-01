@@ -53,3 +53,16 @@ def test_fixed_stress_applies_to_the_active_game_at_once(tmp_path: Path) -> None
     assert preparer.dictionary is not None
     assert preparer.dictionary.apply("Мы против Арасаки.") == "Мы против Арас+аки."  # type: ignore[attr-defined]
     facade._parts = None
+
+
+def test_never_ask_and_create_from_notification(tmp_path: Path) -> None:
+    from subvoicer.core.models import WindowRef
+
+    facade = AppFacade(AppPaths(tmp_path))
+    facade.never_ask("Stalker2.exe")
+    facade.never_ask("stalker2.exe")  # once
+    assert facade.settings.never_ask_exes == ["Stalker2.exe"]
+    window = WindowRef(1, 999_999, "Game.exe", "Новая игра", 1920, 1080)
+    stored = facade.create_profile_for(window)
+    assert stored.profile.exe == "Game.exe" and stored.profile.title == "Новая игра"
+    assert stored.profile.layouts == {}
