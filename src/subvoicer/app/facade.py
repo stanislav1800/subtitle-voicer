@@ -13,11 +13,14 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from subvoicer.app import profile_commands as pc
 from subvoicer.app import runtime
 from subvoicer.app.bus import Bus
 from subvoicer.app.game_runner import RunParts, build_run
 from subvoicer.config.paths import AppPaths
-from subvoicer.config.profile_store import ProfileStore
+from subvoicer.config.profile import Profile
+from subvoicer.config.profile_store import ProfileStore, StoredProfile
+from subvoicer.config.resources import voice_catalog
 from subvoicer.config.settings import Settings, load_settings, save_settings
 from subvoicer.core.events import (
     Event,
@@ -162,7 +165,13 @@ class AppFacade:
         if self._parts is not None:
             self._parts.speech.service.skip()
 
-    def say(self, text: str, voice_id: str, speaker: str | None = None) -> None:
+    def say(
+        self,
+        text: str,
+        voice_id: str,
+        speaker: str | None = None,
+        pronunciation: tuple[tuple[str, str, bool], ...] = (),
+    ) -> None:
         """A manual line (TZ 4.9): cuts what plays and pauses auto voicing until it ends."""
         if self._parts is None or not text.strip():
             return
@@ -173,6 +182,7 @@ class AppFacade:
             priority=Priority.MANUAL,
             channel="manual",
             speaker=speaker,
+            pronunciation=pronunciation,
         )
         self._parts.speech.service.submit(request)
 
@@ -191,7 +201,49 @@ class AppFacade:
         return runtime.output_devices()
 
     def voices(self) -> list[Voice]:
-        return list(self._parts.speech.voices) if self._parts is not None else []
+        """Voices of the loaded engine; before it loads, the catalog (same ids for Silero)."""
+        if self._parts is not None:
+            return list(self._parts.speech.voices)
+        return sorted(voice_catalog(pc.TTS_CATALOG).values(), key=lambda v: v.id)
+
+    # ------------------------------------------------------------------ profiles
+
+    def profiles(self) -> list[StoredProfile]:
+        return self.store.load_all()
+
+    def profile(self, path: Path) -> Profile:
+        return self.store.load(path)
+
+    def update_profile(
+        self, path: Path, change: Callable[[Profile], Profile | None]
+    ) -> StoredProfile:
+        """Re-read, change, save (with a backup); GameWatcher picks the file change up."""
+        return self.store.update(path, change)
+
+    def add_game(self, exe_path: str) -> StoredProfile:
+        """«Добавить игру по exe»: exe name + its folder as install_dir (TZ 4.16 for stage 9)."""
+        exe = Path(exe_path)
+        return pc.new_profile(self.store, exe.name, exe.stem, str(exe.parent))
+
+    def create_profile(self, exe: str, title: str | None = None) -> StoredProfile:
+        return pc.new_profile(self.store, exe, title)
+
+    def delete_profile(self, path: Path) -> None:
+        """The profile only, never the game; the file goes to backup."""
+        self.store.backup_dir.mkdir(parents=True, exist_ok=True)
+        path.replace(self.store.backup_dir / f"{path.stem}.deleted.json")
+
+    def export_profile(self, path: Path, target: Path) -> None:
+        self.store.export(path, target)
+
+    def import_profile(self, source: Path) -> StoredProfile:
+        return self.store.import_file(source)
+
+    def import_characters_text(self, path: Path, text: str) -> pc.CharactersImport:
+        return pc.import_characters_text(self.store, str(path), text)
+
+    def merge_characters(self, path: Path, source: str, target: str) -> StoredProfile:
+        return pc.merge_characters_in(self.store, str(path), source, target)
 
     def recent(self, count: int | None = None) -> list[HistoryEntry]:
         return self.history.recent(count)

@@ -29,6 +29,7 @@ from subvoicer.pipeline.speech.scheduler import (
     Stop,
 )
 from subvoicer.pipeline.text.preparer import TextPreparer
+from subvoicer.pipeline.text.pronunciation import PronunciationEntry
 from subvoicer.services.base import Service
 
 log = logging.getLogger(__name__)
@@ -237,7 +238,13 @@ class SpeechService(Service):
                     self._publisher.publish(SpeechDropped(request, str(reason)))
 
     def _play(self, request: SpeechRequest, rate: float) -> None:
-        pieces = self._preparer.prepare(request.text)
+        dictionary = None
+        if request.pronunciation:
+            dictionary = self._preparer.dictionary.with_extra(
+                PronunciationEntry(source, target, regex)
+                for source, target, regex in request.pronunciation
+            )
+        pieces = self._preparer.prepare(request.text, dictionary)
         if not pieces:
             self._execute(self._scheduler.finished(request.id, True, self._clock.now()))
             return

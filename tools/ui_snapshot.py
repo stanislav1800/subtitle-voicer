@@ -44,6 +44,15 @@ def main() -> int:
         path = args.out / f"{key}.png"
         window.grab().save(str(path))
         print(path)
+        page = window.current_page()
+        bar = page.verticalScrollBar() if page is not None else None
+        if bar is not None and bar.maximum() > 0:
+            bar.setValue(bar.maximum())
+            qt.processEvents()
+            bottom = args.out / f"{key}_bottom.png"
+            window.grab().save(str(bottom))
+            print(bottom)
+            bar.setValue(0)
     menu = app.tray.contextMenu()
     menu.popup(window.mapToGlobal(window.rect().center()))
     qt.processEvents()

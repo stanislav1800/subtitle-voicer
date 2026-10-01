@@ -195,3 +195,17 @@ def test_line_without_duck_leaves_the_game_alone() -> None:
     for _ in range(60):
         rig.step()
     assert ducker.gains == []
+
+
+def test_line_with_extra_pronunciation(rig: Rig) -> None:
+    rig.service.submit(
+        SpeechRequest(
+            7,
+            "Арасака рядом.",
+            "v1",
+            Priority.MANUAL,
+            pronunciation=(("Арасак*", "Арас+ак*", False),),
+        )
+    )
+    rig.step()
+    assert rig.tts.calls[0][0].startswith("Арас+ака")

@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import sys
 import threading
+from pathlib import Path
 
 from PySide6.QtCore import QObject, QTimer, Signal
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
@@ -20,7 +21,8 @@ from subvoicer.ui import theme
 from subvoicer.ui.bridge import Bridge
 from subvoicer.ui.settings.general import GeneralPage
 from subvoicer.ui.settings.hotkeys import HotkeysPage
-from subvoicer.ui.settings.window import Page, SettingsWindow
+from subvoicer.ui.settings.profiles import ProfilesPage
+from subvoicer.ui.settings.window import SettingsWindow
 from subvoicer.ui.tray import Tray
 
 log = logging.getLogger("subvoicer.ui")
@@ -85,9 +87,8 @@ class Application:
     def _build_pages(self) -> None:
         self.general = GeneralPage(self.facade)
         self.window.add_page("general", "Общие", "sliders-horizontal", self.general)
-        profiles = Page("Профили и голоса")
-        profiles.finish()
-        self.window.add_page("profiles", "Профили и голоса", "users", profiles)
+        self.profiles = ProfilesPage(self.facade, self.open_profile_editor)
+        self.window.add_page("profiles", "Профили и голоса", "users", self.profiles)
         self.hotkeys = HotkeysPage(self.facade)
         self.window.add_page("hotkeys", "Горячие клавиши", "keyboard", self.hotkeys)
 
@@ -97,6 +98,9 @@ class Application:
 
     def open_line(self, entry: HistoryEntry) -> None:
         log.info("Реплика %d: %s", entry.id, entry.text)
+
+    def open_profile_editor(self, path: Path, mode: str) -> None:
+        log.info("Редактор зон (%s) для %s появится в части 5 этапа 6", mode, path.name)
 
     def open_zone_editor(self) -> None:
         log.info("Редактор зон появится в части 5 этапа 6")

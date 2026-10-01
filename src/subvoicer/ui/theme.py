@@ -174,7 +174,9 @@ QPushButton:focus {{ border: 2px solid {ACCENT}; }}
 QPushButton#primary {{ background: {ACCENT}; color: {ON_ACCENT}; border: none; font-weight: 600; }}
 QPushButton#primary:hover {{ background: {ACCENT_HOVER}; }}
 QPushButton#iconButton {{ min-height: 32px; min-width: 32px; max-width: 32px; padding: 0;
+    font-size: 16px;
     border-radius: 7px; }}
+QPushButton#iconButton::menu-indicator {{ image: none; width: 0; }}
 QPushButton#nav {{ background: transparent; border: none; text-align: left; padding: 0 12px;
     min-height: 38px; color: {TEXT_SECONDARY}; border-radius: 8px; }}
 QPushButton#nav:checked {{ background: {BG_ACTIVE}; color: {TEXT}; font-weight: 600; }}

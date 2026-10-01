@@ -131,6 +131,10 @@ class SettingsWindow(QWidget):
     def page_keys(self) -> list[str]:
         return [key for key, (button, _) in self._pages.items() if not button.isHidden()]
 
+    def current_page(self) -> Page | None:
+        page = self._stack.currentWidget()
+        return page if isinstance(page, Page) else None
+
     def show_page(self, key: str) -> None:
         button, page = self._pages[key]
         button.setChecked(True)

@@ -164,6 +164,8 @@ class SpeechRequest:
     channel: str = ""
     speaker: str | None = None
     t_change: float | None = None  # latency start, if the line came from a zone
+    # extra dictionary entries (from, to, regex) for this line only: «Прослушать» before saving
+    pronunciation: tuple[tuple[str, str, bool], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

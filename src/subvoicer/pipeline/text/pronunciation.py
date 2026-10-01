@@ -47,9 +47,10 @@ class PronunciationDict:
     """Plain and stem entries first (longer ``from`` first), regex entries after them."""
 
     def __init__(self, entries: Iterable[PronunciationEntry] = ()) -> None:
+        self.entries = list(entries)
         plain: list[PronunciationEntry] = []
         regexes: list[PronunciationEntry] = []
-        for entry in entries:
+        for entry in self.entries:
             if not entry.source.strip():
                 continue
             (regexes if entry.regex else plain).append(entry)
@@ -59,6 +60,14 @@ class PronunciationDict:
 
     def __len__(self) -> int:
         return len(self._rules)
+
+    def with_extra(self, extra: Iterable[PronunciationEntry]) -> PronunciationDict:
+        """This dictionary plus ``extra`` entries that replace ones with the same ``from``
+        (listening to an entry before it is saved, TZ 4.13.1)."""
+        added = list(extra)
+        replaced = {e.source.strip().lower() for e in added}
+        kept = [e for e in self.entries if e.source.strip().lower() not in replaced]
+        return PronunciationDict([*added, *kept])
 
     def apply(self, text: str) -> str:
         for rule in self._rules:

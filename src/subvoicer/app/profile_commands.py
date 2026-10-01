@@ -115,7 +115,12 @@ class CharactersImport:
 
 
 def import_characters_file(store: ProfileStore, ref: str, source: Path) -> CharactersImport:
-    rows, problems = parse_characters(source.read_text(encoding="utf-8-sig"))
+    return import_characters_text(store, ref, source.read_text(encoding="utf-8-sig"))
+
+
+def import_characters_text(store: ProfileStore, ref: str, text: str) -> CharactersImport:
+    """A file or a pasted text (TZ 4.6)."""
+    rows, problems = parse_characters(text)
     target = find_profile(store, ref)
     report_box: list[ImportReport] = []
 
