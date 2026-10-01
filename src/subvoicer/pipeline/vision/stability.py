@@ -36,6 +36,7 @@ class StabilizationSettings:
     min_growth_ratio: float = 0.0002  # growth of 0.02% of the zone (about one character) counts
     change_ratio: float = DEFAULT_CHANGE_RATIO
     empty_ratio: float = DEFAULT_EMPTY_RATIO
+    flicker_ms: int = 300  # a shorter empty spell with the same text after it is a flicker
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,6 +80,8 @@ class ZoneStabilizer:
         self.settings = settings or StabilizationSettings()
         self.state = ZoneState.EMPTY
         self.was_empty = True  # the zone starts empty
+        self.empty_ms = float("inf")  # how long the last empty spell lasted (TZ 1.17)
+        self._t_emptied: float | None = None
         self._previous: Mask | None = None
         self._shown: Mask | None = None
         self._t_change = 0.0
@@ -96,9 +99,12 @@ class ZoneStabilizer:
             self.state = ZoneState.EMPTY
             self.was_empty = True
             self._shown = None
+            self._t_emptied = now
             return Emptied()
 
         if self.state is ZoneState.EMPTY:
+            if self._t_emptied is not None:
+                self.empty_ms = (now - self._t_emptied) * 1000
             self._begin_change(now, growing=True)
             return self._maybe_ocr(mask, now)
 
@@ -121,6 +127,11 @@ class ZoneStabilizer:
         elif self._grew(previous, mask):
             self._t_last_change = now
         return self._maybe_ocr(mask, now)
+
+    @property
+    def flickered(self) -> bool:
+        """The zone was empty only for a moment (shorter than ``flicker_ms``)."""
+        return self.was_empty and self.empty_ms < self.settings.flicker_ms
 
     def consume_was_empty(self) -> None:
         """The result processing used the flag (a new line after an empty zone)."""

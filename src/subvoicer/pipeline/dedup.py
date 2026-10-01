@@ -54,6 +54,15 @@ class Deduplicator:
         self._channels: dict[str, _Channel] = {}
         self._recent: deque[tuple[float, str, str]] = deque()  # (time, channel, normalised)
 
+    def same_as_last(self, text: str, channel: str) -> bool:
+        """``text`` matches the last voiced line of ``channel`` (step 5 comparison)."""
+        state = self._channels.get(channel)
+        return (
+            state is not None
+            and state.last is not None
+            and self._same(normalize(text), state.last_norm)
+        )
+
     def process(
         self,
         text: str,

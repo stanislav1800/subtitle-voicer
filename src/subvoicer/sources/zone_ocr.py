@@ -150,10 +150,16 @@ class ZoneOcrSource:
 
         now = self._clock.now()
         t_change = decision.t_change
+        was_empty = stabilizer.was_empty
+        if stabilizer.flickered and self._dedup.same_as_last(text, spec.id):
+            # the subtitle blinked off for a moment: the same line, not a new one (TZ 1.17)
+            log.debug("Зона %s: мигание %.0f мс — та же реплика", spec.id, stabilizer.empty_ms)
+            was_empty = False
+            stabilizer.consume_was_empty()
         result = self._dedup.process(
             text,
             spec.id,
-            was_empty=stabilizer.was_empty,
+            was_empty=was_empty,
             now=now,
             repeat_cooldown_min=spec.repeat_cooldown_min,
         )

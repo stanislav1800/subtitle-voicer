@@ -349,3 +349,25 @@ def test_name_survives_a_fallback_input() -> None:
     assert [(u.speaker, u.text, u.ocr_input) for u in out] == [
         ("Кирк", "Мой человек на парковке.", "masked")
     ]
+
+
+def test_blink_of_the_same_subtitle_is_not_a_new_line() -> None:
+    s = Screen()
+    s.show("Я бы чего-нибудь заточил.")
+    s.run(1)
+    s.show("")
+    s.tick()  # one empty frame, ~100 ms
+    s.show("Я бы чего-нибудь заточил!")  # OCR reads it a bit differently
+    s.run(1)
+    assert [u.text for u in s.out] == ["Я бы чего-нибудь заточил."]
+
+
+def test_short_gap_before_a_different_line_is_still_a_new_line() -> None:
+    s = Screen()
+    s.show("Без обид.")
+    s.run(1)
+    s.show("")
+    s.tick()
+    s.show("Ну а чё, как по мне, это хорошее начало.")
+    s.run(1)
+    assert [u.text for u in s.out] == ["Без обид.", "Ну а чё, как по мне, это хорошее начало."]
