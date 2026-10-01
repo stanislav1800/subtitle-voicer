@@ -1,0 +1,11 @@
+# exe, для которых не предлагать профиль (ТЗ 4.14, excluded_exes по умолчанию).
+chrome.exe
+msedge.exe
+firefox.exe
+opera.exe
+browser.exe
+explorer.exe
+Telegram.exe
+Discord.exe
+vlc.exe
+mpc-hc64.exe
