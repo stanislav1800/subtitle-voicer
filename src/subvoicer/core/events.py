@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from subvoicer.core.models import SpeechRequest, Utterance
+from subvoicer.core.models import SpeechRequest, Utterance, WindowRef
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,3 +69,44 @@ class SpeechFinished(Event):
 class SpeechDropped(Event):
     request: SpeechRequest
     reason: str
+
+
+@dataclass(frozen=True, slots=True)
+class GameActivated(Event):
+    """A game with a profile became the active one (TZ 4.11), or its profile file or window
+    aspect changed and it has to be rebuilt."""
+
+    profile_path: str
+    window: WindowRef
+    aspect: str  # layout key of the window's client area
+
+
+@dataclass(frozen=True, slots=True)
+class GameClosed(Event):
+    """The active game's process ended."""
+
+    pid: int
+
+
+@dataclass(frozen=True, slots=True)
+class LayoutMissing(Event):
+    """The active profile has no zones for this aspect ratio: voicing does not run."""
+
+    profile_path: str
+    title: str
+    aspect: str
+
+
+@dataclass(frozen=True, slots=True)
+class ProfileOffered(Event):
+    """«Создать профиль?» for a fullscreen window without a profile (TZ 4.11)."""
+
+    window: WindowRef
+
+
+@dataclass(frozen=True, slots=True)
+class ProfileBound(Event):
+    """A library profile without exe got the exe of a running game (TZ 4.11, rule 2)."""
+
+    profile_path: str
+    title: str

@@ -1,0 +1,34 @@
+# Шаблоны зон (ТЗ 4.2): заполняют поля новой зоны, дальше всё можно поменять.
+
+[dialog]
+name = "Диалоги"
+kind = "text"
+trigger = "auto"
+mask = { preset = "bright_on_dark" }
+policy = { priority = "high", voice = { mode = "speaker" }, speaker = { mode = "prefix" }, repeat_cooldown_min = 0, duck = true }
+
+[note]
+name = "Записка"
+kind = "text"
+trigger = "hotkey"
+mask = { preset = "adaptive" }
+policy = { voice = { mode = "narrator" }, speaker = { mode = "none" }, repeat_cooldown_min = 0, duck = true }
+
+[notification]
+name = "Уведомления"
+kind = "text"
+trigger = "auto"
+mask = { preset = "bright_on_dark" }
+policy = { priority = "normal", voice = { mode = "narrator" }, speaker = { mode = "none" }, repeat_cooldown_min = 2, duck = false }
+
+[objective]
+name = "Цель задания"
+kind = "text"
+trigger = "auto"
+mask = { preset = "bright_on_dark" }
+policy = { priority = "low", voice = { mode = "narrator" }, speaker = { mode = "none" }, repeat_cooldown_min = 10, duck = false }
+
+[speaker]
+name = "Имя говорящего"
+kind = "speaker"
+mask = { preset = "color", colors_hsv = [[[0, 0, 200], [179, 60, 255]]] }

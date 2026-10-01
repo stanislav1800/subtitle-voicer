@@ -12,7 +12,7 @@ import numpy as np
 import numpy.typing as npt
 
 from subvoicer.core.events import Event
-from subvoicer.core.models import AudioClip, FoundGame, Frame, OcrResult, Voice
+from subvoicer.core.models import AudioClip, FoundGame, Frame, OcrResult, Voice, WindowRef
 
 E = TypeVar("E", bound=Event)
 
@@ -69,6 +69,20 @@ class Ducker(Protocol):
     def restore_all(self) -> None:
         """Original volumes back from the disk state; on any exit and at start-up."""
         ...
+
+
+ScreenRect = tuple[int, int, int, int]  # left, top, right, bottom in physical pixels
+
+
+class Desktop(Protocol):
+    """Windows and processes as GameWatcher sees them (TZ 4.11)."""
+
+    def foreground(self) -> WindowRef | None: ...
+    def describe(self, hwnd: int) -> WindowRef | None: ...
+    def client_rect(self, hwnd: int) -> ScreenRect: ...
+    def monitor_rect(self, hwnd: int) -> ScreenRect: ...
+    def exe_path(self, pid: int) -> str | None: ...
+    def alive(self, pid: int) -> bool: ...
 
 
 class GameLibrarySource(Protocol):

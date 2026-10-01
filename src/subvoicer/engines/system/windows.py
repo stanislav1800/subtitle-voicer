@@ -109,3 +109,37 @@ def monitor_of_window(hwnd: int) -> MonitorRef:
         if monitor.device == device:
             return monitor
     raise LookupError(f"Монитор {device} окна {hwnd} не найден")
+
+
+def foreground() -> WindowRef | None:
+    hwnd = win32gui.GetForegroundWindow()
+    return describe(hwnd) if hwnd else None
+
+
+def exe_path(pid: int) -> str | None:
+    try:
+        return str(psutil.Process(pid).exe())
+    except (psutil.Error, OSError):
+        return None
+
+
+class WindowsDesktop:
+    """The ``Desktop`` port over pywin32 + psutil."""
+
+    def foreground(self) -> WindowRef | None:
+        return foreground()
+
+    def describe(self, hwnd: int) -> WindowRef | None:
+        return describe(hwnd) if is_window(hwnd) else None
+
+    def client_rect(self, hwnd: int) -> ScreenRect:
+        return client_rect_on_screen(hwnd)
+
+    def monitor_rect(self, hwnd: int) -> ScreenRect:
+        return monitor_of_window(hwnd).rect
+
+    def exe_path(self, pid: int) -> str | None:
+        return exe_path(pid)
+
+    def alive(self, pid: int) -> bool:
+        return bool(psutil.pid_exists(pid))

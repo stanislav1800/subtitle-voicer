@@ -1,6 +1,6 @@
 """Command line entry point: ``uv run python -m subvoicer.cli <command>`` (TZ 4.15).
 
-Commands: ``watch`` (stages 2-3). ``run`` and ``characters`` come with stage 5.
+Commands: ``watch`` (stages 2-3); ``run``, ``profiles``, ``characters`` (stage 5).
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 
+from subvoicer.app import profile_commands as pc
 from subvoicer.app import runtime
 from subvoicer.app.bus import Bus
 from subvoicer.app.container import (
@@ -21,15 +22,29 @@ from subvoicer.app.container import (
     OVERLAP_MODES,
     PRIORITIES,
     SPEAKER_MODES,
+    SPEAKER_MODES_ALL,
     TTS_CHAIN,
     VOICE_MODES,
     SpeechConfig,
     WatchConfig,
     build_watch,
 )
+from subvoicer.app.game_runner import build_run
 from subvoicer.app.log import setup_logging
 from subvoicer.config.paths import AppPaths
-from subvoicer.core.events import CaptureFailed, CaptureStopped, Event, UtteranceDetected
+from subvoicer.config.profile_store import format_error
+from subvoicer.config.settings import load_settings
+from subvoicer.core.events import (
+    CaptureFailed,
+    CaptureStopped,
+    Event,
+    GameActivated,
+    GameClosed,
+    LayoutMissing,
+    ProfileBound,
+    ProfileOffered,
+    UtteranceDetected,
+)
 from subvoicer.core.models import Rect, UtteranceKind, WindowRef
 
 log = logging.getLogger("subvoicer.cli")
@@ -111,7 +126,64 @@ def build_parser() -> argparse.ArgumentParser:
         "--duck-level", type=float, default=0.4, help="до какой доли приглушать игру (0..1)"
     )
     watch.add_argument("--debug", action="store_true", help="подробный лог (DEBUG)")
+
+    run = commands.add_parser("run", help="озвучка по профилям без GUI (этап 5)")
+    run.add_argument("--no-hotkeys", action="store_true", help="без горячих клавиш")
+    run.add_argument("--debug", action="store_true", help="подробный лог (DEBUG)")
+    add_profile_commands(commands)
+    add_character_commands(commands)
     return parser
+
+
+def add_profile_commands(commands: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
+    profiles = commands.add_parser("profiles", help="профили игр").add_subparsers(
+        dest="action", required=True
+    )
+    profiles.add_parser("list", help="список профилей")
+    new = profiles.add_parser("new", help="новый профиль без зон")
+    new.add_argument("exe", help="имя exe игры, например Cyberpunk2077.exe")
+    new.add_argument("--title", help="название игры")
+    new.add_argument("--install-dir", help="папка установки")
+    zone = profiles.add_parser("add-zone", help="добавить зону из шаблона (ТЗ 4.2)")
+    zone.add_argument("profile", help="exe или имя файла профиля")
+    zone.add_argument("--template", required=True, choices=tuple(pc.zone_templates()))
+    zone.add_argument("--rect", required=True, type=parse_rect, help="x1,y1,x2,y2 в долях кадра")
+    zone.add_argument("--aspect", help="соотношение сторон (по умолчанию — по окну игры)")
+    zone.add_argument("--id", help="id зоны (по умолчанию — имя шаблона)")
+    zone.add_argument("--name", help="отображаемое имя")
+    zone.add_argument("--preset", choices=MASK_PRESETS, help="пресет маски")
+    zone.add_argument("--color-hsv", action="append", type=parse_hsv_range, default=[])
+    zone.add_argument("--threshold", type=int)
+    zone.add_argument("--priority", choices=PRIORITIES)
+    zone.add_argument("--voice-mode", choices=VOICE_MODES)
+    zone.add_argument("--voice", help="id голоса для --voice-mode fixed")
+    zone.add_argument("--speaker", choices=SPEAKER_MODES_ALL, help="как определять говорящего")
+    zone.add_argument("--speaker-zone", help="id зоны вида speaker для --speaker zone")
+    zone.add_argument(
+        "--speaker-hsv", action="append", type=parse_hsv_range, default=[], help="цвет имени"
+    )
+    zone.add_argument("--cooldown", type=float, help="не повторять N минут")
+    zone.add_argument("--duck", choices=("yes", "no"), help="приглушать игру")
+    export = profiles.add_parser("export", help="профиль в один файл")
+    export.add_argument("profile")
+    export.add_argument("file", type=Path)
+    imported = profiles.add_parser("import", help="профиль из файла")
+    imported.add_argument("file", type=Path)
+
+
+def add_character_commands(commands: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
+    characters = commands.add_parser("characters", help="персонажи профиля").add_subparsers(
+        dest="action", required=True
+    )
+    listed = characters.add_parser("list", help="персонажи и их голоса")
+    listed.add_argument("profile")
+    imported = characters.add_parser("import", help="импорт из CSV: имя;пол;варианты")
+    imported.add_argument("profile")
+    imported.add_argument("file", type=Path)
+    merge = characters.add_parser("merge", help="A становится вариантом имени B")
+    merge.add_argument("profile")
+    merge.add_argument("a")
+    merge.add_argument("b")
 
 
 def format_window(w: WindowRef) -> str:
@@ -216,6 +288,155 @@ def run_watch(args: argparse.Namespace) -> int:
         session.stop()
 
 
+def run_profiles(args: argparse.Namespace) -> int:
+    paths = AppPaths.default()
+    try:
+        settings = load_settings(paths.settings_file)
+    except ValueError as exc:
+        print(f"settings.toml: {format_error(exc)}", file=sys.stderr)
+        return 1
+    bus = Bus()
+    events: queue.Queue[Event] = queue.Queue()
+    bus.subscribe(Event, events.put)
+    print("Загрузка OCR и озвучки…", file=sys.stderr)
+    session = build_run(settings, bus, paths, hotkeys=not args.no_hotkeys)
+    session.start()
+    print(f"Профили: {paths.profiles_dir}. Жду игру в фокусе. Ctrl+C — выход.", file=sys.stderr)
+    try:
+        while True:
+            try:
+                event = events.get(timeout=0.5)
+            except queue.Empty:
+                continue
+            report_event(event)
+    except KeyboardInterrupt:
+        return 0
+    finally:
+        session.stop()
+
+
+def report_event(event: Event) -> None:
+    match event:
+        case UtteranceDetected():
+            print_utterance(event)
+        case GameActivated(profile_path=path, window=window, aspect=aspect):
+            print(f"Игра: {window.exe} — профиль {Path(path).name} ({aspect})", file=sys.stderr)
+        case LayoutMissing(title=title, aspect=aspect):
+            print(f"Настройте зоны для этой игры: {title}, {aspect}", file=sys.stderr)
+        case ProfileOffered(window=window):
+            print(
+                f"Игра {window.exe} без профиля. Создать: "
+                f"uv run python -m subvoicer.cli profiles new {window.exe}",
+                file=sys.stderr,
+            )
+        case ProfileBound(title=title):
+            print(f"Игра {title} привязана", file=sys.stderr)
+        case GameClosed():
+            print("Игра закрыта.", file=sys.stderr)
+        case CaptureFailed():
+            print("Не удаётся захватить окно игры — продолжаю пытаться", file=sys.stderr)
+
+
+def run_profiles_command(args: argparse.Namespace) -> int:
+    store = pc.store_for()
+    match args.action:
+        case "list":
+            for stored in store.load_all():
+                p = stored.profile
+                layouts = ", ".join(
+                    f"{key}: {len(layout.zones)} зон" for key, layout in p.layouts.items()
+                )
+                print(f"{stored.path.name:<32} {p.title} [{layouts or 'нет зон'}]")
+        case "new":
+            stored = pc.new_profile(store, args.exe, args.title, args.install_dir)
+            print(f"Создан {stored.path}")
+        case "add-zone":
+            stored = pc.find_profile(store, args.profile)
+            aspect = args.aspect or pc.running_aspect(stored.profile.exe)
+            if aspect is None:
+                print("Игра не запущена: укажите --aspect, например 16:9", file=sys.stderr)
+                return 1
+            rect = args.rect
+            stored, zone = pc.add_zone(
+                store,
+                str(stored.path),
+                aspect=aspect,
+                template=args.template,
+                rect=(rect.x1, rect.y1, rect.x2, rect.y2),
+                zone_id=args.id,
+                overrides=zone_overrides(args),
+            )
+            print(f"Зона {zone.id} ({zone.name}) добавлена в {stored.path.name}, {aspect}")
+        case "export":
+            stored = pc.find_profile(store, args.profile)
+            store.export(stored.path, args.file)
+            print(f"Профиль сохранён в {args.file}")
+        case "import":
+            stored = store.import_file(args.file)
+            print(f"Профиль импортирован: {stored.path}")
+    return 0
+
+
+def zone_overrides(args: argparse.Namespace) -> dict[str, object]:
+    overrides: dict[str, object] = {}
+    if args.name:
+        overrides["name"] = args.name
+    if args.preset or args.color_hsv or args.threshold is not None:
+        mask: dict[str, object] = {"preset": args.preset or "color"}
+        if args.color_hsv:
+            mask["colors_hsv"] = args.color_hsv
+        if args.threshold is not None:
+            mask["threshold"] = args.threshold
+        overrides["mask"] = mask
+    policy: dict[str, object] = {}
+    if args.priority:
+        policy["priority"] = args.priority
+    if args.voice_mode or args.voice:
+        policy["voice"] = {"mode": args.voice_mode or "fixed", "id": args.voice}
+    if args.speaker:
+        speaker: dict[str, object] = {"mode": args.speaker}
+        if args.speaker_zone:
+            speaker["zone_id"] = args.speaker_zone
+        if args.speaker_hsv:
+            speaker["colors_hsv"] = args.speaker_hsv
+        policy["speaker"] = speaker
+    if args.cooldown is not None:
+        policy["repeat_cooldown_min"] = args.cooldown
+    if args.duck:
+        policy["duck"] = args.duck == "yes"
+    if policy:
+        overrides["policy"] = policy
+    return overrides
+
+
+def run_characters_command(args: argparse.Namespace) -> int:
+    store = pc.store_for()
+    match args.action:
+        case "list":
+            stored = pc.find_profile(store, args.profile)
+            for c in stored.profile.characters:
+                aliases = f" ({', '.join(c.aliases)})" if c.aliases else ""
+                locks = [
+                    mark for mark, on in (("пол", c.gender_locked), ("голос", c.voice_locked)) if on
+                ]
+                fixed = f" закреплены: {', '.join(locks)}" if locks else ""
+                print(f"{c.name}{aliases}: {c.gender}, {c.voice or '-'} [{c.source}]{fixed}")
+        case "import":
+            result = pc.import_characters_file(store, args.profile, args.file)
+            report = result.report
+            print(f"Профиль {result.stored.path.name}:")
+            print(f"  добавлено: {len(report.added)} {', '.join(report.added)}")
+            print(f"  обновлено: {len(report.updated)} {', '.join(report.updated)}")
+            skipped = sorted([*result.problems, *report.skipped], key=lambda p: p.line)
+            print(f"  пропущено: {len(skipped)}")
+            for problem in skipped:
+                print(f"    строка {problem.line}: {problem.text} — {problem.reason}")
+        case "merge":
+            stored = pc.merge_characters_in(store, args.profile, args.a, args.b)
+            print(f"«{args.a}» теперь вариант имени «{args.b}» ({stored.path.name})")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     runtime.prepare_process()
     args = build_parser().parse_args(argv)
@@ -223,12 +444,25 @@ def main(argv: Sequence[str] | None = None) -> int:
         sys.stdout.reconfigure(errors="replace", line_buffering=True)
     log_file = setup_logging(
         AppPaths.default().logs_dir,
-        level=logging.DEBUG if args.debug else logging.INFO,
+        level=logging.DEBUG if getattr(args, "debug", False) else logging.INFO,
         console=True,
     )
     log.debug("Лог: %s", log_file)
     if args.command == "watch":
         return run_watch(args)
+    if args.command == "run":
+        return run_profiles(args)
+    try:
+        if args.command == "profiles":
+            return run_profiles_command(args)
+        if args.command == "characters":
+            return run_characters_command(args)
+    except (pc.ProfileNotFoundError, FileExistsError, KeyError) as exc:
+        print(exc.args[0] if exc.args else exc, file=sys.stderr)
+        return 1
+    except (OSError, ValueError) as exc:
+        print(format_error(exc), file=sys.stderr)
+        return 1
     return 0
 
 

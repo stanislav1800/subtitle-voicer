@@ -116,10 +116,13 @@ class PycawDucker:
         from pycaw.pycaw import AudioUtilities
 
         found = []
+        own = os.getpid()  # our own voice is never ducked, even if the game is python.exe
         try:
             for session in AudioUtilities.GetAllSessions():
                 process = session.Process
-                if process is not None and process.name().lower() == exe:
+                if process is None or process.pid == own:
+                    continue
+                if process.name().lower() == exe:
                     found.append(session.SimpleAudioVolume)
         except Exception:
             log.exception("Ducking: не удалось получить аудиосессии")

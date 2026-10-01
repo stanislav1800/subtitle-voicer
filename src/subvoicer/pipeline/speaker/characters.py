@@ -182,9 +182,9 @@ def import_characters(
             continue
         character = result[index]
         update: dict[str, object] = {}
-        new_aliases = list(
-            _unique((row.name, *row.aliases), exclude=names_of(character), keep=character.aliases)
-        )
+        # a name the character already answers to, even with an OCR-like typo, adds nothing
+        fresh = [n for n in (row.name, *row.aliases) if find_character([character], n) is None]
+        new_aliases = _unique(fresh, exclude=names_of(character), keep=character.aliases)
         if new_aliases != character.aliases:
             update["aliases"] = new_aliases
         if (

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -19,9 +19,10 @@ from subvoicer.config.resources import (
     translit_table,
     voice_catalog,
 )
+from subvoicer.config.settings import DEFAULT_HOTKEYS
 from subvoicer.core.errors import EngineError
 from subvoicer.core.events import EngineUnavailable, UtteranceDetected
-from subvoicer.core.models import Priority, Rect, SpeechRequest, Utterance, UtteranceKind
+from subvoicer.core.models import Priority, Rect, SpeechRequest, Utterance, UtteranceKind, Voice
 from subvoicer.core.ports import EventBus, EventPublisher
 from subvoicer.engines import registry
 from subvoicer.pipeline.dedup import Deduplicator
@@ -48,17 +49,12 @@ log = logging.getLogger(__name__)
 Hsv = tuple[int, int, int]
 
 MASK_PRESETS = tuple(p.value for p in MaskPreset)
-SPEAKER_MODES = (SpeakerMode.PREFIX.value, SpeakerMode.NONE.value)
+SPEAKER_MODES = (SpeakerMode.PREFIX.value, SpeakerMode.NONE.value)  # watch: one zone
+SPEAKER_MODES_ALL = tuple(m.value for m in SpeakerMode)
 VOICE_MODES = tuple(m.value for m in VoiceMode)
 OVERLAP_MODES = tuple(m.value for m in OverlapMode)
 PRIORITIES = (Priority.HIGH.value, Priority.NORMAL.value, Priority.LOW.value)
 TTS_CHAIN = ("silero", "sapi5")  # fallback order (TZ 4.8)
-
-DEFAULT_HOTKEYS = {  # TZ 4.12
-    "pause": "<ctrl>+<alt>+p",
-    "repeat": "<ctrl>+<alt>+r",
-    "skip": "<ctrl>+<alt>+s",
-}
 
 
 @dataclass(frozen=True)
@@ -152,17 +148,27 @@ def build_ducking(config: SpeechConfig, pid: int | None) -> tuple[GameDucking | 
         return None, None
     ducker = PycawDucker(AppPaths.default().ducking_state_file)
     ducker.restore_all()
-    if pid is None:
-        return None, ducker
     envelope = DuckEnvelope(
         config.duck_level, config.duck_fade_ms / 1000, config.duck_release_ms / 1000
     )
     return GameDucking(ducker, envelope, pid), ducker
 
 
+@dataclass(frozen=True)
+class SpeechParts:
+    session: Session
+    service: SpeechService
+    preparer: TextPreparer
+    voices: list[Voice]  # of the loaded TTS engine
+
+
 def build_speech(
-    config: SpeechConfig, bus: EventBus, game_pid: int | None = None
-) -> tuple[Session, SpeechService]:
+    config: SpeechConfig,
+    bus: EventBus,
+    game_pid: int | None = None,
+    hotkeys: Mapping[str, str] = DEFAULT_HOTKEYS,
+) -> SpeechParts:
+    """TTS, player, scheduler and ducking; who routes utterances in is the caller's choice."""
     clock = MonotonicClock()
     from subvoicer.engines.audio.output import SoundDeviceOutput
     from subvoicer.engines.tts.silero_stress import SileroStressMarker
@@ -194,21 +200,6 @@ def build_speech(
         bus,
         ducking,
     )
-    picker = VoicePicker(default_voices(tts.voices()), GenderGuesser(gender_exceptions()))
-    log.info(
-        "Голоса: рассказчик %s, мужской %s, женский %s",
-        picker.defaults.narrator,
-        picker.defaults.male,
-        picker.defaults.female,
-    )
-    router = LineRouter(
-        picker,
-        VoiceMode(config.voice_mode),
-        config.voice_id,
-        Priority(config.priority),
-        config.duck,
-    )
-    bus.subscribe(UtteranceDetected, lambda event: service.submit(router.request(event.utterance)))
     closers: list[Callable[[], None]] = [output.close]
     if ducker is not None:
         closers.insert(0, ducker.restore_all)
@@ -216,12 +207,13 @@ def build_speech(
     if config.hotkeys:
         from subvoicer.engines.system.hotkeys import PynputHotkeys
 
-        hotkeys = PynputHotkeys()
+        listener = PynputHotkeys()
         actions = {"pause": service.toggle_pause, "repeat": service.repeat, "skip": service.skip}
-        bindings = {DEFAULT_HOTKEYS[name]: action for name, action in actions.items()}
-        starters.append(lambda: hotkeys.start(bindings))
-        closers.insert(0, hotkeys.stop)
-    return Session([service], closers, starters), service
+        bindings = {hotkeys[name]: action for name, action in actions.items()}
+        starters.append(lambda: listener.start(bindings))
+        closers.insert(0, listener.stop)
+    session = Session([service], closers, starters)
+    return SpeechParts(session, service, preparer, tts.voices())
 
 
 class LineRouter:
@@ -296,5 +288,21 @@ def build_watch(config: WatchConfig, bus: EventBus) -> Session:
     watch = Session([capture, zones])
     if config.speech is None:
         return watch
-    speech, _ = build_speech(config.speech, bus, config.pid)
-    return Session([speech, watch])  # speech first: it must be ready for the first line
+    speech = build_speech(config.speech, bus, config.pid)
+    picker = VoicePicker(default_voices(speech.voices), GenderGuesser(gender_exceptions()))
+    log.info(
+        "Голоса: рассказчик %s, мужской %s, женский %s",
+        picker.defaults.narrator,
+        picker.defaults.male,
+        picker.defaults.female,
+    )
+    router = LineRouter(
+        picker,
+        VoiceMode(config.speech.voice_mode),
+        config.speech.voice_id,
+        Priority(config.speech.priority),
+        config.speech.duck,
+    )
+    service = speech.service
+    bus.subscribe(UtteranceDetected, lambda event: service.submit(router.request(event.utterance)))
+    return Session([speech.session, watch])  # speech first: it must be ready for the first line

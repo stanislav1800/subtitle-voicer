@@ -47,7 +47,7 @@ class GameDucking:
 
     ducker: Ducker
     envelope: DuckEnvelope
-    pid: int
+    pid: int | None  # None: no active game, nothing to duck
     applied: float = 1.0  # the gain last given to the ducker
 
 
@@ -68,13 +68,18 @@ class _Finished:
     completed: bool
 
 
+@dataclass(frozen=True, slots=True)
+class _Game:
+    pid: int | None
+
+
 class _Hotkey(StrEnum):
     SKIP = "skip"
     REPEAT = "repeat"
     TOGGLE_PAUSE = "toggle_pause"
 
 
-_Message = _Submit | _Started | _Finished | _Hotkey
+_Message = _Submit | _Started | _Finished | _Hotkey | _Game
 
 
 class SpeechService(Service):
@@ -117,6 +122,10 @@ class SpeechService(Service):
     def toggle_pause(self) -> None:
         self._inbox.put(_Hotkey.TOGGLE_PAUSE)
 
+    def set_game(self, pid: int | None) -> None:
+        """The game to duck from now on; the previous one gets its volume back."""
+        self._inbox.put(_Game(pid))
+
     def _on_started(self, line_id: int, t_play: float) -> None:
         self._inbox.put(_Started(line_id, t_play))
 
@@ -151,6 +160,8 @@ class SpeechService(Service):
                 commands = s.set_paused(not s.paused)
                 log.info("Автоозвучка %s", "на паузе" if s.paused else "продолжена")
                 self._execute(commands)
+            case _Game(pid=pid):
+                self._switch_game(pid)
             case _Started(line_id=line_id, t_play=t_play):
                 line = self._lines.get(line_id)
                 if line is not None:
@@ -222,10 +233,21 @@ class SpeechService(Service):
         )
         line.rate = rate
 
+    def _switch_game(self, pid: int | None) -> None:
+        d = self._ducking
+        if d is None or pid == d.pid:
+            return
+        if d.pid is not None and d.applied != 1.0:
+            try:
+                d.ducker.set_gain(d.pid, 1.0)
+            except Exception:
+                log.exception("Ducking: не удалось вернуть громкость прежней игры")
+        d.pid, d.applied = pid, 1.0
+
     def _duck(self, now: float) -> None:
         """Ducking starts with the Play command: the fade overlaps the first synthesis."""
         d = self._ducking
-        if d is None:
+        if d is None or d.pid is None:
             return
         current = self._scheduler.current
         gain = round(d.envelope.update(current is not None and current.duck, now), 3)
