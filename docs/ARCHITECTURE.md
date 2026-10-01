@@ -136,7 +136,7 @@ subtitle-voicer/
 │   │
 │   ├── config/
 │   │   ├── paths.py               # %APPDATA%/SubtitleVoicer/… через platformdirs
-│   │   ├── settings.py            # Settings (pydantic) + чтение/запись settings.toml
+│   │   ├── settings.py            # Settings (pydantic) + чтение settings.toml (запись — с GUI)
 │   │   ├── profile.py             # Profile, Layout, Zone, VoicingPolicy, SpeakerConfig, VoiceConfig,
 │   │   │                          # Character, PronunciationEntry, HookSettings, HookChannel (5.4, 4.17 ТЗ)
 │   │   ├── profile_store.py       # файлы профилей, атомарная запись, резервные копии, сопоставление
@@ -148,6 +148,7 @@ subtitle-voicer/
 │   ├── pipeline/                  # чистые алгоритмы, всё тестируется без Windows
 │   │   ├── vision/
 │   │   │   ├── crop.py            # вырезка зоны по долям кадра
+│   │   │   ├── regions.py         # имя по цвету: вырезать из текста, прочитать отдельно (4.5)
 │   │   │   ├── masks.py           # пресеты color / bright_on_dark / dark_on_bright / adaptive
 │   │   │   ├── change.py          # изменение и пустота маски
 │   │   │   └── stability.py       # автомат 4.4 по маске: когда звать OCR (только для зон)
@@ -238,6 +239,8 @@ subtitle-voicer/
 │   │   ├── runtime.py             # запуск/остановка, один экземпляр, смена профиля, восстановление громкости,
 │   │   │                          # перехват необработанных исключений, пересоздание захвата
 │   │   ├── log.py                 # логирование: файл с ротацией, консоль, sys/threading.excepthook (4.14 ТЗ)
+│   │   ├── game_runner.py         # run: зоны из профиля, ProfileRouter (политика зоны, персонажи), смена игры
+│   │   ├── profile_commands.py    # команды профилей и персонажей для CLI (этап 5)
 │   │   └── facade.py              # команды для UI и CLI: pause, repeat, skip, save_profile, preview_voice …
 │   │
 │   ├── ui/                        # только здесь PySide6
@@ -389,7 +392,7 @@ TTS: dict[str, str] = {
 | 2 | `engines/capture/`, `engines/system/windows.py` (поиск окна, монитор, DPI), `pipeline/vision/stability.py`, `pipeline/normalize.py`, `pipeline/dedup.py`, `pipeline/speaker/extract.py`, `validate.py`, `resolver.py`, `sources/zone_ocr.py`, `services/base.py`, `capture_service.py`, `zone_service.py`, `app/container.py`, `runtime.py`, `cli.py watch`, `tools/subtitle_player.py`, `capture_probe.py` |
 | 3 | `engines/tts/`, `engines/audio/output.py`, `engines/system/hotkeys.py` (пауза / повтор / пропуск), `pipeline/text/`, `pipeline/speech/`, `pipeline/speaker/gender.py`, `services/speech_service.py`, `resources/voices/`, `tools/voice_samples.py`, `say.py`, `latency_report.py` |
 | 4 | `engines/audio/ducker.py`, `pipeline/speech/ducking.py` |
-| 5 | `config/profile*.py`, `config/migrations.py`, `config/characters_csv.py`, `pipeline/speaker/characters.py`, `pipeline/games/`, `engines/system/windows.py`, `services/game_watcher.py`, `cli.py run / characters` |
+| 5 | `config/profile*.py`, `config/settings.py`, `config/migrations.py`, `config/characters_csv.py`, `pipeline/speaker/characters.py`, `pipeline/games/`, `pipeline/vision/regions.py`, `engines/system/windows.py` (окно переднего плана, порт `Desktop`), `services/game_watcher.py`, `app/game_runner.py`, `app/profile_commands.py`, `resources/zone_templates.toml`, `excluded_exes.txt`, `cli.py run / profiles / characters`, сценарий `subtitle_player.py --scenario profiles` |
 | 6 | `ui/`, `app/facade.py`, `services/history.py`, `engines/system/single_instance.py` |
 | 7 | `sources/manual.py`, `engines/system/hotkeys.py` целиком, `services/hotkey_service.py` |
 | 8 | загрузка моделей в `config/` + `engines/`, `engines/system/autostart.py` |

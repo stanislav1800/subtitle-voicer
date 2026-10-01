@@ -30,7 +30,7 @@ FPS = 30
 
 @dataclass
 class Step:
-    kind: str  # "show" | "type" | "gap"
+    kind: str  # "show" | "type" | "gap" | "objective" (top-right text; "" clears it)
     text: str = ""
     seconds: float = 0.0
     char_s: float = 0.04  # typewriter speed
@@ -88,7 +88,27 @@ SPEECH_SCENARIO = [  # stage 3: voicing checks
     ),
     Step("gap", seconds=5),
 ]
-SCENARIOS = {"watch": SCENARIO, "speech": SPEECH_SCENARIO}
+PROFILES_SCENARIO = [  # stage 5: two zones, characters, an OCR error in a name, cooldown
+    Step("show", "Джуди: Ты вовремя. Заходи, покажу кое-что.", 1.5),
+    Step("objective", "Найти Панам в доках"),  # low priority: waits for the dialog line
+    Step("show", "Джуди: Ты вовремя. Заходи, покажу кое-что.", 2.5),
+    Step("gap", seconds=4),
+    Step("show", "Джудн: Тут безопасно, можно говорить.", 4),  # OCR error: Джуди's voice
+    Step("gap", seconds=1),
+    Step("show", "Панам: Я знаю короткую дорогу через доки.", 4),
+    Step("gap", seconds=1),
+    Step("show", "Ривер: Я пошёл за машиной, ждите тут.", 4),
+    Step("objective", ""),
+    Step("gap", seconds=2),
+    Step("objective", "Найти Панам в доках"),  # again within repeat_cooldown_min: silent
+    Step("show", "Джуди: Я рада, что ты пришёл.", 4),
+    Step("gap", seconds=2),
+    Step("objective", ""),
+    Step("gap", seconds=1),
+]
+SCENARIOS = {"watch": SCENARIO, "speech": SPEECH_SCENARIO, "profiles": PROFILES_SCENARIO}
+OBJECTIVE_FONT = ("Arial", 22, "bold")
+OBJECTIVE_X, OBJECTIVE_Y = int(WIDTH * 0.97), int(HEIGHT * 0.15)  # right-aligned, top
 
 
 class Player:
@@ -110,6 +130,7 @@ class Player:
             blob = self.canvas.create_oval(x - r, y - r, x + r, y + r, fill=color, outline="")
             self.blobs.append((blob, rng.uniform(-3, 3)))
         self.text_items: list[int] = []
+        self.objective_items: list[int] = []
         self.index = 0
         self.animate()
         self.root.after(int(delay_s * 1000), self.next_step)
@@ -122,9 +143,32 @@ class Player:
                 self.canvas.move(blob, -WIDTH - (x2 - x1), 0)
             elif x2 < 0:
                 self.canvas.move(blob, WIDTH + (x2 - x1), 0)
-        for item in self.text_items:
+        for item in self.text_items + self.objective_items:
             self.canvas.tag_raise(item)
         self.root.after(1000 // FPS, self.animate)
+
+    def draw_objective(self, text: str) -> None:
+        for item in self.objective_items:
+            self.canvas.delete(item)
+        self.objective_items = []
+        for dx, dy, fill in [
+            (-2, 0, "black"),
+            (2, 0, "black"),
+            (0, -2, "black"),
+            (0, 2, "black"),
+            (0, 0, "white"),
+        ]:
+            if text:
+                self.objective_items.append(
+                    self.canvas.create_text(
+                        OBJECTIVE_X + dx,
+                        OBJECTIVE_Y + dy,
+                        text=text,
+                        font=OBJECTIVE_FONT,
+                        fill=fill,
+                        anchor="ne",
+                    )
+                )
 
     def draw(self, text: str, typed: bool = False) -> None:
         """Shown lines are centred and grow upwards; typed text is left-aligned from a fixed
@@ -172,7 +216,11 @@ class Player:
             self.index = 0
         step = self.scenario[self.index]
         self.index += 1
-        if step.kind == "gap":
+        if step.kind == "objective":
+            self.draw_objective(step.text)
+            self.echo(f"(цель) {step.text or '—'}")
+            self.root.after(0, self.next_step)
+        elif step.kind == "gap":
             self.draw("")
             self.root.after(int(step.seconds * 1000), self.next_step)
         elif step.kind == "show":
@@ -197,7 +245,10 @@ def main() -> int:
     )
     parser.add_argument("--loop", action="store_true", help="повторять сценарий по кругу")
     parser.add_argument(
-        "--scenario", choices=SCENARIOS, default="watch", help="watch — этап 2, speech — этап 3"
+        "--scenario",
+        choices=SCENARIOS,
+        default="watch",
+        help="watch — этап 2, speech — этап 3, profiles — этап 5",
     )
     parser.add_argument(
         "--delay", type=float, default=0, help="пауза перед сценарием, с (пока грузится watch)"
