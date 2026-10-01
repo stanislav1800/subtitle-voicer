@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLayout,
     QPushButton,
+    QSizePolicy,
     QSlider,
     QVBoxLayout,
     QWidget,
@@ -75,6 +76,8 @@ def chip(text: str, kind: str = "info") -> QLabel:
     result = QLabel(text)
     result.setStyleSheet(theme.chip_style(kind))
     result.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    result.setFixedHeight(24)
+    result.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
     return result
 
 

@@ -57,6 +57,7 @@ class SpeechStarted(Event):
     request: SpeechRequest
     rate: float
     t_play: float  # monotonic time the first audio buffer went out (latency end, TZ 6)
+    prepared: str = ""  # the text after TextPreparer, as synthesized (developer History)
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,6 +111,13 @@ class ProfileBound(Event):
 
     profile_path: str
     title: str
+
+
+@dataclass(frozen=True, slots=True)
+class DebugCaptured(Event):
+    """Ctrl+Alt+D saved a frame, zone crops and OCR results (TZ 4.13.2)."""
+
+    folder: str
 
 
 @dataclass(frozen=True, slots=True)

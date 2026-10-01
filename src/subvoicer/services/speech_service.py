@@ -41,6 +41,7 @@ class _Line:
     rate: float
     pending: list[str] = field(default_factory=list)  # pieces not synthesized yet
     fed: list[str] = field(default_factory=list)  # pieces given to the player, in order
+    prepared: str = ""  # all pieces, for the History
 
 
 @dataclass
@@ -154,6 +155,11 @@ class SpeechService(Service):
         self._inbox.put(_Pause(paused))
 
     @property
+    def scheduler(self) -> SpeechScheduler:
+        """Read-only look for the developer overlay (current line and rate)."""
+        return self._scheduler
+
+    @property
     def paused(self) -> bool:
         return self._scheduler.paused
 
@@ -214,7 +220,9 @@ class SpeechService(Service):
                 line = self._lines.get(line_id)
                 if line is not None:
                     log.debug("LATENCY play id=%d t=%.3f", line_id, t_play)
-                    self._publisher.publish(SpeechStarted(line.request, line.rate, t_play))
+                    self._publisher.publish(
+                        SpeechStarted(line.request, line.rate, t_play, line.prepared)
+                    )
             case _Finished(line_id=line_id, completed=completed):
                 finished = self._lines.pop(line_id, None)
                 if finished is not None:
@@ -256,7 +264,7 @@ class SpeechService(Service):
             rate,
             pieces[0],
         )
-        self._lines[request.id] = _Line(request, rate, pieces[1:], [pieces[0]])
+        self._lines[request.id] = _Line(request, rate, pieces[1:], [pieces[0]], " ".join(pieces))
         self._output.start_line(request.id, clip)
         if len(pieces) == 1:
             self._output.finish_feeding(request.id)

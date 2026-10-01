@@ -7,22 +7,27 @@ the current settings; every call is safe from the Qt thread.
 from __future__ import annotations
 
 import itertools
+import json
 import logging
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
+import numpy as np
+
+from subvoicer.app import game_runner, runtime, zone_tools
 from subvoicer.app import profile_commands as pc
-from subvoicer.app import runtime, zone_tools
 from subvoicer.app.bus import Bus
 from subvoicer.app.game_runner import RunParts, build_run, pronunciation
 from subvoicer.config.paths import AppPaths
-from subvoicer.config.profile import Profile, Zone
+from subvoicer.config.profile import Layout, Profile, Zone
 from subvoicer.config.profile_store import ProfileStore, StoredProfile
 from subvoicer.config.resources import gender_exceptions, voice_catalog
 from subvoicer.config.settings import Settings, load_settings, save_settings
 from subvoicer.core.events import (
+    DebugCaptured,
     Event,
     GameActivated,
     GameClosed,
@@ -34,10 +39,34 @@ from subvoicer.pipeline.speaker.gender import GenderGuesser
 from subvoicer.pipeline.speech.scheduler import OverlapMode
 from subvoicer.services.history import History
 from subvoicer.services.speech_service import SpeechTuning
+from subvoicer.sources.zone_ocr import read_once
 
 log = logging.getLogger(__name__)
 
 MANUAL_ID_START = 2_000_000  # ids of manual lines, apart from zone lines and repeats
+
+
+@dataclass(frozen=True, slots=True)
+class OverlayZone:
+    id: str
+    name: str
+    rect: tuple[float, float, float, float]
+    state: str
+
+
+@dataclass(frozen=True, slots=True)
+class DebugState:
+    """What the developer overlay shows (TZ 4.13.2)."""
+
+    status: GameStatus
+    client_rect: tuple[int, int, int, int] | None  # physical screen pixels of the game image
+    monitor: str | None  # device name of the game's monitor
+    monitor_rect: tuple[int, int, int, int] | None  # physical pixels
+    zones: list[OverlayZone]
+    rate: float
+    playing: str  # speaker and voice of the line that sounds now, or ""
+    playing_text: str
+    last: HistoryEntry | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,6 +101,7 @@ class AppFacade:
             "pause": self.toggle_enabled,
             "repeat": self.repeat,
             "skip": self.skip,
+            "debug_capture": self._capture_in_background,
         }
         self.bus.subscribe(GameActivated, self._on_activated)
         self.bus.subscribe(LayoutMissing, self._on_missing)
@@ -116,9 +146,12 @@ class AppFacade:
             parts.speech.service.set_paused(not new.enabled)
             parts.offers.update(new.excluded_exes, new.never_ask_exes)
             parts.runner.set_poll_hz(new.poll_hz)
-        if new.hotkeys != old.hotkeys:
+        if new.hotkeys != old.hotkeys or new.dev_mode != old.dev_mode:
             self._register_hotkeys()
         self.bus.publish(SettingsApplied())
+
+    def _capture_in_background(self) -> None:
+        threading.Thread(target=self.debug_capture, name="DebugCapture", daemon=True).start()
 
     def set_hotkey_action(self, name: str, action: Callable[[], None]) -> None:
         """Actions the GUI owns (zone editor, debug frame): bound with the others."""
@@ -206,6 +239,91 @@ class AppFacade:
         if self._parts is not None:
             return list(self._parts.speech.voices)
         return sorted(voice_catalog(pc.TTS_CATALOG).values(), key=lambda v: v.id)
+
+    # ------------------------------------------------------------------ developer mode
+
+    def debug_state(self) -> DebugState:
+        status = self.status()
+        parts = self._parts
+        zones: list[OverlayZone] = []
+        client = monitor = monitor_rect = None
+        rate, playing, playing_text = 1.0, "", ""
+        if status.window is not None:
+            client = runtime.client_rect(status.window.hwnd)
+            monitor = runtime.monitor_device(status.window.hwnd)
+            monitor_rect = runtime.monitor_rect(status.window.hwnd)
+        if parts is not None:
+            states = parts.runner.zone_states()
+            layout = self._active_layout(status)
+            for zone in layout.zones if layout else []:
+                state = states.get(zone.id, "OFF" if zone.trigger == "off" else "—")
+                zones.append(OverlayZone(zone.id, zone.name or zone.id, zone.rect, state))
+            scheduler = parts.speech.service.scheduler
+            rate = scheduler.current_rate
+            current = scheduler.current
+            if current is not None:
+                playing = f"{current.speaker or 'Рассказчик'} · {current.voice_id}"
+                playing_text = current.text
+        recent = self.history.recent(1)
+        last = recent[0] if recent else None
+        return DebugState(
+            status, client, monitor, monitor_rect, zones, rate, playing, playing_text, last
+        )
+
+    def _active_layout(self, status: GameStatus) -> Layout | None:
+        if not status.profile_path or not status.aspect:
+            return None
+        try:
+            return self.store.load(Path(status.profile_path)).layouts.get(status.aspect)
+        except (OSError, ValueError):
+            return None
+
+    def debug_capture(self) -> Path | None:
+        """Ctrl+Alt+D: the full frame, crops and masks of every zone, OCR results as JSON."""
+        status = self.status()
+        if not self.settings.dev_mode or status.window is None or status.profile_path is None:
+            return None
+        parts = self._parts
+        frame = parts.runner.latest_frame() if parts is not None else None
+        if frame is None:
+            frame = zone_tools.grab_window(status.window.hwnd)
+        if frame is None:
+            return None
+        folder = self.paths.captures_dir / datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        folder.mkdir(parents=True, exist_ok=True)
+        frame = np.ascontiguousarray(frame[:, :, :3])
+        zone_tools.save_image(folder / "frame.png", frame)
+        profile = self.store.load(Path(status.profile_path))
+        layout = profile.layouts.get(status.aspect or "")
+        zones: dict[str, object] = {}
+        for zone in layout.zones if layout else []:
+            if zone.kind != "text" or zone.policy is None or parts is None or layout is None:
+                continue
+            spec = game_runner.zone_spec(profile, zone, layout.zones, parts.engines)
+            assert spec.runner is not None
+            reading = read_once(spec, frame, spec.runner)
+            zone_tools.save_image(folder / f"{zone.id}_crop.png", reading.crop)
+            zone_tools.save_image(folder / f"{zone.id}_mask.png", reading.mask)
+            zones[zone.id] = {
+                "rect": list(zone.rect),
+                "text": reading.text,
+                "confidence": round(reading.confidence, 3),
+                "input": reading.input_kind,
+                "ms": round(reading.elapsed_ms),
+                "lines": [{"speaker": line.name, "text": line.text} for line in reading.lines],
+            }
+        results = {
+            "profile": Path(status.profile_path).name,
+            "aspect": status.aspect,
+            "exe": status.exe,
+            "zones": zones,
+        }
+        (folder / "ocr.json").write_text(
+            json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        log.info("Кадр для отладки сохранён: %s", folder)
+        self.bus.publish(DebugCaptured(str(folder)))
+        return folder
 
     # ------------------------------------------------------------------ zone editor
 

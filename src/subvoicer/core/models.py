@@ -166,6 +166,8 @@ class SpeechRequest:
     t_change: float | None = None  # latency start, if the line came from a zone
     # extra dictionary entries (from, to, regex) for this line only: «Прослушать» before saving
     pronunciation: tuple[tuple[str, str, bool], ...] = ()
+    voice_reason: str = ""  # why this voice (developer History, TZ 4.13.2)
+    zone_name: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -195,3 +197,6 @@ class HistoryEntry:
     rate: float = 1.0
     latency_ms: float | None = None  # TZ 6: mask change -> first sound
     outcome: str = "queued"  # queued | playing | done | cut | dropped:<reason>
+    voice_reason: str = ""
+    zone_name: str = ""
+    prepared: str = ""  # after TextPreparer

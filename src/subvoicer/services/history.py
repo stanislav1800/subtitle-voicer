@@ -42,6 +42,10 @@ class History:
         with self._lock:
             return self._entries.get(entry_id)
 
+    def clear(self) -> None:
+        with self._lock:
+            self._entries.clear()
+
     def resize(self, size: int) -> None:
         with self._lock:
             self.size = size
@@ -62,7 +66,7 @@ class History:
                         t_change=u.t_change,
                     )
                     self._trim()
-                case SpeechStarted(request=request, rate=rate, t_play=t_play):
+                case SpeechStarted(request=request, rate=rate, t_play=t_play, prepared=prepared):
                     entry = self._entries.get(request.id)
                     if entry is not None:
                         latency = (
@@ -75,6 +79,9 @@ class History:
                             rate=rate,
                             latency_ms=latency,
                             outcome="playing",
+                            voice_reason=request.voice_reason,
+                            zone_name=request.zone_name,
+                            prepared=prepared,
                         )
                 case SpeechFinished(request=request, completed=completed):
                     self._update(request.id, "done" if completed else "cut", request.voice_id)

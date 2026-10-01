@@ -145,6 +145,15 @@ def capture_factories() -> dict[str, Any]:
     return factories
 
 
+class GameSession(Session):
+    """Capture + zones of the active game; the overlay and Ctrl+Alt+D look inside."""
+
+    def __init__(self, capture: CaptureService, zones: ZoneService, source: ZoneOcrSource) -> None:
+        super().__init__([capture, zones])
+        self.capture = capture
+        self.source = source
+
+
 def build_game_session(
     profile: Profile,
     window: WindowRef,
@@ -168,7 +177,7 @@ def build_game_session(
         clock,
     )
     zones = ZoneService(capture.latest, source, bus, poll_hz)
-    return Session([capture, zones])
+    return GameSession(capture, zones, source)
 
 
 # ---------------------------------------------------------------- utterance -> speech request
@@ -214,8 +223,9 @@ class ProfileRouter:
             continuation = utterance.kind is UtteranceKind.CONTINUATION
             if continuation and utterance.channel in self._last_voice:
                 voice = self._last_voice[utterance.channel]  # a continuation keeps the voice
+                reason = "продолжение — голос прежней строки"
             else:
-                voice = self._voice(active, policy, utterance)
+                voice, reason = self._voice(active, policy, utterance)
             self._last_voice[utterance.channel] = voice
         return SpeechRequest(
             id=utterance.id,
@@ -227,9 +237,14 @@ class ProfileRouter:
             channel=utterance.channel,
             speaker=utterance.speaker,
             t_change=utterance.t_change,
+            voice_reason=reason,
+            zone_name=zone.name or zone.id,
         )
 
-    def _voice(self, active: _Active, policy: VoicingPolicy, utterance: Utterance) -> str:
+    def _voice(
+        self, active: _Active, policy: VoicingPolicy, utterance: Utterance
+    ) -> tuple[str, str]:
+        """The voice and why it was chosen (developer History, TZ 4.13.2)."""
         profile = active.profile
         picker = VoicePicker(
             VoiceDefaults(
@@ -238,12 +253,25 @@ class ProfileRouter:
             self._gender,
         )
         mode = VoiceMode(policy.voice.mode)
-        if mode is not VoiceMode.SPEAKER or not utterance.speaker:
-            return picker.pick(mode, utterance.text, policy.voice.id)
+        if mode is VoiceMode.FIXED:
+            return picker.pick(mode, utterance.text, policy.voice.id), "голос зоны"
+        if mode is VoiceMode.NARRATOR:
+            return picker.pick(mode, utterance.text), "рассказчик зоны"
+        if not utterance.speaker:
+            gender = self._gender.guess(utterance.text)
+            why = {"male": "мужской по тексту", "female": "женский по тексту"}.get(
+                gender.value, "рассказчик: имени и пола нет"
+            )
+            return picker.pick(mode, utterance.text), why
         resolved = self._book.resolve(profile.characters, utterance.speaker, utterance.text)
         if resolved.changed:
             self._save_characters(active, utterance.speaker, utterance.text)
-        return resolved.character.voice or picker.pick(mode, utterance.text)
+        character = resolved.character
+        how = "вручную" if character.voice_locked else "авто"
+        matched = "" if character.name == utterance.speaker else f"«{utterance.speaker}» → "
+        if character.voice:
+            return character.voice, f"{matched}персонаж {character.name}, {how}"
+        return picker.pick(mode, utterance.text), f"{matched}персонаж {character.name} без голоса"
 
     def _save_characters(self, active: _Active, name: str, text: str) -> None:
         """Applied to the file as it is on disk now, so hand edits are not lost."""
@@ -347,6 +375,15 @@ class GameRunner:
             self._key = None
             self._router.set_profile(None, None)
             self._speech.set_game(None)
+
+    def zone_states(self) -> dict[str, str]:
+        session = self._session
+        return session.source.states() if isinstance(session, GameSession) else {}
+
+    def latest_frame(self) -> Any:
+        session = self._session
+        frame = session.capture.latest() if isinstance(session, GameSession) else None
+        return None if frame is None else frame.image
 
     def start(self) -> None:
         """Sessions start when GameWatcher reports a game."""

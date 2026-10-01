@@ -16,6 +16,7 @@ from subvoicer.app.facade import AppFacade
 from subvoicer.app.log import setup_logging
 from subvoicer.config.paths import AppPaths
 from subvoicer.core.events import (
+    DebugCaptured,
     Event,
     GameActivated,
     GameClosed,
@@ -29,7 +30,9 @@ from subvoicer.ui import theme
 from subvoicer.ui.bridge import Bridge
 from subvoicer.ui.line_window import LineWindow
 from subvoicer.ui.notifications import Notification, Notifier, mono
+from subvoicer.ui.overlay import Overlay
 from subvoicer.ui.settings.general import GeneralPage
+from subvoicer.ui.settings.history import HistoryPage
 from subvoicer.ui.settings.hotkeys import HotkeysPage
 from subvoicer.ui.settings.profiles import ProfilesPage
 from subvoicer.ui.settings.window import SettingsWindow
@@ -99,6 +102,7 @@ class Application:
         self.server.newConnection.connect(self._on_second_copy)
         self.server.listen(SERVER_NAME)
         self.notifier = Notifier()
+        self.overlay = Overlay(facade)
         self.line_window: LineWindow | None = None
         self.editor: ZoneEditor | None = None
         self.hotkey_signals = HotkeySignals()
@@ -114,6 +118,9 @@ class Application:
         self.window.add_page("profiles", "Профили и голоса", "users", self.profiles)
         self.hotkeys = HotkeysPage(self.facade)
         self.window.add_page("hotkeys", "Горячие клавиши", "keyboard", self.hotkeys)
+        self.history = HistoryPage(self.facade)
+        self.window.add_page("history", "История", "history", self.history)
+        self.window.set_page_visible("history", self.facade.settings.dev_mode)
 
     def run(self) -> None:
         self.tray.show()
@@ -179,6 +186,7 @@ class Application:
         editor.open()
 
     def quit(self) -> None:
+        self.overlay.hide()
         self.tray.hide()
         self.facade.stop()  # restores the game's volume
         self.qt.quit()
@@ -216,12 +224,18 @@ class Application:
                 )
             case ProfileBound(title=title):
                 self.notifier.show(Notification("Игра привязана", f"{title} — профиль готов."))
+            case DebugCaptured(folder=folder):
+                self.notifier.show(Notification("Кадр сохранён", mono(folder)))
             case _:
                 pass
         if isinstance(event, SettingsApplied):
             self.tray.refresh()
             self.window.refresh_status()
             self.general.sync()
+            self.window.set_page_visible("history", self.facade.settings.dev_mode)
+            self.hotkeys.refresh()
+        if isinstance(event, (*STATUS_EVENTS, SettingsApplied)):
+            self.overlay.sync()
 
     def _create_profile(self, window: WindowRef) -> None:
         try:

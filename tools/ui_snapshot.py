@@ -29,12 +29,42 @@ def main() -> int:
     parser.add_argument("--out", type=Path, default=ROOT / "captures" / "ui")
     parser.add_argument("--page", help="только эта вкладка")
     parser.add_argument("--frame", type=Path, help="кадр игры: снимок редактора зон")
+    parser.add_argument("--dev", action="store_true", help="режим разработчика (только в памяти)")
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     runtime.prepare_process()
     qt = QApplication(sys.argv)
     theme.apply(qt)
-    app = Application(qt, AppFacade())
+    facade = AppFacade()
+    if args.dev:  # in memory only: the settings file is not touched
+        facade.settings = facade.settings.model_copy(update={"dev_mode": True})
+        from subvoicer.app.bus import Bus  # noqa: F401
+        from subvoicer.core.events import SpeechStarted, UtteranceDetected
+        from subvoicer.core.models import Priority, SpeechRequest, Utterance, UtteranceKind
+
+        samples = [
+            ("Джуди", "Ви, ты вообще меня слушаешь?", "персонаж Джуди, вручную", 560.0),
+            ("Ви", "Прости, задумался. Что ты говорила про брейнданс?", "персонаж Ви, авто", 610.0),
+            (None, "Новая цель: встретиться с Джуди", "рассказчик зоны", None),
+        ]
+        for index, (speaker, text, reason, latency) in enumerate(samples, start=1):
+            u = Utterance(
+                "dialog", UtteranceKind.NEW, text, text, speaker, 10.0, 10.2, 0.93, "raw", index
+            )
+            facade.bus.publish(UtteranceDetected(u))
+            if latency is not None:
+                request = SpeechRequest(
+                    index,
+                    text,
+                    "ru_eduard",
+                    Priority.HIGH,
+                    voice_reason=reason,
+                    zone_name="Диалоги",
+                )
+                facade.bus.publish(
+                    SpeechStarted(request, 1.0, 10.0 + latency / 1000, text.replace("о", "+о", 1))
+                )
+    app = Application(qt, facade)
     window = app.window
     window.resize(1100, 720)
     window.show()

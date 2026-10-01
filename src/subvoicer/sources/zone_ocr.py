@@ -132,6 +132,10 @@ class ZoneOcrSource:
         self._clock = clock
         self._ids = itertools.count(1)
 
+    def states(self) -> dict[str, str]:
+        """Zone id -> stabiliser state (developer overlay)."""
+        return {zone.spec.id: str(zone.stabilizer.state.name) for zone in self._zones}
+
     def process(self, frame: Frame) -> list[Utterance]:
         """Feed the latest frame (the same frame again is fine: time still moves on, which
         lets a zone settle when the window stops sending frames)."""

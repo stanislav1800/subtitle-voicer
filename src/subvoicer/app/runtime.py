@@ -147,3 +147,27 @@ def exe_path(pid: int) -> str | None:
     from subvoicer.engines.system import windows
 
     return windows.exe_path(pid)
+
+
+def client_rect(hwnd: int) -> tuple[int, int, int, int] | None:
+    """The game image on screen, physical pixels (DPI awareness v2)."""
+    if sys.platform != "win32":
+        return None
+    from subvoicer.engines.system import windows
+
+    try:
+        return windows.client_rect_on_screen(hwnd)
+    except Exception:
+        return None
+
+
+def monitor_rect(hwnd: int) -> tuple[int, int, int, int] | None:
+    """The monitor showing the window, physical pixels."""
+    if sys.platform != "win32":
+        return None
+    from subvoicer.engines.system import windows
+
+    try:
+        return windows.monitor_of_window(hwnd).rect
+    except LookupError:
+        return None
