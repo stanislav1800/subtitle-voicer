@@ -332,10 +332,10 @@ class AppFacade:
         window = self.status().window
         return zone_tools.grab_window(window.hwnd) if window is not None else None
 
-    def game_monitor(self) -> str | None:
-        """Device name of the game's monitor (DISPLAY1 style; Qt names its screens the same)."""
+    def game_monitor(self) -> tuple[int, int, int, int] | None:
+        """The game's monitor, physical pixels."""
         window = self.status().window
-        return runtime.monitor_device(window.hwnd) if window is not None else None
+        return runtime.monitor_rect(window.hwnd) if window is not None else None
 
     def preview_zone(
         self, frame: zone_tools.Image, zone: Zone, zones: list[Zone], profile: Profile

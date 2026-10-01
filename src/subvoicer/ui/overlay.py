@@ -4,11 +4,12 @@ and thin zone frames; transparent for clicks."""
 from __future__ import annotations
 
 from PySide6.QtCore import QPointF, QRectF, Qt, QTimer
-from PySide6.QtGui import QColor, QGuiApplication, QPainter, QPaintEvent, QPen, QScreen
+from PySide6.QtGui import QColor, QPainter, QPaintEvent, QPen, QScreen
 from PySide6.QtWidgets import QWidget
 
 from subvoicer.app.facade import AppFacade, DebugState
 from subvoicer.ui import theme
+from subvoicer.ui.widgets.screens import screen_for
 
 REFRESH_MS = 500
 PANEL = QRectF(16, 16, 340, 196)
@@ -67,10 +68,7 @@ class Overlay(QWidget):
     def _tick(self) -> None:
         state = self._facade.debug_state()
         self._state = state
-        screen = next(
-            (s for s in QGuiApplication.screens() if state.monitor and s.name() == state.monitor),
-            QGuiApplication.primaryScreen(),
-        )
+        screen = screen_for(state.monitor_rect)
         if screen is None:
             return
         if self.geometry() != screen.geometry():

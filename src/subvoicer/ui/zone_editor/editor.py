@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QGuiApplication, QKeyEvent
+from PySide6.QtGui import QKeyEvent
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -25,6 +25,7 @@ from subvoicer.config.profile_store import format_error
 from subvoicer.ui import theme
 from subvoicer.ui.settings.hotkeys import ACTIONS
 from subvoicer.ui.widgets.common import chip, label, primary
+from subvoicer.ui.widgets.screens import screen_for
 from subvoicer.ui.zone_editor.canvas import Fractions, ZoneBox, ZoneCanvas
 from subvoicer.ui.zone_editor.panel import TEMPLATE_TITLES, ZonePanel, describe, zone_color
 
@@ -132,10 +133,7 @@ class ZoneEditor(QWidget):
                 | Qt.WindowType.WindowStaysOnTopHint
                 | Qt.WindowType.Tool
             )
-            device = self._facade.game_monitor()
-            screen = next(
-                (s for s in QGuiApplication.screens() if device and s.name() == device), None
-            )
+            screen = screen_for(self._facade.game_monitor())
             if screen is not None:
                 self.setScreen(screen)
                 self.setGeometry(screen.geometry())
