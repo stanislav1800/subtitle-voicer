@@ -170,6 +170,7 @@ QPushButton {{ background: {BG_CONTROL}; border: 1px solid {BORDER_CONTROL}; bor
     padding: 0 14px; min-height: 34px; font-size: 13px; }}
 QPushButton:hover {{ border-color: {TEXT_MUTED}; }}
 QPushButton:disabled {{ color: {TEXT_MUTED}; }}
+QPushButton:checked {{ background: {BG_ACTIVE}; border: 1px solid {ACCENT}; font-weight: 600; }}
 QPushButton:focus {{ border: 2px solid {ACCENT}; }}
 QPushButton#primary {{ background: {ACCENT}; color: {ON_ACCENT}; border: none; font-weight: 600; }}
 QPushButton#primary:hover {{ background: {ACCENT_HOVER}; }}

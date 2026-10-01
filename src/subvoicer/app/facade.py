@@ -16,7 +16,7 @@ from pathlib import Path
 from subvoicer.app import profile_commands as pc
 from subvoicer.app import runtime
 from subvoicer.app.bus import Bus
-from subvoicer.app.game_runner import RunParts, build_run
+from subvoicer.app.game_runner import RunParts, build_run, pronunciation
 from subvoicer.config.paths import AppPaths
 from subvoicer.config.profile import Profile
 from subvoicer.config.profile_store import ProfileStore, StoredProfile
@@ -217,8 +217,14 @@ class AppFacade:
     def update_profile(
         self, path: Path, change: Callable[[Profile], Profile | None]
     ) -> StoredProfile:
-        """Re-read, change, save (with a backup); GameWatcher picks the file change up."""
-        return self.store.update(path, change)
+        """Re-read, change, save (with a backup). GameWatcher picks the file change up within a
+        second; the dictionary of the active game is applied at once (TZ 6: a fixed stress
+        works in the next line)."""
+        stored = self.store.update(path, change)
+        status = self.status()
+        if self._parts is not None and status.profile_path == str(path):
+            self._parts.speech.preparer.dictionary = pronunciation(stored.profile)
+        return stored
 
     def add_game(self, exe_path: str) -> StoredProfile:
         """«Добавить игру по exe»: exe name + its folder as install_dir (TZ 4.16 for stage 9)."""

@@ -10,12 +10,14 @@ from __future__ import annotations
 
 import argparse
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
 
 from subvoicer.app import runtime
 from subvoicer.app.facade import AppFacade
+from subvoicer.core.models import HistoryEntry
 from subvoicer.ui import theme
 from subvoicer.ui.app import Application
 
@@ -53,6 +55,26 @@ def main() -> int:
             window.grab().save(str(bottom))
             print(bottom)
             bar.setValue(0)
+    entry = HistoryEntry(
+        1,
+        datetime.now(),
+        "dialog",
+        "Джонни",
+        "Арасака ещё хуже, чем Милитех, пацан.",
+        voice="ru_eduard",
+    )
+    app.open_line(entry)
+    line = app.line_window
+    assert line is not None
+    line._fix_button.setChecked(True)
+    first = line._words.itemAt(0)
+    if first is not None and first.widget() is not None:
+        first.widget().click()
+    for _ in range(3):
+        qt.processEvents()
+    line.grab().save(str(args.out / "line.png"))
+    print(args.out / "line.png")
+    line.hide()
     menu = app.tray.contextMenu()
     menu.popup(window.mapToGlobal(window.rect().center()))
     qt.processEvents()

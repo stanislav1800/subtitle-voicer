@@ -32,3 +32,24 @@ def test_status_without_a_game(tmp_path: Path) -> None:
     facade = AppFacade(AppPaths(tmp_path))
     assert not facade.ready and facade.status().title is None
     facade.say("Привет", "v1")  # not started: ignored, no crash
+
+
+def test_fixed_stress_applies_to_the_active_game_at_once(tmp_path: Path) -> None:
+    from types import SimpleNamespace
+
+    from subvoicer.config.profile import Profile, PronunciationRule
+    from subvoicer.core.events import GameActivated
+    from subvoicer.core.models import WindowRef
+    from tests.unit.config.profiles import profile_data
+
+    facade = AppFacade(AppPaths(tmp_path))
+    stored = facade.store.save(Profile.model_validate(profile_data()))
+    preparer = SimpleNamespace(dictionary=None)
+    facade._parts = SimpleNamespace(speech=SimpleNamespace(preparer=preparer))  # type: ignore[assignment]
+    window = WindowRef(1, 2, "Game.exe", "Game", 1920, 1080)
+    facade.bus.publish(GameActivated(str(stored.path), window, "16:9"))
+    rule = PronunciationRule.model_validate({"from": "Арасак*", "to": "Арас+ак*"})
+    facade.update_profile(stored.path, lambda p: p.model_copy(update={"pronunciation": [rule]}))
+    assert preparer.dictionary is not None
+    assert preparer.dictionary.apply("Мы против Арасаки.") == "Мы против Арас+аки."  # type: ignore[attr-defined]
+    facade._parts = None

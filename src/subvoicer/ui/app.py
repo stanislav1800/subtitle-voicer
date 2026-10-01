@@ -19,6 +19,7 @@ from subvoicer.core.events import Event, GameActivated, GameClosed, LayoutMissin
 from subvoicer.core.models import HistoryEntry
 from subvoicer.ui import theme
 from subvoicer.ui.bridge import Bridge
+from subvoicer.ui.line_window import LineWindow
 from subvoicer.ui.settings.general import GeneralPage
 from subvoicer.ui.settings.hotkeys import HotkeysPage
 from subvoicer.ui.settings.profiles import ProfilesPage
@@ -81,6 +82,7 @@ class Application:
         QLocalServer.removeServer(SERVER_NAME)
         self.server.newConnection.connect(self._on_second_copy)
         self.server.listen(SERVER_NAME)
+        self.line_window: LineWindow | None = None
         self.loader = Loader(facade)
         self.loader.done.connect(self._on_loaded)
 
@@ -97,7 +99,10 @@ class Application:
         self.loader.start()
 
     def open_line(self, entry: HistoryEntry) -> None:
-        log.info("Реплика %d: %s", entry.id, entry.text)
+        if self.line_window is None:
+            self.line_window = LineWindow(self.facade)
+        current = self.facade.history.get(entry.id) or entry  # voice may be known by now
+        self.line_window.show_entry(current)
 
     def open_profile_editor(self, path: Path, mode: str) -> None:
         log.info("Редактор зон (%s) для %s появится в части 5 этапа 6", mode, path.name)
