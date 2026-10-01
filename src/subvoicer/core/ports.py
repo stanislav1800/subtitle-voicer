@@ -59,10 +59,15 @@ class StressMarker(Protocol):
 
 
 class Ducker(Protocol):
-    def duck(self, pid: int) -> None: ...
-    def restore(self, pid: int) -> None: ...
+    """Volume of a game's audio sessions: the process and every process with its exe name."""
+
+    def set_gain(self, pid: int, gain: float) -> None:
+        """Sessions at ``gain`` × their original volume. The original is taken once, on the
+        first change, and written to disk before the volume is touched (TZ 4.10)."""
+        ...
+
     def restore_all(self) -> None:
-        """Called on any exit path."""
+        """Original volumes back from the disk state; on any exit and at start-up."""
         ...
 
 

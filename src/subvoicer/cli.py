@@ -106,6 +106,10 @@ def build_parser() -> argparse.ArgumentParser:
     speech.add_argument("--volume", type=float, default=1.0, help="громкость 0..1")
     speech.add_argument("--tts", choices=TTS_CHAIN, help="только этот движок (иначе цепочка)")
     speech.add_argument("--no-hotkeys", action="store_true", help="без горячих клавиш")
+    speech.add_argument("--no-duck", action="store_true", help="не приглушать игру")
+    speech.add_argument(
+        "--duck-level", type=float, default=0.4, help="до какой доли приглушать игру (0..1)"
+    )
     watch.add_argument("--debug", action="store_true", help="подробный лог (DEBUG)")
     return parser
 
@@ -155,6 +159,8 @@ def speech_config(args: argparse.Namespace) -> SpeechConfig | None:
         volume=args.volume,
         tts=(args.tts,) if args.tts else TTS_CHAIN,
         hotkeys=not args.no_hotkeys,
+        duck=not args.no_duck,
+        duck_level=args.duck_level,
     )
 
 
@@ -172,6 +178,7 @@ def run_watch(args: argparse.Namespace) -> int:
     bus.subscribe(Event, events.put)
     config = WatchConfig(
         hwnd=window.hwnd,
+        pid=window.pid,
         rect=args.rect,
         preset=args.preset,
         colors_hsv=tuple(args.color_hsv),

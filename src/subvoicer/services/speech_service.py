@@ -3,6 +3,7 @@
 Everything reaches the thread through one queue: new lines, player callbacks, hotkeys.
 Long lines are synthesized piece by piece while the first piece already plays (TZ 4.7);
 a hurried line re-synthesizes its pieces that have not sounded yet at the new rate.
+While a line with ``duck`` is on, the game is ducked along the envelope (TZ 4.10).
 """
 
 from __future__ import annotations
@@ -15,8 +16,9 @@ from enum import StrEnum
 
 from subvoicer.core.events import SpeechDropped, SpeechFinished, SpeechStarted
 from subvoicer.core.models import AudioClip, SpeechRequest
-from subvoicer.core.ports import AudioOutput, Clock, EventPublisher, TtsEngine
+from subvoicer.core.ports import AudioOutput, Clock, Ducker, EventPublisher, TtsEngine
 from subvoicer.pipeline.speech.cache import SpeechCache
+from subvoicer.pipeline.speech.ducking import DuckEnvelope
 from subvoicer.pipeline.speech.scheduler import (
     Command,
     Dropped,
@@ -37,6 +39,16 @@ class _Line:
     rate: float
     pending: list[str] = field(default_factory=list)  # pieces not synthesized yet
     fed: list[str] = field(default_factory=list)  # pieces given to the player, in order
+
+
+@dataclass
+class GameDucking:
+    """Which game to duck and how."""
+
+    ducker: Ducker
+    envelope: DuckEnvelope
+    pid: int
+    applied: float = 1.0  # the gain last given to the ducker
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,6 +87,7 @@ class SpeechService(Service):
         cache: SpeechCache,
         clock: Clock,
         publisher: EventPublisher,
+        ducking: GameDucking | None = None,
         interval_s: float = 0.01,
     ) -> None:
         super().__init__("SpeechService", interval_s)
@@ -85,6 +98,7 @@ class SpeechService(Service):
         self._cache = cache
         self._clock = clock
         self._publisher = publisher
+        self._ducking = ducking
         self._inbox: queue.Queue[_Message] = queue.Queue()
         self._lines: dict[int, _Line] = {}
         output.set_listeners(self._on_started, self._on_finished)
@@ -120,6 +134,7 @@ class SpeechService(Service):
                 break
             self._handle(message, now)
         self._execute(self._scheduler.tick(now))
+        self._duck(now)
         self._synthesize_next_piece()
 
     def _handle(self, message: _Message, now: float) -> None:
@@ -206,6 +221,21 @@ class SpeechService(Service):
             len(line.pending),
         )
         line.rate = rate
+
+    def _duck(self, now: float) -> None:
+        """Ducking starts with the Play command: the fade overlaps the first synthesis."""
+        d = self._ducking
+        if d is None:
+            return
+        current = self._scheduler.current
+        gain = round(d.envelope.update(current is not None and current.duck, now), 3)
+        if gain == d.applied:
+            return
+        d.applied = gain
+        try:
+            d.ducker.set_gain(d.pid, gain)
+        except Exception:
+            log.exception("Ducking: ошибка смены громкости")
 
     def _synthesize(self, text: str, voice_id: str, rate: float) -> AudioClip:
         clip = self._cache.get(text, voice_id, rate)

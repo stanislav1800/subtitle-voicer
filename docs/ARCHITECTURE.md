@@ -175,7 +175,8 @@ subtitle-voicer/
 │   │   ├── speech/
 │   │   │   ├── scheduler.py       # политика 4.9: приоритеты, очередь, обрывы, ускорение
 │   │   │   ├── voices.py          # голос реплики: рассказчик / по полу / фиксированный (4.6)
-│   │   │   └── cache.py           # кеш синтеза
+│   │   │   ├── cache.py           # кеш синтеза
+│   │   │   └── ducking.py         # огибающая громкости игры: плавность и задержка возврата (4.10)
 │   │   └── games/
 │   │       ├── matching.py        # полноэкранность, исключения, «уже спрашивали» (4.11)
 │   │       └── aspect.py          # соотношение сторон кадра
@@ -387,7 +388,7 @@ TTS: dict[str, str] = {
 | 1 | `pipeline/vision/`, `pipeline/ocr/`, `engines/ocr/rapid.py`, `winrt.py` |
 | 2 | `engines/capture/`, `engines/system/windows.py` (поиск окна, монитор, DPI), `pipeline/vision/stability.py`, `pipeline/normalize.py`, `pipeline/dedup.py`, `pipeline/speaker/extract.py`, `validate.py`, `resolver.py`, `sources/zone_ocr.py`, `services/base.py`, `capture_service.py`, `zone_service.py`, `app/container.py`, `runtime.py`, `cli.py watch`, `tools/subtitle_player.py`, `capture_probe.py` |
 | 3 | `engines/tts/`, `engines/audio/output.py`, `engines/system/hotkeys.py` (пауза / повтор / пропуск), `pipeline/text/`, `pipeline/speech/`, `pipeline/speaker/gender.py`, `services/speech_service.py`, `resources/voices/`, `tools/voice_samples.py`, `say.py`, `latency_report.py` |
-| 4 | `engines/audio/ducker.py` |
+| 4 | `engines/audio/ducker.py`, `pipeline/speech/ducking.py` |
 | 5 | `config/profile*.py`, `config/migrations.py`, `config/characters_csv.py`, `pipeline/speaker/characters.py`, `pipeline/games/`, `engines/system/windows.py`, `services/game_watcher.py`, `cli.py run / characters` |
 | 6 | `ui/`, `app/facade.py`, `services/history.py`, `engines/system/single_instance.py` |
 | 7 | `sources/manual.py`, `engines/system/hotkeys.py` целиком, `services/hotkey_service.py` |

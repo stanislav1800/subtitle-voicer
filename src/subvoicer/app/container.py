@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from subvoicer.app.runtime import MonotonicClock, Session
+from subvoicer.config.paths import AppPaths
 from subvoicer.config.resources import (
     gender_exceptions,
     letter_names,
@@ -30,6 +31,7 @@ from subvoicer.pipeline.ocr.runner import OcrRunner
 from subvoicer.pipeline.speaker.gender import GenderGuesser
 from subvoicer.pipeline.speaker.resolver import SpeakerMode, SpeakerResolver
 from subvoicer.pipeline.speech.cache import SpeechCache
+from subvoicer.pipeline.speech.ducking import DuckEnvelope
 from subvoicer.pipeline.speech.scheduler import OverlapMode, SpeechScheduler
 from subvoicer.pipeline.speech.voices import VoiceMode, VoicePicker, default_voices
 from subvoicer.pipeline.text.latin import LatinReader
@@ -37,7 +39,7 @@ from subvoicer.pipeline.text.preparer import TextPreparer
 from subvoicer.pipeline.text.pronunciation import PronunciationDict, PronunciationEntry
 from subvoicer.pipeline.vision.masks import MaskPreset, MaskSpec
 from subvoicer.services.capture_service import CaptureService
-from subvoicer.services.speech_service import SpeechService
+from subvoicer.services.speech_service import GameDucking, SpeechService
 from subvoicer.services.zone_service import ZoneService
 from subvoicer.sources.zone_ocr import ZoneOcrSource, ZoneSpec
 
@@ -77,6 +79,10 @@ class SpeechConfig:
     hotkeys: bool = True
     low_priority_ttl_s: float = 5.0
     cache_size: int = 200
+    duck: bool = True  # the zone's ``duck`` flag (TZ 4.10)
+    duck_level: float = 0.4
+    duck_fade_ms: int = 150
+    duck_release_ms: int = 300
 
 
 @dataclass(frozen=True)
@@ -96,6 +102,7 @@ class WatchConfig:
     ocr_engine: str = "rapidocr"
     ocr_options: dict[str, Any] = field(default_factory=lambda: {"model": "cyrillic"})
     capture_modes: tuple[str, ...] = ("wgc", "dxgi")
+    pid: int | None = None  # the game process to duck
     speech: SpeechConfig | None = None  # None: print only (stage 2)
 
 
@@ -136,7 +143,26 @@ def load_dictionary(path: Path | None) -> PronunciationDict:
     return PronunciationDict(entries)
 
 
-def build_speech(config: SpeechConfig, bus: EventBus) -> tuple[Session, SpeechService]:
+def build_ducking(config: SpeechConfig, pid: int | None) -> tuple[GameDucking | None, Any]:
+    """The ducker restores what a crashed run left ducked before anything else (TZ 4.10)."""
+    from subvoicer.engines.audio.ducker import PycawDucker
+
+    if not PycawDucker.is_available():
+        log.warning("Ducking недоступен (нужен pycaw на Windows)")
+        return None, None
+    ducker = PycawDucker(AppPaths.default().ducking_state_file)
+    ducker.restore_all()
+    if pid is None:
+        return None, ducker
+    envelope = DuckEnvelope(
+        config.duck_level, config.duck_fade_ms / 1000, config.duck_release_ms / 1000
+    )
+    return GameDucking(ducker, envelope, pid), ducker
+
+
+def build_speech(
+    config: SpeechConfig, bus: EventBus, game_pid: int | None = None
+) -> tuple[Session, SpeechService]:
     clock = MonotonicClock()
     from subvoicer.engines.audio.output import SoundDeviceOutput
     from subvoicer.engines.tts.silero_stress import SileroStressMarker
@@ -151,6 +177,7 @@ def build_speech(config: SpeechConfig, bus: EventBus) -> tuple[Session, SpeechSe
     )
     output = SoundDeviceOutput(device=config.output_device or None, volume=config.volume)
     output.load()
+    ducking, ducker = build_ducking(config, game_pid)
     service = SpeechService(
         SpeechScheduler(
             config.base_rate,
@@ -165,6 +192,7 @@ def build_speech(config: SpeechConfig, bus: EventBus) -> tuple[Session, SpeechSe
         SpeechCache(config.cache_size),
         clock,
         bus,
+        ducking,
     )
     picker = VoicePicker(default_voices(tts.voices()), GenderGuesser(gender_exceptions()))
     log.info(
@@ -174,10 +202,16 @@ def build_speech(config: SpeechConfig, bus: EventBus) -> tuple[Session, SpeechSe
         picker.defaults.female,
     )
     router = LineRouter(
-        picker, VoiceMode(config.voice_mode), config.voice_id, Priority(config.priority)
+        picker,
+        VoiceMode(config.voice_mode),
+        config.voice_id,
+        Priority(config.priority),
+        config.duck,
     )
     bus.subscribe(UtteranceDetected, lambda event: service.submit(router.request(event.utterance)))
     closers: list[Callable[[], None]] = [output.close]
+    if ducker is not None:
+        closers.insert(0, ducker.restore_all)
     starters: list[Callable[[], None]] = []
     if config.hotkeys:
         from subvoicer.engines.system.hotkeys import PynputHotkeys
@@ -195,12 +229,18 @@ class LineRouter:
     Profiles and per-zone VoicingPolicy replace the fixed settings on stage 5."""
 
     def __init__(
-        self, picker: VoicePicker, mode: VoiceMode, fixed_id: str | None, priority: Priority
+        self,
+        picker: VoicePicker,
+        mode: VoiceMode,
+        fixed_id: str | None,
+        priority: Priority,
+        duck: bool = True,
     ) -> None:
         self._picker = picker
         self._mode = mode
         self._fixed_id = fixed_id
         self._priority = priority
+        self._duck = duck
         self._last_voice: dict[str, str] = {}
 
     def request(self, utterance: Utterance) -> SpeechRequest:
@@ -216,6 +256,7 @@ class LineRouter:
             voice_id=voice,
             priority=self._priority,
             continuation=continuation,
+            duck=self._duck,
             channel=utterance.channel,
             speaker=utterance.speaker,
             t_change=utterance.t_change,
@@ -255,5 +296,5 @@ def build_watch(config: WatchConfig, bus: EventBus) -> Session:
     watch = Session([capture, zones])
     if config.speech is None:
         return watch
-    speech, _ = build_speech(config.speech, bus)
+    speech, _ = build_speech(config.speech, bus, config.pid)
     return Session([speech, watch])  # speech first: it must be ready for the first line

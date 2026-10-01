@@ -68,3 +68,15 @@ class FakeOutput:
 
     def line_ends(self, line_id: int, completed: bool = True) -> None:
         self._finished(line_id, completed)
+
+
+class FakeDucker:
+    def __init__(self) -> None:
+        self.gains: list[tuple[int, float]] = []
+        self.restored = 0
+
+    def set_gain(self, pid: int, gain: float) -> None:
+        self.gains.append((pid, gain))
+
+    def restore_all(self) -> None:
+        self.restored += 1

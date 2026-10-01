@@ -8,11 +8,12 @@ from subvoicer.config.resources import letter_names, translit_table
 from subvoicer.core.events import SpeechDropped, SpeechFinished, SpeechStarted
 from subvoicer.core.models import Priority, SpeechRequest
 from subvoicer.pipeline.speech.cache import SpeechCache
+from subvoicer.pipeline.speech.ducking import DuckEnvelope
 from subvoicer.pipeline.speech.scheduler import OverlapMode, SpeechScheduler
 from subvoicer.pipeline.text.latin import LatinReader
 from subvoicer.pipeline.text.preparer import TextPreparer
-from subvoicer.services.speech_service import SpeechService
-from tests.fakes.audio import FakeOutput, FakeTts
+from subvoicer.services.speech_service import GameDucking, SpeechService
+from tests.fakes.audio import FakeDucker, FakeOutput, FakeTts
 from tests.fakes.capture import RecordingBus
 from tests.fakes.clock import FakeClock
 from tests.fakes.stress import FirstVowelStress
@@ -147,3 +148,50 @@ def test_speedup_mode_resynthesizes_the_rest_faster() -> None:
     rig.step()
     assert rig.out.log[-1] == ("start", 2)
     assert rig.tts.calls[-1] == ("Н+овая.", "v1", 1.15)
+
+
+def ducking_rig() -> tuple[Rig, FakeDucker]:
+    rig = Rig()
+    ducker = FakeDucker()
+    rig.service = SpeechService(
+        SpeechScheduler(),
+        TextPreparer(FirstVowelStress(), LatinReader(letter_names(), translit_table())),
+        rig.tts,
+        rig.out,
+        SpeechCache(10),
+        rig.clock,
+        rig.bus,
+        GameDucking(ducker, DuckEnvelope(0.4, 0.15, 0.3), pid=42),
+    )
+    return rig, ducker
+
+
+def test_game_is_ducked_while_the_line_plays_and_released_after() -> None:
+    rig, ducker = ducking_rig()
+    rig.service.submit(request(1))
+    for _ in range(20):
+        rig.step()
+    assert ducker.gains[-1] == (42, 0.4)
+    assert all(pid == 42 for pid, _ in ducker.gains)
+    rig.out.line_ends(1)
+    for _ in range(25):  # inside the release delay
+        rig.step()
+    assert ducker.gains[-1] == (42, 0.4)
+    for _ in range(25):
+        rig.step()
+    assert ducker.gains[-1] == (42, 1.0)
+    gains = [g for _, g in ducker.gains]
+    down, up = gains[: gains.index(0.4) + 1], gains[gains.index(0.4) :]
+    assert down == sorted(down, reverse=True) and len(down) > 3  # a fade, not a jump
+    assert up == sorted(up) and len(up) > 3
+
+
+def test_line_without_duck_leaves_the_game_alone() -> None:
+    rig, ducker = ducking_rig()
+    rig.service.submit(SpeechRequest(1, "Привет.", "v1", Priority.HIGH, duck=False, channel="z"))
+    for _ in range(20):
+        rig.step()
+    rig.out.line_ends(1)
+    for _ in range(60):
+        rig.step()
+    assert ducker.gains == []
