@@ -127,3 +127,15 @@ def make_hotkeys() -> object:
     from subvoicer.engines.system.hotkeys import PynputHotkeys
 
     return PynputHotkeys()
+
+
+def monitor_device(hwnd: int) -> str | None:
+    """The device name of the monitor that shows the window."""
+    if sys.platform != "win32":
+        return None
+    from subvoicer.engines.system import windows
+
+    try:
+        return windows.monitor_of_window(hwnd).device
+    except LookupError:
+        return None

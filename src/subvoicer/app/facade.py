@@ -14,13 +14,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from subvoicer.app import profile_commands as pc
-from subvoicer.app import runtime
+from subvoicer.app import runtime, zone_tools
 from subvoicer.app.bus import Bus
 from subvoicer.app.game_runner import RunParts, build_run, pronunciation
 from subvoicer.config.paths import AppPaths
-from subvoicer.config.profile import Profile
+from subvoicer.config.profile import Profile, Zone
 from subvoicer.config.profile_store import ProfileStore, StoredProfile
-from subvoicer.config.resources import voice_catalog
+from subvoicer.config.resources import gender_exceptions, voice_catalog
 from subvoicer.config.settings import Settings, load_settings, save_settings
 from subvoicer.core.events import (
     Event,
@@ -30,6 +30,7 @@ from subvoicer.core.events import (
     SettingsApplied,
 )
 from subvoicer.core.models import HistoryEntry, Priority, SpeechRequest, Voice, WindowRef
+from subvoicer.pipeline.speaker.gender import GenderGuesser
 from subvoicer.pipeline.speech.scheduler import OverlapMode
 from subvoicer.services.history import History
 from subvoicer.services.speech_service import SpeechTuning
@@ -205,6 +206,33 @@ class AppFacade:
         if self._parts is not None:
             return list(self._parts.speech.voices)
         return sorted(voice_catalog(pc.TTS_CATALOG).values(), key=lambda v: v.id)
+
+    # ------------------------------------------------------------------ zone editor
+
+    def grab_game_frame(self) -> zone_tools.Image | None:
+        """A frozen frame of the active game for the editor «поверх игры»."""
+        window = self.status().window
+        return zone_tools.grab_window(window.hwnd) if window is not None else None
+
+    def game_monitor(self) -> str | None:
+        """Device name of the game's monitor (DISPLAY1 style; Qt names its screens the same)."""
+        window = self.status().window
+        return runtime.monitor_device(window.hwnd) if window is not None else None
+
+    def preview_zone(
+        self, frame: zone_tools.Image, zone: Zone, zones: list[Zone], profile: Profile
+    ) -> zone_tools.ZonePreview:
+        if self._parts is None:
+            return zone_tools.ZonePreview(None, error="OCR ещё загружается")
+        return zone_tools.preview_zone(
+            frame,
+            zone,
+            zones,
+            profile,
+            self._parts.engines,
+            self.voices(),
+            GenderGuesser(gender_exceptions()),
+        )
 
     # ------------------------------------------------------------------ profiles
 

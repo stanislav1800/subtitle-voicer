@@ -93,40 +93,45 @@ def zone_specs(profile: Profile, aspect: str, engines: OcrEngines) -> list[ZoneS
     layout = profile.layouts.get(aspect)
     if layout is None:
         return []
-    by_id = {z.id: z for z in layout.zones}
-    specs = []
-    for zone in layout.zones:
-        if zone.kind != "text" or zone.trigger != "auto" or zone.policy is None:
-            continue
-        speaker = zone.policy.speaker
-        name: NameSource | None = None
-        if speaker.mode == "zone" and speaker.zone_id:
-            source = by_id[speaker.zone_id]
-            name = NameSource(mask_spec(source.mask), rect_of(source))
-        elif speaker.mode == "color":
-            name = NameSource(mask_spec(MaskConfig(preset="color", colors_hsv=speaker.colors_hsv)))
-        stab = profile.stabilization.merged(zone.stabilization)
-        ocr = profile.ocr.merged(zone.ocr)
-        specs.append(
-            ZoneSpec(
-                id=zone.id,
-                rect=rect_of(zone),
-                mask=mask_spec(zone.mask),
-                speaker=SpeakerResolver(SpeakerMode(speaker.mode), profile.speaker_stoplist),
-                stabilization=StabilizationSettings(
-                    stable_ms=stab.stable_ms,
-                    max_wait_ms=stab.max_wait_ms,
-                    typing_max_wait_ms=stab.typing_max_wait_ms,
-                    change_ratio=stab.change_ratio,
-                    empty_ratio=stab.empty_ratio,
-                ),
-                repeat_cooldown_min=zone.policy.repeat_cooldown_min,
-                name=name,
-                runner=OcrRunner(engines.get(ocr.engine), OcrSettings(upscale=ocr.upscale)),
-                junk=JunkFilter(short_words(), min_confidence=ocr.min_confidence),
-            )
-        )
-    return specs
+    zones = layout.zones
+    return [
+        zone_spec(profile, zone, zones, engines)
+        for zone in zones
+        if zone.kind == "text" and zone.trigger == "auto" and zone.policy is not None
+    ]
+
+
+def zone_spec(profile: Profile, zone: Zone, zones: list[Zone], engines: OcrEngines) -> ZoneSpec:
+    """One text zone of a profile as the pipeline sees it (speaker zones are looked up in
+    ``zones``)."""
+    assert zone.policy is not None
+    by_id = {z.id: z for z in zones}
+    speaker = zone.policy.speaker
+    name: NameSource | None = None
+    if speaker.mode == "zone" and speaker.zone_id in by_id:
+        source = by_id[speaker.zone_id]
+        name = NameSource(mask_spec(source.mask), rect_of(source))
+    elif speaker.mode == "color":
+        name = NameSource(mask_spec(MaskConfig(preset="color", colors_hsv=speaker.colors_hsv)))
+    stab = profile.stabilization.merged(zone.stabilization)
+    ocr = profile.ocr.merged(zone.ocr)
+    return ZoneSpec(
+        id=zone.id,
+        rect=rect_of(zone),
+        mask=mask_spec(zone.mask),
+        speaker=SpeakerResolver(SpeakerMode(speaker.mode), profile.speaker_stoplist),
+        stabilization=StabilizationSettings(
+            stable_ms=stab.stable_ms,
+            max_wait_ms=stab.max_wait_ms,
+            typing_max_wait_ms=stab.typing_max_wait_ms,
+            change_ratio=stab.change_ratio,
+            empty_ratio=stab.empty_ratio,
+        ),
+        repeat_cooldown_min=zone.policy.repeat_cooldown_min,
+        name=name,
+        runner=OcrRunner(engines.get(ocr.engine), OcrSettings(upscale=ocr.upscale)),
+        junk=JunkFilter(short_words(), min_confidence=ocr.min_confidence),
+    )
 
 
 def capture_factories() -> dict[str, Any]:

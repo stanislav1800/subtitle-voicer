@@ -19,7 +19,7 @@ from subvoicer.pipeline.dedup import DedupKind, Deduplicator
 from subvoicer.pipeline.ocr.inputs import OcrInput
 from subvoicer.pipeline.ocr.junk_filter import JunkFilter
 from subvoicer.pipeline.ocr.runner import OcrOutcome, OcrRunner
-from subvoicer.pipeline.speaker.resolver import SpeakerMode, SpeakerResolver
+from subvoicer.pipeline.speaker.resolver import SpeakerMode, SpeakerResolver, SpeakerResult
 from subvoicer.pipeline.vision.change import mask_empty
 from subvoicer.pipeline.vision.crop import crop
 from subvoicer.pipeline.vision.masks import Image, MaskSpec, build_mask
@@ -73,6 +73,47 @@ class _ZoneState:
     mask: Image | None = None
     name_mask: Image | None = None  # name colour pixels (speaker mode color)
     speaker: str | None = None  # speaker of the last new line (a continuation keeps it)
+
+
+@dataclass(frozen=True)
+class ZoneReading:
+    """One read of a zone without the stabiliser and dedup: the editor preview now,
+    hotkey zones on stage 7."""
+
+    crop: Image
+    mask: Image
+    text: str
+    confidence: float
+    input_kind: str
+    elapsed_ms: float
+    lines: list[SpeakerResult]  # per speaker (TZ 1.17), names already taken out
+
+
+def read_once(spec: ZoneSpec, frame: Image, runner: OcrRunner, separator: str = " ") -> ZoneReading:
+    state = _ZoneState(spec, ZoneStabilizer(spec.stabilization))
+    state.frame = frame
+    state.crop = crop(frame, spec.rect)
+    state.mask = build_mask(state.crop, spec.mask)
+    if spec.name is not None and spec.name.rect is None:
+        state.name_mask = build_mask(state.crop, spec.name.mask)
+        state.mask = without(state.mask, state.name_mask)
+    active = spec.runner or runner
+    image = state.crop if state.name_mask is None else paint_out(state.crop, state.name_mask)
+    started = time.perf_counter()
+    outcome = active.run(image, state.mask, spec.ocr_input, separator=separator)
+    elapsed = (time.perf_counter() - started) * 1000
+    text = ZoneOcrSource._keep_prefix_name(spec, outcome, text=outcome.text)
+    candidate = ZoneOcrSource._read_name(state, active)
+    lines = spec.speaker.resolve_all(text, candidate) if text else []
+    return ZoneReading(
+        state.crop,
+        state.mask,
+        text,
+        outcome.mean_confidence,
+        str(outcome.input_kind),
+        elapsed,
+        lines,
+    )
 
 
 class ZoneOcrSource:
@@ -223,6 +264,10 @@ class ZoneOcrSource:
         return f"{named.name}: {text.lstrip(':;,. ')}"
 
     def _name_candidate(self, zone: _ZoneState) -> str | None:
+        return self._read_name(zone, zone.spec.runner or self._runner)
+
+    @staticmethod
+    def _read_name(zone: _ZoneState, runner: OcrRunner) -> str | None:
         """OCR of the speaker zone or of the name-colour part of the zone (TZ 4.5)."""
         spec, name = zone.spec, zone.spec.name
         if name is None or zone.frame is None or zone.crop is None:
@@ -239,6 +284,6 @@ class ZoneOcrSource:
             if part is None:
                 return None
             image, mask = part, build_mask(part, name.mask)
-        outcome = (spec.runner or self._runner).run(image, mask, OcrInput.RAW)
+        outcome = runner.run(image, mask, OcrInput.RAW)
         log.debug("Зона %s: имя %r (%.2f)", spec.id, outcome.text, outcome.mean_confidence)
         return outcome.text or None

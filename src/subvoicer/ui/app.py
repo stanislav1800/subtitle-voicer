@@ -7,11 +7,11 @@ import sys
 import threading
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QTimer, Signal
+from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox
 
-from subvoicer.app import runtime
+from subvoicer.app import runtime, zone_tools
 from subvoicer.app.facade import AppFacade
 from subvoicer.app.log import setup_logging
 from subvoicer.config.paths import AppPaths
@@ -25,6 +25,7 @@ from subvoicer.ui.settings.hotkeys import HotkeysPage
 from subvoicer.ui.settings.profiles import ProfilesPage
 from subvoicer.ui.settings.window import SettingsWindow
 from subvoicer.ui.tray import Tray
+from subvoicer.ui.zone_editor.editor import ZoneEditor
 
 log = logging.getLogger("subvoicer.ui")
 
@@ -39,6 +40,12 @@ def tell_first_copy() -> None:
         socket.write(b"show")
         socket.waitForBytesWritten(1000)
         socket.disconnectFromServer()
+
+
+class HotkeySignals(QObject):
+    """Hotkeys fire in the pynput thread; windows open in the Qt one."""
+
+    zone_editor = Signal()
 
 
 class Loader(QObject):
@@ -83,6 +90,10 @@ class Application:
         self.server.newConnection.connect(self._on_second_copy)
         self.server.listen(SERVER_NAME)
         self.line_window: LineWindow | None = None
+        self.editor: ZoneEditor | None = None
+        self.hotkey_signals = HotkeySignals()
+        self.hotkey_signals.zone_editor.connect(self.open_zone_editor)
+        facade.set_hotkey_action("zone_editor", self.hotkey_signals.zone_editor.emit)
         self.loader = Loader(facade)
         self.loader.done.connect(self._on_loaded)
 
@@ -105,10 +116,57 @@ class Application:
         self.line_window.show_entry(current)
 
     def open_profile_editor(self, path: Path, mode: str) -> None:
-        log.info("Редактор зон (%s) для %s появится в части 5 этапа 6", mode, path.name)
+        """«Настроить в игре» / «По скриншоту» from the profile tab."""
+        if mode == "game":
+            status = self.facade.status()
+            if status.profile_path != str(path):
+                self.tray.showMessage(
+                    "Subtitle Voicer", "Запустите эту игру — редактор откроется поверх неё"
+                )
+                return
+            self.open_zone_editor()
+            return
+        name, _ = QFileDialog.getOpenFileName(
+            self.window, "Полный кадр игры", "", "Изображения (*.png *.jpg *.jpeg *.bmp)"
+        )
+        if not name:
+            return
+        image = zone_tools.load_image(Path(name))
+        if image is None:
+            QMessageBox.warning(self.window, "Скриншот", "Не удалось открыть картинку")
+            return
+        height, width = image.shape[:2]
+        warnings = []
+        if not zone_tools.is_known_aspect(width, height):
+            warnings.append(
+                f"Картинка {width}×{height} — не 16:9, 16:10, 21:9, 32:9 или 4:3. Нужен полный "
+                "кадр игры, иначе зоны могут съехать."
+            )
+        if Path(name).suffix.lower() in (".jpg", ".jpeg"):
+            warnings.append(
+                "JPEG: цвета могут быть неточными (сжатие, кадр из видео) — проверьте маску в игре."
+            )
+        self._show_editor(ZoneEditor(self.facade, path, image, "screenshot", warnings))
 
     def open_zone_editor(self) -> None:
-        log.info("Редактор зон появится в части 5 этапа 6")
+        """Ctrl+Alt+Z or «Настроить зоны»: a frozen frame of the active game."""
+        status = self.facade.status()
+        if status.profile_path is None:
+            self.tray.showMessage("Subtitle Voicer", "Нет активной игры с профилем")
+            return
+        frame = self.facade.grab_game_frame()
+        if frame is None:
+            self.tray.showMessage("Subtitle Voicer", "Не удалось получить кадр игры")
+            return
+        self._show_editor(ZoneEditor(self.facade, Path(status.profile_path), frame, "game"))
+
+    def _show_editor(self, editor: ZoneEditor) -> None:
+        if self.editor is not None:
+            self.editor.close()
+        self.editor = editor
+        editor.destroyed.connect(lambda: setattr(self, "editor", None))
+        editor.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        editor.open()
 
     def quit(self) -> None:
         self.tray.hide()

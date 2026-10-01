@@ -28,6 +28,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, default=ROOT / "captures" / "ui")
     parser.add_argument("--page", help="только эта вкладка")
+    parser.add_argument("--frame", type=Path, help="кадр игры: снимок редактора зон")
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     runtime.prepare_process()
@@ -75,6 +76,21 @@ def main() -> int:
     line.grab().save(str(args.out / "line.png"))
     print(args.out / "line.png")
     line.hide()
+    if args.frame is not None:
+        from subvoicer.app import zone_tools
+        from subvoicer.ui.zone_editor.editor import ZoneEditor
+
+        image = zone_tools.load_image(args.frame)
+        profile = next(iter(app.facade.profiles()), None)
+        if image is not None and profile is not None:
+            editor = ZoneEditor(app.facade, profile.path, image, "screenshot")
+            editor.resize(1400, 860)
+            editor.show()
+            for _ in range(5):
+                qt.processEvents()
+            editor.grab().save(str(args.out / "zone_editor.png"))
+            print(args.out / "zone_editor.png")
+            editor.hide()
     menu = app.tray.contextMenu()
     menu.popup(window.mapToGlobal(window.rect().center()))
     qt.processEvents()
