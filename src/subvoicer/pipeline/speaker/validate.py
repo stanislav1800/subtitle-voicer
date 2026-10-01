@@ -22,5 +22,6 @@ class NameValidator:
             and MIN_LENGTH <= len(name) <= MAX_LENGTH
             and name[0].isupper()
             and not any(ch.isdigit() for ch in name)  # "Встретимся в 22:30" is a time
+            and not any(ch in ".!?…" for ch in name)  # "Он вышел. Джеки: …" is not a name
             and normalize(name) not in self._stoplist
         )

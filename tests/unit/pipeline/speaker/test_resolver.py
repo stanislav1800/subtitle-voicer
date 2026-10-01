@@ -87,3 +87,29 @@ def test_stoplist_resource_matches_tz() -> None:
         "получено",
         "новое",
     }
+
+
+def test_several_speakers_in_one_subtitle() -> None:
+    r = SpeakerResolver(SpeakerMode.PREFIX, speaker_stoplist())
+    found = r.resolve_all("Ви: А ты ещё кто? Джеки: Вылезай. Ви: Эй, спокойно.")
+    assert [(x.name, x.text) for x in found] == [
+        ("Ви", "А ты ещё кто?"),
+        ("Джеки", "Вылезай."),
+        ("Ви", "Эй, спокойно."),
+    ]
+
+
+def test_inner_names_need_a_named_line_and_a_sentence_end() -> None:
+    r = SpeakerResolver(SpeakerMode.PREFIX, speaker_stoplist())
+    plain = r.resolve_all("Он вышел. Джеки: так он и сказал.")  # no name at the start
+    assert [(x.name, x.text) for x in plain] == [(None, "Он вышел. Джеки: так он и сказал.")]
+    mid = r.resolve_all("Ви: Встретимся в 22: 30. Совет: не опаздывай.")
+    assert [(x.name, x.text) for x in mid] == [("Ви", "Встретимся в 22: 30. Совет: не опаздывай.")]
+
+
+def test_continuation_split() -> None:
+    r = SpeakerResolver(SpeakerMode.PREFIX, speaker_stoplist())
+    assert r.split_inner("и уходи. Джеки: Стой!") == [(None, "и уходи."), ("Джеки", "Стой!")]
+    assert r.split_inner("Джеки: Стой!") == [(None, "Джеки: Стой!")]  # no sentence end before
+    none = SpeakerResolver(SpeakerMode.NONE, speaker_stoplist())
+    assert none.split_inner("Раз. Джеки: Стой!") == [(None, "Раз. Джеки: Стой!")]

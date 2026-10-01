@@ -18,8 +18,8 @@ from subvoicer.core.ports import Clock
 from subvoicer.pipeline.dedup import DedupKind, Deduplicator
 from subvoicer.pipeline.ocr.inputs import OcrInput
 from subvoicer.pipeline.ocr.junk_filter import JunkFilter
-from subvoicer.pipeline.ocr.runner import OcrRunner
-from subvoicer.pipeline.speaker.resolver import SpeakerResolver
+from subvoicer.pipeline.ocr.runner import OcrOutcome, OcrRunner
+from subvoicer.pipeline.speaker.resolver import SpeakerMode, SpeakerResolver
 from subvoicer.pipeline.vision.change import mask_empty
 from subvoicer.pipeline.vision.crop import crop
 from subvoicer.pipeline.vision.masks import Image, MaskSpec, build_mask
@@ -97,12 +97,10 @@ class ZoneOcrSource:
         now = self._clock.now()
         found = []
         for zone in self._zones:
-            utterance = self._process_zone(zone, frame, now)
-            if utterance is not None:
-                found.append(utterance)
+            found += self._process_zone(zone, frame, now)
         return found
 
-    def _process_zone(self, zone: _ZoneState, frame: Frame, now: float) -> Utterance | None:
+    def _process_zone(self, zone: _ZoneState, frame: Frame, now: float) -> list[Utterance]:
         spec, stabilizer = zone.spec, zone.stabilizer
         if frame.timestamp != zone.frame_ts or zone.mask is None or zone.crop is None:
             zone.frame_ts = frame.timestamp
@@ -121,11 +119,11 @@ class ZoneOcrSource:
         if stabilizer.state is not before:
             log.debug("Зона %s: %s -> %s", spec.id, before, stabilizer.state)
         if isinstance(decision, Emptied) or decision is None:
-            return None
+            return []
         assert isinstance(decision, RunOcr)
         return self._recognize(zone, decision)
 
-    def _recognize(self, zone: _ZoneState, decision: RunOcr) -> Utterance | None:
+    def _recognize(self, zone: _ZoneState, decision: RunOcr) -> list[Utterance]:
         spec, stabilizer = zone.spec, zone.stabilizer
         assert zone.crop is not None and zone.mask is not None
         runner = spec.runner or self._runner
@@ -141,14 +139,14 @@ class ZoneOcrSource:
             outcome.mean_confidence,
             outcome.text,
         )
-        text = outcome.text
+        text = self._keep_prefix_name(spec, outcome, text=outcome.text)
         if decision.still_typing:
             # read before typing ended: the last word is likely cut, it comes with the rest
             text = drop_last_word(text)
         verdict = (spec.junk or self._junk).check(text, outcome.mean_confidence)
         if not verdict.ok:
             log.debug("Зона %s: отброшено фильтром (%s)", spec.id, verdict.reason)
-            return None
+            return []
 
         now = self._clock.now()
         t_change = decision.t_change
@@ -163,36 +161,60 @@ class ZoneOcrSource:
             stabilizer.consume_was_empty()
         log.debug("Зона %s: dedup -> %s", spec.id, result.kind)
         if not result.voiced:
-            return None
+            return []
 
+        lines: list[tuple[UtteranceKind, str | None, str]] = []
         if result.kind is DedupKind.NEW:
-            speaker = spec.speaker.resolve(result.text, self._name_candidate(zone))
-            zone.speaker = speaker.name
-            text, kind = speaker.text, UtteranceKind.NEW
-        else:
-            text, kind = result.text, UtteranceKind.CONTINUATION
-        if not text:
-            return None
-        utterance_id = next(self._ids)
-        log.debug(
-            "LATENCY change id=%d t=%.3f detected=%.3f zone=%s",
-            utterance_id,
-            t_change,
-            now,
-            spec.id,
-        )
-        return Utterance(
-            channel=spec.id,
-            kind=kind,
-            text=text,
-            full_text=text,
-            speaker=zone.speaker,
-            t_change=t_change,
-            t_detected=now,
-            confidence=outcome.mean_confidence,
-            ocr_input=str(outcome.input_kind),
-            id=utterance_id,
-        )
+            for speaker in spec.speaker.resolve_all(result.text, self._name_candidate(zone)):
+                lines.append((UtteranceKind.NEW, speaker.name, speaker.text))
+        else:  # the head continues the last speaker, inner names start new lines (TZ 1.17)
+            for name, part in spec.speaker.split_inner(result.text):
+                if name is None:
+                    lines.append((UtteranceKind.CONTINUATION, zone.speaker, part))
+                else:
+                    lines.append((UtteranceKind.NEW, name, part))
+        utterances = []
+        for kind, speaker_name, text in lines:
+            if not text:
+                continue
+            zone.speaker = speaker_name
+            utterance_id = next(self._ids)
+            log.debug(
+                "LATENCY change id=%d t=%.3f detected=%.3f zone=%s",
+                utterance_id,
+                t_change,
+                now,
+                spec.id,
+            )
+            utterances.append(
+                Utterance(
+                    channel=spec.id,
+                    kind=kind,
+                    text=text,
+                    full_text=text,
+                    speaker=speaker_name,
+                    t_change=t_change,
+                    t_detected=now,
+                    confidence=outcome.mean_confidence,
+                    ocr_input=str(outcome.input_kind),
+                    id=utterance_id,
+                )
+            )
+        return utterances
+
+    @staticmethod
+    def _keep_prefix_name(spec: ZoneSpec, outcome: OcrOutcome, text: str) -> str:
+        """A fallback input (masked / mask) loses a name of another colour; the default
+        input still has it: put it back in front (TZ 1.17)."""
+        default = outcome.attempts[0]
+        if spec.speaker.mode is not SpeakerMode.PREFIX or outcome.best is default:
+            return text
+        if spec.speaker.resolve(text).name is not None:
+            return text
+        named = spec.speaker.resolve(" ".join(line.text for line in default.lines))
+        if named.name is None:
+            return text
+        return f"{named.name}: {text.lstrip(':;,. ')}"
 
     def _name_candidate(self, zone: _ZoneState) -> str | None:
         """OCR of the speaker zone or of the name-colour part of the zone (TZ 4.5)."""

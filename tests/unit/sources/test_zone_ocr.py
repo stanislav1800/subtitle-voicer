@@ -287,3 +287,65 @@ def test_speaker_by_colour_inside_the_zone() -> None:
     red_pixels = (text_image[..., 2] > 200) & (text_image[..., 1] < 50)
     assert not red_pixels.any()  # the name is painted out of the text input
     assert name_image.shape[1] < 200  # only the name part (78 px, upscaled x2) is read
+
+
+# ---------------------------------------------------------------- TZ 1.17
+
+
+def test_two_speakers_in_one_subtitle_are_two_lines() -> None:
+    s = Screen(SpeakerMode.PREFIX)
+    s.show("Ви: А ты ещё кто? Джеки: Вылезай.")
+    s.run(1)
+    assert [(u.kind, u.speaker, u.text) for u in s.out] == [
+        (UtteranceKind.NEW, "Ви", "А ты ещё кто?"),
+        (UtteranceKind.NEW, "Джеки", "Вылезай."),
+    ]
+    assert s.out[0].id != s.out[1].id
+
+
+def test_continuation_with_another_speaker() -> None:
+    s = Screen(SpeakerMode.PREFIX)
+    s.show("Ви: Не понял, ты кто?")
+    s.run(1)
+    s.show("Ви: Не понял, ты кто? Я был первый. Джеки: Можем решить по-хорошему.")
+    s.run(1)
+    assert [(u.kind, u.speaker, u.text) for u in s.out] == [
+        (UtteranceKind.NEW, "Ви", "Не понял, ты кто?"),
+        (UtteranceKind.CONTINUATION, "Ви", "Я был первый."),
+        (UtteranceKind.NEW, "Джеки", "Можем решить по-хорошему."),
+    ]
+
+
+class FallbackOcr:
+    """The default input is unsure but has the name; the fallback is sure but lost it."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def recognize(self, image: np.ndarray) -> OcrResult:
+        self.calls += 1
+        if self.calls % 3 == 1:
+            return OcrResult((OcrLine("Кирк: Мой человек на парковке.", 0.7, (0, 0, 10, 10)),))
+        return OcrResult((OcrLine("Мой человек на парковке.", 0.95, (0, 0, 10, 10)),))
+
+
+def test_name_survives_a_fallback_input() -> None:
+    image = np.full((H, W, 4), 20, dtype=np.uint8)
+    image[30:50, 10:390, :3] = 255
+    zone = ZoneSpec(
+        id="dialog",
+        rect=Rect(0.0, 0.0, 1.0, 1.0),
+        mask=MaskSpec(MaskPreset.BRIGHT_ON_DARK),
+        speaker=SpeakerResolver(SpeakerMode.PREFIX, speaker_stoplist()),
+    )
+    clock = FakeClock(100.0)
+    source = ZoneOcrSource(
+        [zone], OcrRunner(FallbackOcr()), JunkFilter(short_words()), Deduplicator(), clock
+    )
+    out: list[Utterance] = []
+    for _ in range(10):
+        clock.advance(FRAME_S)
+        out += source.process(Frame(image, clock.now()))
+    assert [(u.speaker, u.text, u.ocr_input) for u in out] == [
+        ("Кирк", "Мой человек на парковке.", "masked")
+    ]
