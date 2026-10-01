@@ -8,6 +8,7 @@ when its window changes aspect ratio or its profile file changes on disk.
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -61,6 +62,7 @@ class GameWatcher(Service):
         self._publisher = publisher
         self.active: ActiveGame | None = None
         self._seen: tuple[int, int, Signature] | None = None  # (hwnd, pid, profile files)
+        self._own_pid = os.getpid()
 
     def step(self) -> None:
         self.check()
@@ -68,8 +70,8 @@ class GameWatcher(Service):
     def check(self) -> None:
         self._check_active()
         window = self._desktop.foreground()
-        if window is None or not self._desktop.alive(window.pid):
-            return
+        if window is None or window.pid == self._own_pid or not self._desktop.alive(window.pid):
+            return  # our own windows (settings, zone editor) are never a game
         if self.active is not None and window.pid == self.active.window.pid:
             if window.hwnd != self.active.window.hwnd and not self._desktop.describe(
                 self.active.window.hwnd

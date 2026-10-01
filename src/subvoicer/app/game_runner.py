@@ -13,6 +13,7 @@ from typing import Any
 
 from subvoicer.app.container import (
     SpeechConfig,
+    SpeechParts,
     build_speech,
     load_ocr,
 )
@@ -356,7 +357,21 @@ def speech_config(settings: Settings, hotkeys: bool = True) -> SpeechConfig:
     )
 
 
-def build_run(settings: Settings, bus: EventBus, paths: AppPaths, hotkeys: bool = True) -> Session:
+@dataclass
+class RunParts:
+    """Everything ``run`` is made of; the GUI facade reaches the parts to apply settings."""
+
+    session: Session
+    speech: SpeechParts
+    router: ProfileRouter
+    runner: GameRunner
+    watcher: GameWatcher
+    offers: OfferPolicy
+    store: ProfileStore
+    engines: OcrEngines
+
+
+def build_run(settings: Settings, bus: EventBus, paths: AppPaths, hotkeys: bool = True) -> RunParts:
     """Speech for the whole run, GameWatcher, and a game session rebuilt per active game."""
     from subvoicer.engines.system.windows import WindowsDesktop
 
@@ -382,10 +397,9 @@ def build_run(settings: Settings, bus: EventBus, paths: AppPaths, hotkeys: bool 
     bus.subscribe(GameActivated, runner.on_activated)
     bus.subscribe(GameClosed, runner.on_closed)
     bus.subscribe(CaptureStopped, runner.on_closed)
-    watcher = GameWatcher(
-        store,
-        WindowsDesktop(),
-        OfferPolicy(settings.excluded_exes, settings.never_ask_exes),
-        bus,
-    )
-    return Session([speech.session, watcher, runner])  # stopped in reverse: game, watcher, speech
+    offers = OfferPolicy(settings.excluded_exes, settings.never_ask_exes)
+    watcher = GameWatcher(store, WindowsDesktop(), offers, bus)
+    session = Session(
+        [speech.session, watcher, runner]
+    )  # stopped in reverse: game, watcher, speech
+    return RunParts(session, speech, router, runner, watcher, offers, store, engines)

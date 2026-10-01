@@ -143,3 +143,17 @@ class WindowsDesktop:
 
     def alive(self, pid: int) -> bool:
         return bool(psutil.pid_exists(pid))
+
+
+DWMWA_USE_IMMERSIVE_DARK_MODE = 20
+
+
+def set_dark_title_bar(hwnd: int) -> None:
+    """Dark standard title bar (docs/UI.md: the MVP keeps the Windows frame)."""
+    value = ctypes.c_int(1)
+    try:
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(
+            hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ctypes.byref(value), ctypes.sizeof(value)
+        )
+    except OSError:
+        log.debug("Тёмный заголовок окна недоступен", exc_info=True)

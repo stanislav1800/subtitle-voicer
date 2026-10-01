@@ -1,0 +1,169 @@
+"""Small building blocks of the settings screens (docs/UI.md, section 5)."""
+
+from __future__ import annotations
+
+from collections.abc import Callable, Sequence
+
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import (
+    QButtonGroup,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QSlider,
+    QVBoxLayout,
+    QWidget,
+)
+
+from subvoicer.ui import theme
+from subvoicer.ui.widgets.toggle import ToggleSwitch
+
+
+def label(text: str, name: str = "", *, wrap: bool = False) -> QLabel:
+    result = QLabel(text)
+    if name:
+        result.setObjectName(name)
+    result.setWordWrap(wrap)
+    return result
+
+
+class Card(QFrame):
+    """A section: ``bg_card`` frame with an upper-case title."""
+
+    def __init__(self, title: str = "", parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("card")
+        self.body = QVBoxLayout(self)
+        self.body.setContentsMargins(18, 16, 18, 16)
+        self.body.setSpacing(12)
+        if title:
+            self.body.addWidget(label(title.upper(), "sectionTitle"))
+
+
+def chip(text: str, kind: str = "info") -> QLabel:
+    result = QLabel(text)
+    result.setStyleSheet(theme.chip_style(kind))
+    result.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    return result
+
+
+def keycap(text: str) -> QLabel:
+    return label(text, "keycap")
+
+
+def icon_button(
+    icon_name: str, tooltip: str, on_click: Callable[[], None] | None = None
+) -> QPushButton:
+    button = QPushButton()
+    button.setObjectName("iconButton")
+    button.setIcon(theme.icon(icon_name))
+    button.setToolTip(tooltip)
+    button.setAccessibleName(tooltip)
+    if on_click is not None:
+        button.clicked.connect(on_click)
+    return button
+
+
+def primary(text: str, on_click: Callable[[], None] | None = None) -> QPushButton:
+    button = QPushButton(text)
+    button.setObjectName("primary")
+    if on_click is not None:
+        button.clicked.connect(on_click)
+    return button
+
+
+def titled(title: str, hint: str = "") -> QWidget:
+    """A setting's title with a muted hint under it."""
+    box = QWidget()
+    layout = QVBoxLayout(box)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(2)
+    layout.addWidget(label(title))
+    if hint:
+        layout.addWidget(label(hint, "hint", wrap=True))
+    return box
+
+
+def row(left: QWidget, right: QWidget) -> QWidget:
+    box = QWidget()
+    layout = QHBoxLayout(box)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.addWidget(left, 1)
+    layout.addWidget(right, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+    return box
+
+
+def toggle_row(title: str, hint: str, checked: bool) -> tuple[QWidget, ToggleSwitch]:
+    switch = ToggleSwitch(checked=checked)
+    switch.setAccessibleName(title)
+    return row(titled(title, hint), switch), switch
+
+
+class SliderRow(QWidget):
+    """Title, value in accent on the right, slider under them. Works in integer steps."""
+
+    changed = Signal(float)
+
+    def __init__(
+        self,
+        title: str,
+        minimum: float,
+        maximum: float,
+        step: float,
+        value: float,
+        fmt: Callable[[float], str],
+    ) -> None:
+        super().__init__()
+        self._minimum, self._step, self._fmt = minimum, step, fmt
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        self._value = label("", "value")
+        layout.addWidget(row(label(title), self._value))
+        self.slider = QSlider(Qt.Orientation.Horizontal)
+        self.slider.setAccessibleName(title)
+        self.slider.setRange(0, round((maximum - minimum) / step))
+        self.slider.setValue(round((value - minimum) / step))
+        self.slider.valueChanged.connect(self._on_value)
+        layout.addWidget(self.slider)
+        self._on_value(self.slider.value(), emit=False)
+
+    def value(self) -> float:
+        return round(self._minimum + self.slider.value() * self._step, 6)
+
+    def _on_value(self, _position: int, emit: bool = True) -> None:
+        self._value.setText(self._fmt(self.value()))
+        if emit:
+            self.changed.emit(self.value())
+
+
+class Segmented(QFrame):
+    """Mutually exclusive checkable buttons in a frame."""
+
+    changed = Signal(str)
+
+    def __init__(self, options: Sequence[tuple[str, str]], value: str) -> None:
+        super().__init__()
+        self.setObjectName("segments")
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(3, 3, 3, 3)
+        layout.setSpacing(2)
+        self._group = QButtonGroup(self)
+        self._buttons: dict[str, QPushButton] = {}
+        for key, text in options:
+            button = QPushButton(text)
+            button.setObjectName("segment")
+            button.setCheckable(True)
+            button.setChecked(key == value)
+            button.clicked.connect(lambda _=False, k=key: self.changed.emit(k))
+            self._group.addButton(button)
+            self._buttons[key] = button
+            layout.addWidget(button)
+
+    def value(self) -> str:
+        return next((k for k, b in self._buttons.items() if b.isChecked()), "")
+
+    def set_value(self, key: str) -> None:
+        if key in self._buttons:
+            self._buttons[key].setChecked(True)

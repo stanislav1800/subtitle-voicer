@@ -159,3 +159,11 @@ def test_library_profile_is_bound_for_a_fullscreen_game(rig: Rig) -> None:
     assert rig.activated() == ["GameB.exe"]
     assert not path.exists()
     assert rig.store.load_all()[0].profile.exe == "GameB.exe"
+
+
+def test_own_windows_are_never_a_game(rig: Rig) -> None:
+    rig.add(exe="python.exe")
+    own = WindowRef(50, os.getpid(), "python.exe", "Subtitle Voicer", 1100, 720)
+    rig.desktop.windows[own.hwnd] = own
+    rig.focus(own)
+    assert rig.activated() == []

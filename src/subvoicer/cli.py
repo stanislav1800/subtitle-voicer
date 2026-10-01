@@ -50,6 +50,7 @@ from subvoicer.core.models import Rect, UtteranceKind, WindowRef
 log = logging.getLogger("subvoicer.cli")
 
 EXIT_WINDOW_NOT_CHOSEN = 2
+EXIT_ALREADY_RUNNING = 3
 
 
 def parse_rect(value: str) -> Rect:
@@ -299,7 +300,7 @@ def run_profiles(args: argparse.Namespace) -> int:
     events: queue.Queue[Event] = queue.Queue()
     bus.subscribe(Event, events.put)
     print("Загрузка OCR и озвучки…", file=sys.stderr)
-    session = build_run(settings, bus, paths, hotkeys=not args.no_hotkeys)
+    session = build_run(settings, bus, paths, hotkeys=not args.no_hotkeys).session
     session.start()
     print(f"Профили: {paths.profiles_dir}. Жду игру в фокусе. Ctrl+C — выход.", file=sys.stderr)
     try:
@@ -448,10 +449,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         console=True,
     )
     log.debug("Лог: %s", log_file)
-    if args.command == "watch":
-        return run_watch(args)
-    if args.command == "run":
-        return run_profiles(args)
+    if args.command in ("watch", "run"):
+        instance = runtime.acquire_single_instance()  # TZ 4.14: one voicing copy
+        if instance is None:
+            print("Subtitle Voicer уже запущен — второй экземпляр не нужен.", file=sys.stderr)
+            return EXIT_ALREADY_RUNNING
+        try:
+            return run_watch(args) if args.command == "watch" else run_profiles(args)
+        finally:
+            runtime.release_single_instance(instance)
     try:
         if args.command == "profiles":
             return run_profiles_command(args)

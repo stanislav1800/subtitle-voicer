@@ -73,13 +73,18 @@ class _Game:
     pid: int | None
 
 
+@dataclass(frozen=True, slots=True)
+class _Pause:
+    paused: bool
+
+
 class _Hotkey(StrEnum):
     SKIP = "skip"
     REPEAT = "repeat"
     TOGGLE_PAUSE = "toggle_pause"
 
 
-_Message = _Submit | _Started | _Finished | _Hotkey | _Game
+_Message = _Submit | _Started | _Finished | _Hotkey | _Game | _Pause
 
 
 class SpeechService(Service):
@@ -121,6 +126,14 @@ class SpeechService(Service):
 
     def toggle_pause(self) -> None:
         self._inbox.put(_Hotkey.TOGGLE_PAUSE)
+
+    def set_paused(self, paused: bool) -> None:
+        """Auto voicing off/on (the tray switch); manual lines still play."""
+        self._inbox.put(_Pause(paused))
+
+    @property
+    def paused(self) -> bool:
+        return self._scheduler.paused
 
     def set_game(self, pid: int | None) -> None:
         """The game to duck from now on; the previous one gets its volume back."""
@@ -167,6 +180,10 @@ class SpeechService(Service):
                 commands = s.set_paused(not s.paused)
                 log.info("Автоозвучка %s", "на паузе" if s.paused else "продолжена")
                 self._execute(commands)
+            case _Pause(paused=paused):
+                if paused != s.paused:
+                    log.info("Автоозвучка %s", "на паузе" if paused else "продолжена")
+                    self._execute(s.set_paused(paused))
             case _Game(pid=pid):
                 self._switch_game(pid)
             case _Started(line_id=line_id, t_play=t_play):

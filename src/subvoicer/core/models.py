@@ -6,6 +6,7 @@ Models are added by the stages that need them.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
 
@@ -173,3 +174,22 @@ class FoundGame:
     install_dir: Path
     exe: str | None
     icon_path: Path | None
+
+
+@dataclass(frozen=True, slots=True)
+class HistoryEntry:
+    """A recent line with its metrics (tray, developer History; TZ 4.13)."""
+
+    id: int
+    time: datetime
+    channel: str
+    speaker: str | None
+    text: str  # as recognised, without the speaker name
+    confidence: float = 1.0
+    ocr_input: str = ""
+    t_change: float | None = None
+    voice: str = ""
+    priority: str = ""
+    rate: float = 1.0
+    latency_ms: float | None = None  # TZ 6: mask change -> first sound
+    outcome: str = "queued"  # queued | playing | done | cut | dropped:<reason>

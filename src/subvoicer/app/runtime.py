@@ -71,3 +71,27 @@ class Session:
                 close()
             except Exception:
                 log.exception("Ошибка при закрытии")
+
+
+def dark_title_bar(hwnd: int) -> None:
+    if sys.platform == "win32":
+        from subvoicer.engines.system import windows
+
+        windows.set_dark_title_bar(hwnd)
+
+
+def acquire_single_instance() -> object | None:
+    """The first copy gets a handle to keep (release with ``release_single_instance``);
+    a second copy gets None (TZ 4.14)."""
+    if sys.platform != "win32":
+        return object()
+    from subvoicer.engines.system.single_instance import SingleInstance
+
+    instance = SingleInstance()
+    return instance if instance.acquire() else None
+
+
+def release_single_instance(handle: object | None) -> None:
+    release = getattr(handle, "release", None)
+    if release is not None:
+        release()
