@@ -23,6 +23,7 @@ from subvoicer.pipeline.speech.scheduler import (
     Command,
     Dropped,
     Hurry,
+    OverlapMode,
     Play,
     SpeechScheduler,
     Stop,
@@ -78,13 +79,30 @@ class _Pause:
     paused: bool
 
 
+@dataclass(frozen=True, slots=True)
+class SpeechTuning:
+    """Settings applied on the fly (TZ 4.14: no restart)."""
+
+    base_rate: float
+    overlap: OverlapMode
+    hurry_rate: float
+    max_lag_s: float
+    low_priority_ttl_s: float
+    volume: float
+    duck_level: float
+    duck_fade_s: float
+    duck_release_s: float
+    cache_size: int
+    output_device: str
+
+
 class _Hotkey(StrEnum):
     SKIP = "skip"
     REPEAT = "repeat"
     TOGGLE_PAUSE = "toggle_pause"
 
 
-_Message = _Submit | _Started | _Finished | _Hotkey | _Game | _Pause
+_Message = _Submit | _Started | _Finished | _Hotkey | _Game | _Pause | SpeechTuning
 
 
 class SpeechService(Service):
@@ -126,6 +144,9 @@ class SpeechService(Service):
 
     def toggle_pause(self) -> None:
         self._inbox.put(_Hotkey.TOGGLE_PAUSE)
+
+    def tune(self, tuning: SpeechTuning) -> None:
+        self._inbox.put(tuning)
 
     def set_paused(self, paused: bool) -> None:
         """Auto voicing off/on (the tray switch); manual lines still play."""
@@ -186,6 +207,8 @@ class SpeechService(Service):
                     self._execute(s.set_paused(paused))
             case _Game(pid=pid):
                 self._switch_game(pid)
+            case SpeechTuning():
+                self._tune(message)
             case _Started(line_id=line_id, t_play=t_play):
                 line = self._lines.get(line_id)
                 if line is not None:
@@ -256,6 +279,25 @@ class SpeechService(Service):
             len(line.pending),
         )
         line.rate = rate
+
+    def _tune(self, t: SpeechTuning) -> None:
+        s = self._scheduler
+        s.base_rate, s.overlap, s.hurry_rate = t.base_rate, t.overlap, t.hurry_rate
+        s.max_lag_s, s.low_priority_ttl_s = t.max_lag_s, t.low_priority_ttl_s
+        self._cache.resize(t.cache_size)
+        self._output.set_volume(t.volume)
+        if self._ducking is not None:
+            envelope = self._ducking.envelope
+            envelope.level, envelope.fade_s, envelope.release_s = (
+                t.duck_level,
+                t.duck_fade_s,
+                t.duck_release_s,
+            )
+        try:
+            self._output.set_device(t.output_device or None)
+        except Exception:
+            log.exception("Не удалось открыть устройство вывода %r", t.output_device)
+        log.info("Настройки озвучки применены (скорость %.2f, %s)", t.base_rate, t.overlap)
 
     def _switch_game(self, pid: int | None) -> None:
         d = self._ducking

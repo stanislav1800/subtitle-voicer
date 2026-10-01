@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import os
 import tomllib
 from pathlib import Path
 from typing import Literal
 
+import tomlkit
 from pydantic import Field
 
 from subvoicer.config.profile import StrictModel
@@ -54,3 +56,23 @@ def load_settings(path: Path) -> Settings:
     if not path.exists():
         return Settings()
     return Settings.model_validate(tomllib.loads(path.read_text(encoding="utf-8")))
+
+
+def save_settings(path: Path, settings: Settings) -> None:
+    """Atomic write; keys of the file that the user commented stay as tomlkit keeps them."""
+    try:
+        document = tomlkit.parse(path.read_text(encoding="utf-8")) if path.exists() else None
+    except (OSError, ValueError):
+        document = None
+    if document is None:
+        document = tomlkit.document()
+        document.add(tomlkit.comment("Subtitle Voicer — общие настройки (ТЗ 4.14)"))
+    for key, value in settings.model_dump(mode="json").items():
+        document[key] = value
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    try:
+        tmp.write_text(tomlkit.dumps(document), encoding="utf-8")
+        os.replace(tmp, path)
+    finally:
+        tmp.unlink(missing_ok=True)

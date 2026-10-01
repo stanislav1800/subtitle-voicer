@@ -95,3 +95,35 @@ def release_single_instance(handle: object | None) -> None:
     release = getattr(handle, "release", None)
     if release is not None:
         release()
+
+
+def autostart_command() -> str:
+    """``pythonw -m subvoicer`` of this environment: no console window at logon."""
+    from pathlib import Path
+
+    exe = Path(sys.executable)
+    windowed = exe.with_name("pythonw.exe")
+    return f'"{windowed if windowed.exists() else exe}" -m subvoicer'
+
+
+def set_autostart(enabled: bool) -> None:
+    if sys.platform == "win32":
+        from subvoicer.engines.system import autostart
+
+        autostart.set_enabled(enabled, autostart_command())
+
+
+def output_devices() -> list[str]:
+    from subvoicer.engines.audio.output import output_devices as devices
+
+    try:
+        return devices()
+    except Exception:
+        log.exception("Список устройств вывода недоступен")
+        return []
+
+
+def make_hotkeys() -> object:
+    from subvoicer.engines.system.hotkeys import PynputHotkeys
+
+    return PynputHotkeys()

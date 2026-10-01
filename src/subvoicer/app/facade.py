@@ -13,19 +13,23 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from subvoicer.app import runtime
 from subvoicer.app.bus import Bus
 from subvoicer.app.game_runner import RunParts, build_run
 from subvoicer.config.paths import AppPaths
 from subvoicer.config.profile_store import ProfileStore
-from subvoicer.config.settings import Settings, load_settings
+from subvoicer.config.settings import Settings, load_settings, save_settings
 from subvoicer.core.events import (
     Event,
     GameActivated,
     GameClosed,
     LayoutMissing,
+    SettingsApplied,
 )
 from subvoicer.core.models import HistoryEntry, Priority, SpeechRequest, Voice, WindowRef
+from subvoicer.pipeline.speech.scheduler import OverlapMode
 from subvoicer.services.history import History
+from subvoicer.services.speech_service import SpeechTuning
 
 log = logging.getLogger(__name__)
 
@@ -59,6 +63,12 @@ class AppFacade:
         self._missing = False
         self._title: str | None = None
         self._manual_ids = itertools.count(MANUAL_ID_START)
+        self._hotkeys: object | None = None
+        self._hotkey_actions: dict[str, Callable[[], None]] = {
+            "pause": self.toggle_enabled,
+            "repeat": self.repeat,
+            "skip": self.skip,
+        }
         self.bus.subscribe(GameActivated, self._on_activated)
         self.bus.subscribe(LayoutMissing, self._on_missing)
         self.bus.subscribe(GameClosed, self._on_closed)
@@ -67,15 +77,66 @@ class AppFacade:
 
     def start(self, hotkeys: bool = True) -> None:
         """Loads OCR and TTS (seconds) — call from a worker thread, not the Qt one."""
-        parts = build_run(self.settings, self.bus, self.paths, hotkeys=hotkeys)
+        parts = build_run(self.settings, self.bus, self.paths, hotkeys=False)
         parts.session.start()
         parts.speech.service.set_paused(not self.settings.enabled)
         self._parts = parts
+        if hotkeys:
+            self._hotkeys = runtime.make_hotkeys()
+            self._register_hotkeys()
 
     def stop(self) -> None:
+        hotkeys, self._hotkeys = self._hotkeys, None
+        stop_hotkeys = getattr(hotkeys, "stop", None)
+        if stop_hotkeys is not None:
+            stop_hotkeys()
         parts, self._parts = self._parts, None
         if parts is not None:
             parts.session.stop()
+
+    # ------------------------------------------------------------------ settings
+
+    def apply_settings(self, new: Settings) -> None:
+        """Save and apply at once, without a restart (TZ 4.14)."""
+        old, self.settings = self.settings, new
+        save_settings(self.paths.settings_file, new)
+        self.history.resize(new.history_size)
+        if new.autostart != old.autostart:
+            try:
+                runtime.set_autostart(new.autostart)
+            except OSError:
+                log.exception("Не удалось изменить автозапуск")
+        parts = self._parts
+        if parts is not None:
+            parts.speech.service.tune(tuning(new))
+            parts.speech.service.set_paused(not new.enabled)
+            parts.offers.update(new.excluded_exes, new.never_ask_exes)
+            parts.runner.set_poll_hz(new.poll_hz)
+        if new.hotkeys != old.hotkeys:
+            self._register_hotkeys()
+        self.bus.publish(SettingsApplied())
+
+    def set_hotkey_action(self, name: str, action: Callable[[], None]) -> None:
+        """Actions the GUI owns (zone editor, debug frame): bound with the others."""
+        self._hotkey_actions[name] = action
+        self._register_hotkeys()
+
+    def _register_hotkeys(self) -> None:
+        start = getattr(self._hotkeys, "start", None)
+        if start is None:
+            return
+        actions = dict(self._hotkey_actions)
+        if not self.settings.dev_mode:
+            actions.pop("debug_capture", None)  # TZ 4.13.2: not registered without dev mode
+        bindings = {
+            self.settings.hotkeys[name]: action
+            for name, action in actions.items()
+            if name in self.settings.hotkeys
+        }
+        try:
+            start(bindings)
+        except Exception:
+            log.exception("Горячие клавиши не зарегистрированы")
 
     @property
     def ready(self) -> bool:
@@ -87,9 +148,11 @@ class AppFacade:
     # ------------------------------------------------------------------ speech
 
     def set_enabled(self, enabled: bool) -> None:
-        self.settings = self.settings.model_copy(update={"enabled": enabled})
-        if self._parts is not None:
-            self._parts.speech.service.set_paused(not enabled)
+        if enabled != self.settings.enabled:
+            self.apply_settings(self.settings.model_copy(update={"enabled": enabled}))
+
+    def toggle_enabled(self) -> None:
+        self.set_enabled(not self.settings.enabled)
 
     def repeat(self) -> None:
         if self._parts is not None:
@@ -112,6 +175,20 @@ class AppFacade:
             speaker=speaker,
         )
         self._parts.speech.service.submit(request)
+
+    def zone_hotkeys(self) -> dict[str, str]:
+        """Hotkeys of hotkey zones in all profiles: combo -> «game · zone» (TZ 4.12)."""
+        found: dict[str, str] = {}
+        for stored in self.store.load_all():
+            for layout in stored.profile.layouts.values():
+                for zone in layout.zones:
+                    if zone.trigger == "hotkey" and zone.hotkey:
+                        title = stored.profile.title or stored.path.stem
+                        found[zone.hotkey] = f"{title} · {zone.name or zone.id}"
+        return found
+
+    def output_devices(self) -> list[str]:
+        return runtime.output_devices()
 
     def voices(self) -> list[Voice]:
         return list(self._parts.speech.voices) if self._parts is not None else []
@@ -153,3 +230,19 @@ class AppFacade:
     def _on_closed(self, _event: Event) -> None:
         with self._lock:
             self._game, self._missing, self._title = None, False, None
+
+
+def tuning(settings: Settings) -> SpeechTuning:
+    return SpeechTuning(
+        base_rate=settings.base_rate,
+        overlap=OverlapMode(settings.overlap_mode),
+        hurry_rate=settings.hurry_rate,
+        max_lag_s=settings.max_lag_s,
+        low_priority_ttl_s=settings.low_priority_ttl_s,
+        volume=settings.voice_volume,
+        duck_level=settings.duck_level,
+        duck_fade_s=settings.duck_fade_ms / 1000,
+        duck_release_s=settings.duck_release_ms / 1000,
+        cache_size=settings.tts_cache_size,
+        output_device=settings.output_device,
+    )

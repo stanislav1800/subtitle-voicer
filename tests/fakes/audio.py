@@ -62,6 +62,12 @@ class FakeOutput:
     def stop(self, line_id: int, fade_ms: int | None = None) -> None:
         self.log.append(("stop", line_id))
 
+    def set_volume(self, volume: float) -> None:
+        self.log.append(("volume", round(volume * 100)))
+
+    def set_device(self, device: str | None) -> None:
+        self.log.append(("device", 0 if not device else 1))
+
     # the audio thread's side
     def sound_starts(self, line_id: int, t: float) -> None:
         self._started(line_id, t)

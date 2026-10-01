@@ -7,9 +7,11 @@ from collections.abc import Callable, Sequence
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QButtonGroup,
+    QComboBox,
     QFrame,
     QHBoxLayout,
     QLabel,
+    QLayout,
     QPushButton,
     QSlider,
     QVBoxLayout,
@@ -18,6 +20,34 @@ from PySide6.QtWidgets import (
 
 from subvoicer.ui import theme
 from subvoicer.ui.widgets.toggle import ToggleSwitch
+
+
+def clear_layout(layout: QLayout) -> None:
+    """Remove and destroy every widget of ``layout`` now (``deleteLater`` alone leaves them
+    painted until the event loop runs)."""
+    while layout.count():
+        item = layout.takeAt(0)
+        if item is None:
+            continue
+        widget = item.widget()
+        if widget is not None:
+            widget.hide()
+            widget.setParent(None)
+            widget.deleteLater()
+        elif item.layout() is not None:
+            clear_layout(item.layout())
+
+
+def combo(items: Sequence[tuple[str, object]], value: object, name: str) -> QComboBox:
+    """A drop-down that does not grow with its longest item."""
+    box = QComboBox()
+    box.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+    box.setMinimumContentsLength(14)
+    box.setAccessibleName(name)
+    for text, data in items:
+        box.addItem(text, data)
+    box.setCurrentIndex(max(box.findData(value), 0))
+    return box
 
 
 def label(text: str, name: str = "", *, wrap: bool = False) -> QLabel:
@@ -79,7 +109,7 @@ def titled(title: str, hint: str = "") -> QWidget:
     layout = QVBoxLayout(box)
     layout.setContentsMargins(0, 0, 0, 0)
     layout.setSpacing(2)
-    layout.addWidget(label(title))
+    layout.addWidget(label(title, wrap=True))
     if hint:
         layout.addWidget(label(hint, "hint", wrap=True))
     return box
@@ -120,7 +150,7 @@ class SliderRow(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
         self._value = label("", "value")
-        layout.addWidget(row(label(title), self._value))
+        layout.addWidget(row(label(title, wrap=True), self._value))
         self.slider = QSlider(Qt.Orientation.Horizontal)
         self.slider.setAccessibleName(title)
         self.slider.setRange(0, round((maximum - minimum) / step))

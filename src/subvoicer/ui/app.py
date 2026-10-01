@@ -14,10 +14,12 @@ from subvoicer.app import runtime
 from subvoicer.app.facade import AppFacade
 from subvoicer.app.log import setup_logging
 from subvoicer.config.paths import AppPaths
-from subvoicer.core.events import Event, GameActivated, GameClosed, LayoutMissing
+from subvoicer.core.events import Event, GameActivated, GameClosed, LayoutMissing, SettingsApplied
 from subvoicer.core.models import HistoryEntry
 from subvoicer.ui import theme
 from subvoicer.ui.bridge import Bridge
+from subvoicer.ui.settings.general import GeneralPage
+from subvoicer.ui.settings.hotkeys import HotkeysPage
 from subvoicer.ui.settings.window import Page, SettingsWindow
 from subvoicer.ui.tray import Tray
 
@@ -81,15 +83,13 @@ class Application:
         self.loader.done.connect(self._on_loaded)
 
     def _build_pages(self) -> None:
-        general = Page("Общие", "Действуют во всех играх. Изменения применяются сразу.")
-        general.finish()
-        self.window.add_page("general", "Общие", "sliders-horizontal", general)
+        self.general = GeneralPage(self.facade)
+        self.window.add_page("general", "Общие", "sliders-horizontal", self.general)
         profiles = Page("Профили и голоса")
         profiles.finish()
         self.window.add_page("profiles", "Профили и голоса", "users", profiles)
-        hotkeys = Page("Горячие клавиши")
-        hotkeys.finish()
-        self.window.add_page("hotkeys", "Горячие клавиши", "keyboard", hotkeys)
+        self.hotkeys = HotkeysPage(self.facade)
+        self.window.add_page("hotkeys", "Горячие клавиши", "keyboard", self.hotkeys)
 
     def run(self) -> None:
         self.tray.show()
@@ -116,6 +116,10 @@ class Application:
         if isinstance(event, STATUS_EVENTS):
             self.tray.refresh()
             self.window.refresh_status()
+        if isinstance(event, SettingsApplied):
+            self.tray.refresh()
+            self.window.refresh_status()
+            self.general.sync()
 
     def _on_second_copy(self) -> None:
         connection = self.server.nextPendingConnection()

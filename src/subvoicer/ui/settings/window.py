@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QCloseEvent, QShowEvent
+from PySide6.QtGui import QCloseEvent, QResizeEvent, QShowEvent
 from PySide6.QtWidgets import (
     QButtonGroup,
     QFrame,
@@ -32,6 +32,7 @@ class Page(QScrollArea):
         super().__init__()
         self.setWidgetResizable(True)
         self.setFrameShape(QFrame.Shape.NoFrame)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         inner = QWidget()
         self.content = QVBoxLayout(inner)
         self.content.setContentsMargins(32, 28, 32, 28)
@@ -43,6 +44,21 @@ class Page(QScrollArea):
 
     def finish(self) -> None:
         self.content.addStretch(1)
+
+    def resizeEvent(self, event: QResizeEvent) -> None:
+        super().resizeEvent(event)
+        self.fit_height()
+
+    def fit_height(self) -> None:
+        """Wrapped labels need their height for the actual width, or the cards get squeezed
+        instead of the page scrolling."""
+        inner = self.widget()
+        layout = inner.layout()
+        width = self.viewport().width()
+        if layout is not None and layout.hasHeightForWidth():
+            inner.setMinimumHeight(layout.totalHeightForWidth(width))
+        else:
+            inner.setMinimumHeight(inner.sizeHint().height())
 
     def refresh(self) -> None:
         """Called when the page is shown: re-read what may have changed."""

@@ -275,13 +275,16 @@ class GameRunner:
         router: ProfileRouter,
         speech: SpeechService,
         preparer: TextPreparer,
-        build: Callable[[Profile, WindowRef, str], Session | None],
+        build: Callable[[Profile, WindowRef, str, float], Session | None],
+        poll_hz: float = 10,
     ) -> None:
         self._store = store
         self._router = router
         self._speech = speech
         self._preparer = preparer
         self._build = build
+        self.poll_hz = poll_hz
+        self._last: GameActivated | None = None
         self._lock = threading.Lock()
         self._session: Session | None = None
         self._key: tuple[int, str, str] | None = None  # (pid, aspect, layouts json)
@@ -296,6 +299,7 @@ class GameRunner:
         layout = profile.layouts.get(event.aspect)
         key = (event.window.pid, event.aspect, layout.model_dump_json() if layout else "")
         with self._lock:
+            self._last = event
             self._router.set_profile(path, profile, event.aspect)
             self._preparer.dictionary = pronunciation(profile)
             self._speech.set_game(event.window.pid)
@@ -309,7 +313,7 @@ class GameRunner:
                 )
                 return
             try:
-                session = self._build(profile, event.window, event.aspect)
+                session = self._build(profile, event.window, event.aspect, self.poll_hz)
             except Exception:
                 log.exception("Не удалось запустить зоны профиля %s", path.name)
                 return
@@ -320,8 +324,20 @@ class GameRunner:
             self._session = session
             log.info("Зоны профиля %s запущены (%s)", path.name, event.aspect)
 
+    def set_poll_hz(self, poll_hz: float) -> None:
+        """A new zone polling rate: the running game session is rebuilt with it."""
+        with self._lock:
+            if poll_hz == self.poll_hz:
+                return
+            self.poll_hz = poll_hz
+            last, self._key = self._last, None
+            self._stop_session()
+        if last is not None:
+            self.on_activated(last)
+
     def on_closed(self, _event: GameClosed | CaptureStopped) -> None:
         with self._lock:
+            self._last = None
             self._stop_session()
             self._key = None
             self._router.set_profile(None, None)
@@ -382,10 +398,12 @@ def build_run(settings: Settings, bus: EventBus, paths: AppPaths, hotkeys: bool 
     engines = OcrEngines()
     engines.get("rapidocr")  # load before the first game, not on its first frame
 
-    def build(profile: Profile, window: WindowRef, aspect: str) -> Session | None:
-        return build_game_session(profile, window, aspect, engines, bus, settings.poll_hz)
+    def build(profile: Profile, window: WindowRef, aspect: str, poll_hz: float) -> Session | None:
+        return build_game_session(profile, window, aspect, engines, bus, poll_hz)
 
-    runner = GameRunner(store, router, speech.service, speech.preparer, build)
+    runner = GameRunner(
+        store, router, speech.service, speech.preparer, build, poll_hz=settings.poll_hz
+    )
     service = speech.service
 
     def route(event: UtteranceDetected) -> None:

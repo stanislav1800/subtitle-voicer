@@ -28,5 +28,10 @@ class SpeechCache:
         while len(self._items) > self.size:
             self._items.popitem(last=False)
 
+    def resize(self, size: int) -> None:
+        self.size = size
+        while len(self._items) > self.size:
+            self._items.popitem(last=False)
+
     def __len__(self) -> int:
         return len(self._items)

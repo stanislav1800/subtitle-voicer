@@ -23,9 +23,13 @@ class OfferPolicy:
     not marked «не спрашивать» and not asked about yet in this run."""
 
     def __init__(self, excluded: Iterable[str], never_ask: Iterable[str]) -> None:
+        self._asked: set[str] = set()
+        self.update(excluded, never_ask)
+
+    def update(self, excluded: Iterable[str], never_ask: Iterable[str]) -> None:
+        """New lists from the settings; who was asked in this run is kept."""
         self._excluded = _lower(excluded)
         self._never_ask = _lower(never_ask)
-        self._asked: set[str] = set()
 
     def should_offer(self, exe: str, fullscreen: bool) -> bool:
         key = exe.lower()

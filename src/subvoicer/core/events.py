@@ -110,3 +110,8 @@ class ProfileBound(Event):
 
     profile_path: str
     title: str
+
+
+@dataclass(frozen=True, slots=True)
+class SettingsApplied(Event):
+    """The settings changed (window, tray switch or hotkey): views refresh themselves."""

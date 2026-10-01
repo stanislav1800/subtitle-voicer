@@ -39,7 +39,8 @@ def main() -> int:
         if args.page and key != args.page:
             continue
         window.show_page(key)
-        qt.processEvents()
+        for _ in range(3):
+            qt.processEvents()
         path = args.out / f"{key}.png"
         window.grab().save(str(path))
         print(path)

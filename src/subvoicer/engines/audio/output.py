@@ -79,6 +79,20 @@ class SoundDeviceOutput:
         self._stream.start()
         log.info("Звук: %s, %d Гц", self._stream.device, self.sample_rate)
 
+    def set_volume(self, volume: float) -> None:
+        self.volume = max(0.0, min(1.0, volume))
+
+    def set_device(self, device: str | None) -> None:
+        if (device or None) == self.device:
+            return
+        self.close()
+        with self._lock:
+            replaced, self._line = self._line, None
+        if replaced is not None:
+            self._on_finished(replaced.id, False)
+        self.device = device or None
+        self.load()
+
     def close(self) -> None:
         stream, self._stream = self._stream, None
         if stream is not None:
@@ -195,3 +209,15 @@ class SoundDeviceOutput:
         out[:n] *= np.linspace(start, end, n, endpoint=False, dtype=np.float32)
         out[n:] = 0.0
         line.fade_left = 0 if written == 0 else line.fade_left - n
+
+
+def output_devices() -> list[str]:
+    """Names of the output devices of the default host API (what ``device=`` accepts)."""
+    import sounddevice as sd
+
+    hostapi = sd.default.hostapi
+    names = []
+    for device in sd.query_devices():
+        if device["max_output_channels"] > 0 and device["hostapi"] == hostapi:
+            names.append(str(device["name"]))
+    return names

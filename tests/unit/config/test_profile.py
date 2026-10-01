@@ -167,3 +167,17 @@ def test_settings_defaults_and_unknown_keys(tmp_path: Path) -> None:
     with pytest.raises(ValidationError, match="speed"):
         load_settings(path)
     assert Settings().duck_level == 0.4
+
+
+def test_settings_round_trip_keeps_comments(tmp_path: Path) -> None:
+    from subvoicer.config.settings import save_settings
+
+    path = tmp_path / "settings.toml"
+    path.write_text("# моя скорость\nbase_rate = 1.3\n", encoding="utf-8")
+    settings = load_settings(path).model_copy(update={"duck_level": 0.25})
+    save_settings(path, settings)
+    text = path.read_text(encoding="utf-8")
+    assert "# моя скорость" in text
+    again = load_settings(path)
+    assert (again.base_rate, again.duck_level) == (1.3, 0.25)
+    assert again == settings
