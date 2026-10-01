@@ -72,7 +72,7 @@ def test_newline_separator_for_manual_reading() -> None:
 
 def test_bboxes_are_mapped_back_after_upscale() -> None:
     ocr = FakeOcr([[line("Текст", 0.9, (100, 40, 500, 80))]])
-    outcome = OcrRunner(ocr, OcrSettings(upscale=2.0)).run(*zone(line_height=20), OcrInput.RAW)
+    outcome = OcrRunner(ocr, OcrSettings(upscale=2.0)).run(*zone(line_height=12), OcrInput.RAW)
     assert ocr.inputs[0].shape[:2] == (200, 600)
     assert outcome.best.lines[0].bbox == (50, 20, 250, 40)
 

@@ -96,7 +96,7 @@ class WatchConfig:
     speaker: str = "none"  # one of SPEAKER_MODES
     poll_hz: float = 10
     ocr_engine: str = "rapidocr"
-    ocr_options: dict[str, Any] = field(default_factory=lambda: {"model": "cyrillic"})
+    ocr_options: dict[str, Any] = field(default_factory=lambda: {"model": "eslav"})
     capture_modes: tuple[str, ...] = ("wgc", "dxgi")
     pid: int | None = None  # the game process to duck
     speech: SpeechConfig | None = None  # None: print only (stage 2)

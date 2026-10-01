@@ -31,7 +31,7 @@ class RapidOcrEngine:
 
     def __init__(
         self,
-        model: str = "cyrillic",
+        model: str = "eslav",
         threads: int = 4,
         det_max_side: int = 1280,
         merge_rows: bool = True,

@@ -74,7 +74,7 @@ class OcrEngines:
     """OCR engines by id, loaded once and shared by all zones and sessions."""
 
     def __init__(self, options: Mapping[str, dict[str, Any]] | None = None) -> None:
-        self._options = options or {"rapidocr": {"model": "cyrillic"}}
+        self._options = options or {"rapidocr": {"model": "eslav"}}
         self._engines: dict[str, Any] = {}
         self._lock = threading.Lock()
 

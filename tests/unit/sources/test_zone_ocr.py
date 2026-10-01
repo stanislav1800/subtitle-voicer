@@ -223,7 +223,7 @@ class ByWidthOcr:
 
     def recognize(self, image: np.ndarray) -> OcrResult:
         self.images.append(image)
-        said = self.name if image.shape[1] < 500 else self.text
+        said = self.name if image.shape[1] < 300 else self.text
         return OcrResult((OcrLine(said, 0.97, (0, 0, 10, 10)),))
 
 

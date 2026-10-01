@@ -35,7 +35,7 @@ def build_input(
     kind: OcrInput,
     *,
     upscale: float = 2.0,
-    min_line_height: int = 32,
+    min_line_height: int = 20,
 ) -> PreparedInput:
     """Build an OCR input from a zone crop and its text mask.
 

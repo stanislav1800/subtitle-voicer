@@ -15,7 +15,7 @@ SAME_ROW_OVERLAP = 0.5  # boxes overlapping vertically by half of the lower one 
 @dataclass(frozen=True, slots=True)
 class OcrSettings:
     upscale: float = 2.0
-    min_line_height: int = 32
+    min_line_height: int = 20  # by measure on real frames (DECISIONS, TZ 1.17)
     low_confidence: float = 0.8
 
 
