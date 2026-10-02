@@ -241,6 +241,7 @@ subtitle-voicer/
 │   │   ├── log.py                 # логирование: файл с ротацией, консоль, sys/threading.excepthook (4.14 ТЗ)
 │   │   ├── game_runner.py         # run: зоны из профиля, ProfileRouter (политика зоны, персонажи), смена игры
 │   │   ├── profile_commands.py    # команды профилей и персонажей для CLI (этап 5)
+│   │   ├── zone_tools.py          # для редактора зон: кадр окна, скриншот, пипетка, предпросмотр зоны
 │   │   └── facade.py              # команды для UI и CLI: pause, repeat, skip, save_profile, preview_voice …
 │   │
 │   ├── ui/                        # только здесь PySide6
@@ -250,8 +251,8 @@ subtitle-voicer/
 │   │   ├── widgets/               # toggle.py, segmented.py, chip.py, keycap.py
 │   │   ├── tray.py
 │   │   ├── notifications.py
-│   │   ├── settings/              # window.py, general.py, profiles.py, hotkeys.py, history.py
-│   │   ├── zone_editor/           # editor.py, canvas.py, panel.py, screenshot_dialog.py
+│   │   ├── settings/              # window.py, general.py, profiles.py, dialogs.py, hotkeys.py, history.py
+│   │   ├── zone_editor/           # editor.py, canvas.py, panel.py (скриншот открывается из ui/app.py)
 │   │   ├── line_window.py         # окно реплики и исправление произношения
 │   │   └── overlay.py
 │   │
@@ -393,7 +394,7 @@ TTS: dict[str, str] = {
 | 3 | `engines/tts/`, `engines/audio/output.py`, `engines/system/hotkeys.py` (пауза / повтор / пропуск), `pipeline/text/`, `pipeline/speech/`, `pipeline/speaker/gender.py`, `services/speech_service.py`, `resources/voices/`, `tools/voice_samples.py`, `say.py`, `latency_report.py` |
 | 4 | `engines/audio/ducker.py`, `pipeline/speech/ducking.py` |
 | 5 | `config/profile*.py`, `config/settings.py`, `config/migrations.py`, `config/characters_csv.py`, `pipeline/speaker/characters.py`, `pipeline/games/`, `pipeline/vision/regions.py`, `engines/system/windows.py` (окно переднего плана, порт `Desktop`), `services/game_watcher.py`, `app/game_runner.py`, `app/profile_commands.py`, `resources/zone_templates.toml`, `excluded_exes.txt`, `cli.py run / profiles / characters`, сценарий `subtitle_player.py --scenario profiles`; после этапа (ТЗ 1.17) — `tools/real_bench.py`, `tests/fixtures/real/cyberpunk` |
-| 6 | `ui/`, `app/facade.py`, `services/history.py`, `engines/system/single_instance.py` |
+| 6 | `ui/`, `app/facade.py`, `app/zone_tools.py`, `services/history.py`, `engines/system/single_instance.py`, `autostart.py` (в ТЗ — этап 8, нужен для «Общих»), `__main__.py`, `tools/ui_snapshot.py` |
 | 7 | `sources/manual.py`, `engines/system/hotkeys.py` целиком, `services/hotkey_service.py` |
 | 8 | загрузка моделей в `config/` + `engines/`, `engines/system/autostart.py` |
 | 9 | `engines/library/`, `engines/system/icons.py` |
