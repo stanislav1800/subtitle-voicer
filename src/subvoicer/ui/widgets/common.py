@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QResizeEvent
 from PySide6.QtWidgets import (
     QButtonGroup,
     QComboBox,
@@ -94,7 +95,7 @@ def icon_button(
     button.setToolTip(tooltip)
     button.setAccessibleName(tooltip)
     if on_click is not None:
-        button.clicked.connect(on_click)
+        button.clicked.connect(lambda _checked=False: on_click())  # not the checked flag
     return button
 
 
@@ -102,7 +103,7 @@ def primary(text: str, on_click: Callable[[], None] | None = None) -> QPushButto
     button = QPushButton(text)
     button.setObjectName("primary")
     if on_click is not None:
-        button.clicked.connect(on_click)
+        button.clicked.connect(lambda _checked=False: on_click())  # not the checked flag
     return button
 
 
@@ -200,3 +201,28 @@ class Segmented(QFrame):
     def set_value(self, key: str) -> None:
         if key in self._buttons:
             self._buttons[key].setChecked(True)
+
+
+class ElidedLabel(QLabel):
+    """One line that shortens itself with «…» in the middle instead of widening the window
+    (long game paths); the full text is in the tooltip."""
+
+    def __init__(self, text: str, name: str = "") -> None:
+        super().__init__()
+        if name:
+            self.setObjectName(name)
+        self._full = text
+        self.setToolTip(text)
+        self.setMinimumWidth(40)
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self._update()
+
+    def resizeEvent(self, event: QResizeEvent) -> None:
+        super().resizeEvent(event)
+        self._update()
+
+    def _update(self) -> None:
+        metrics = self.fontMetrics()
+        self.setText(
+            metrics.elidedText(self._full, Qt.TextElideMode.ElideMiddle, max(self.width(), 40))
+        )

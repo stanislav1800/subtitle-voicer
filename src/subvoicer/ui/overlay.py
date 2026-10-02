@@ -7,6 +7,7 @@ from PySide6.QtCore import QPointF, QRectF, Qt, QTimer
 from PySide6.QtGui import QColor, QPainter, QPaintEvent, QPen, QScreen
 from PySide6.QtWidgets import QWidget
 
+from subvoicer.app import runtime
 from subvoicer.app.facade import AppFacade, DebugState
 from subvoicer.ui import theme
 from subvoicer.ui.widgets.screens import screen_for
@@ -80,6 +81,7 @@ class Overlay(QWidget):
             self._game = QRectF(self.rect())
         if not self.isVisible():
             self.show()
+        runtime.keep_topmost(int(self.winId()))  # a borderless game in focus would cover it
         self.update()
 
     def paintEvent(self, _event: QPaintEvent) -> None:

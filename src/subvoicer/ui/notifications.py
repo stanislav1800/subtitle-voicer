@@ -9,6 +9,7 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
+from subvoicer.app import runtime
 from subvoicer.ui import theme
 from subvoicer.ui.widgets.common import icon_button, label, primary
 
@@ -32,10 +33,12 @@ class Notification(QWidget):
             None,
             Qt.WindowType.Tool
             | Qt.WindowType.FramelessWindowHint
-            | Qt.WindowType.WindowStaysOnTopHint,
+            | Qt.WindowType.WindowStaysOnTopHint
+            | Qt.WindowType.WindowDoesNotAcceptFocus,
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)  # the game keeps focus
         self.setFixedWidth(WIDTH)
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -90,6 +93,7 @@ class Notification(QWidget):
             y = area.bottom() - (self.height() + MARGIN) * (stack_index + 1)
             self.move(x, y)
         self.show()
+        runtime.keep_topmost(int(self.winId()))
 
 
 class Notifier:

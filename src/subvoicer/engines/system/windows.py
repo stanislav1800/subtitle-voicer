@@ -157,3 +157,28 @@ def set_dark_title_bar(hwnd: int) -> None:
         )
     except OSError:
         log.debug("Тёмный заголовок окна недоступен", exc_info=True)
+
+
+HWND_TOPMOST = -1
+SWP_NOSIZE, SWP_NOMOVE, SWP_NOACTIVATE, SWP_SHOWWINDOW = 0x0001, 0x0002, 0x0010, 0x0040
+VK_MENU, KEYEVENTF_KEYUP = 0x12, 0x0002
+
+
+def keep_topmost(hwnd: int) -> None:
+    """Back on top of a borderless game without taking the focus (overlay, notifications)."""
+    ctypes.windll.user32.SetWindowPos(
+        hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE | SWP_SHOWWINDOW
+    )
+
+
+def force_foreground(hwnd: int) -> None:
+    """Take the focus from the game (the zone editor): Windows lets a process that just got
+    a key event do it, so a released Alt is sent first."""
+    user32 = ctypes.windll.user32
+    user32.keybd_event(VK_MENU, 0, 0, 0)
+    user32.keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, 0)
+    keep_topmost(hwnd)
+    try:
+        win32gui.SetForegroundWindow(hwnd)
+    except Exception:
+        log.debug("SetForegroundWindow отказал для %s", hwnd, exc_info=True)

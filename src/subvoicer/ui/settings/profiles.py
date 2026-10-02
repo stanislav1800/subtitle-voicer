@@ -42,6 +42,7 @@ from subvoicer.ui.settings.dialogs import (
 from subvoicer.ui.settings.window import Page
 from subvoicer.ui.widgets.common import (
     Card,
+    ElidedLabel,
     chip,
     clear_layout,
     combo,
@@ -126,9 +127,12 @@ class ProfilesPage(Page):
         games = Card("Игры")
         self._games = QListWidget()
         self._games.setMinimumHeight(220)
+        self._games.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._games.setTextElideMode(Qt.TextElideMode.ElideRight)
         self._games.currentItemChanged.connect(self._on_game)
         games.body.addWidget(self._games)
-        add = QPushButton("  Добавить игру по exe")
+        add = QPushButton("  Добавить игру")
+        add.setToolTip("Выбрать exe игры")
         add.setIcon(theme.icon("plus"))
         add.clicked.connect(self._add_game)
         games.body.addWidget(add)
@@ -251,9 +255,9 @@ class ProfilesPage(Page):
         title = profile.title or path.stem
         top.addWidget(badge(initials(title)))
         names = QVBoxLayout()
-        names.addWidget(label(title, "windowTitle"))
+        names.addWidget(ElidedLabel(title, "windowTitle"))
         where = " · ".join(p for p in (profile.exe or "без exe", profile.install_dir) if p)
-        names.addWidget(label(where, "mono"))
+        names.addWidget(ElidedLabel(where, "mono"))
         top.addLayout(names, 1)
         card.body.addLayout(top)
         running = self._facade.status().profile_path == str(path)

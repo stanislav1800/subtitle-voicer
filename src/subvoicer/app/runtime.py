@@ -171,3 +171,17 @@ def monitor_rect(hwnd: int) -> tuple[int, int, int, int] | None:
         return windows.monitor_of_window(hwnd).rect
     except LookupError:
         return None
+
+
+def keep_topmost(hwnd: int) -> None:
+    if sys.platform == "win32":
+        from subvoicer.engines.system import windows
+
+        windows.keep_topmost(hwnd)
+
+
+def force_foreground(hwnd: int) -> None:
+    if sys.platform == "win32":
+        from subvoicer.engines.system import windows
+
+        windows.force_foreground(hwnd)

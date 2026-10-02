@@ -36,7 +36,7 @@ from subvoicer.ui.settings.history import HistoryPage
 from subvoicer.ui.settings.hotkeys import HotkeysPage
 from subvoicer.ui.settings.profiles import ProfilesPage
 from subvoicer.ui.settings.window import SettingsWindow
-from subvoicer.ui.tray import Tray
+from subvoicer.ui.tray import Tray, pretty
 from subvoicer.ui.zone_editor.editor import ZoneEditor
 
 log = logging.getLogger("subvoicer.ui")
@@ -102,6 +102,7 @@ class Application:
         self.server.newConnection.connect(self._on_second_copy)
         self.server.listen(SERVER_NAME)
         self.notifier = Notifier()
+        self._missing_shown: set[tuple[str, str]] = set()
         self.overlay = Overlay(facade)
         self.line_window: LineWindow | None = None
         self.editor: ZoneEditor | None = None
@@ -203,23 +204,30 @@ class Application:
             self.window.refresh_status()
         match event:
             case ProfileOffered(window=window):
+                self.tray.offer(window, self._create_profile)
                 self.notifier.show(
                     Notification(
                         "Похоже, это новая игра",
-                        f"{mono(window.exe)} — создать профиль, чтобы озвучивать её субтитры?",
+                        f"{mono(window.exe)} — создать профиль, чтобы озвучивать её субтитры? "
+                        "Если не успели нажать — пункт есть в меню трея.",
                         ("Создать профиль", lambda: self._create_profile(window)),
                         ("Не спрашивать", lambda: self.facade.never_ask(window.exe)),
-                        timeout_ms=None,
+                        timeout_ms=20_000,
                     )
                 )
-            case LayoutMissing(title=title, aspect=aspect):
+            case LayoutMissing(profile_path=path, title=title, aspect=aspect):
+                if (path, aspect) in self._missing_shown:
+                    return  # once per game and layout, not on every profile re-read
+                self._missing_shown.add((path, aspect))
+                key = pretty(self.facade.settings.hotkeys["zone_editor"])
                 self.notifier.show(
                     Notification(
                         "Настройте зоны для этой игры",
-                        f"{title or 'Игра'}: нет зон для {aspect}. Редактор откроется поверх игры.",
+                        f"{title or 'Игра'}: нет зон для {aspect}. В игре нажмите {key} — "
+                        "редактор откроется поверх неё.",
                         ("Настроить зоны", self.open_zone_editor),
                         None,
-                        timeout_ms=30_000,
+                        timeout_ms=20_000,
                     )
                 )
             case ProfileBound(title=title):
@@ -244,6 +252,7 @@ class Application:
             self.notifier.show(Notification("Профиль не создан", str(exc)))
             return
         log.info("Создан профиль %s", stored.path.name)
+        self.tray.offer(None, self._create_profile)
         self.profiles.refresh()
 
     def _on_second_copy(self) -> None:
@@ -263,7 +272,8 @@ def main() -> int:
         tell_first_copy()
         return 0
     paths = AppPaths.default()
-    setup_logging(paths.logs_dir, level=logging.INFO, console=False)
+    log_file = setup_logging(paths.logs_dir, level=logging.INFO, console=False)
+    log.info("Subtitle Voicer запущен, лог: %s", log_file)
     theme.apply(qt)
     facade = AppFacade(paths)
     app = Application(qt, facade)

@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
 )
 
 from subvoicer.app.facade import AppFacade, GameStatus
-from subvoicer.core.models import HistoryEntry
+from subvoicer.core.models import HistoryEntry, WindowRef
 from subvoicer.ui import theme
 from subvoicer.ui.widgets.common import label
 from subvoicer.ui.widgets.toggle import ToggleSwitch
@@ -87,6 +87,11 @@ class Tray(QSystemTrayIcon):
         self._recent.aboutToShow.connect(self._fill_recent)
         self._zones = menu.addAction(f"Настроить зоны\t{pretty(hotkeys['zone_editor'])}")
         self._zones.triggered.connect(open_zone_editor)
+        self._offer = menu.addAction("Создать профиль")
+        self._offer.setVisible(False)
+        self._offered: WindowRef | None = None
+        self._create: Callable[[WindowRef], None] | None = None
+        self._offer.triggered.connect(self._create_offered)
         menu.addSeparator()
         menu.addAction("Настройки…").triggered.connect(open_settings)
         menu.addSeparator()
@@ -106,6 +111,17 @@ class Tray(QSystemTrayIcon):
         self._toggle.blockSignals(False)
         self._zones.setEnabled(status.window is not None)
         self.setToolTip(f"Subtitle Voicer — {status_text(status, ready)}")
+
+    def offer(self, window: WindowRef | None, create: Callable[[WindowRef], None]) -> None:
+        """«Создать профиль: game.exe» for a game offered by a notification (None hides it)."""
+        self._offered, self._create = window, create
+        self._offer.setVisible(window is not None)
+        if window is not None:
+            self._offer.setText(f"Создать профиль: {window.exe}")
+
+    def _create_offered(self) -> None:
+        if self._offered is not None and self._create is not None:
+            self._create(self._offered)
 
     def _fill_recent(self) -> None:
         self._recent.clear()

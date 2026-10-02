@@ -59,16 +59,31 @@ LATIN = {getattr(Qt.Key, f"Key_{c}"): c.lower() for c in "ABCDEFGHIJKLMNOPQRSTUV
 DIGITS = {getattr(Qt.Key, f"Key_{d}"): d for d in "0123456789"}
 
 
-def to_pynput(key: int, modifiers: Qt.KeyboardModifier) -> str | None:
+def from_virtual_key(vk: int) -> str | None:
+    """Windows virtual key -> pynput key name; the same in any keyboard layout."""
+    if 0x41 <= vk <= 0x5A:
+        return chr(vk).lower()
+    if 0x30 <= vk <= 0x39:
+        return chr(vk)
+    if 0x70 <= vk <= 0x87:
+        return f"<f{vk - 0x70 + 1}>"
+    return None
+
+
+def to_pynput(key: int, modifiers: Qt.KeyboardModifier, virtual_key: int = 0) -> str | None:
     """A key press -> pynput hotkey text, or None when it is not a usable combination
-    (TZ 4.12: global hotkeys need at least Ctrl, Alt or Win)."""
+    (TZ 4.12: global hotkeys need at least Ctrl, Alt or Win). With a Russian layout Qt
+    reports Cyrillic keys, so the Windows virtual key decides the letter."""
     if key in MODIFIER_KEYS:
         return None
     parts = [name for flag, name in MODIFIERS if modifiers & flag]
     if not any(p in parts for p in ("<ctrl>", "<alt>", "<cmd>")):
         return None
     qt_key = Qt.Key(key)
-    if qt_key in LATIN:
+    by_vk = from_virtual_key(virtual_key) if virtual_key else None
+    if by_vk is not None:
+        name = by_vk
+    elif qt_key in LATIN:
         name = LATIN[qt_key]
     elif qt_key in DIGITS:
         name = DIGITS[qt_key]
@@ -103,7 +118,7 @@ class CaptureDialog(QDialog):
         if event.key() == Qt.Key.Key_Escape:
             self.reject()
             return
-        hotkey = to_pynput(event.key(), event.modifiers())
+        hotkey = to_pynput(event.key(), event.modifiers(), event.nativeVirtualKey())
         if hotkey is None:
             if event.key() not in MODIFIER_KEYS:
                 self._hint.setText("Нужен Ctrl, Alt или Win вместе с буквой, цифрой или F1–F24.")

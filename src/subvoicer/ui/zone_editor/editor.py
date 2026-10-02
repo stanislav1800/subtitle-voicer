@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from subvoicer.app import profile_commands as pc
-from subvoicer.app import zone_tools
+from subvoicer.app import runtime, zone_tools
 from subvoicer.app.facade import AppFacade
 from subvoicer.config.profile import Layout, Profile, Zone
 from subvoicer.config.profile_store import format_error
@@ -143,6 +143,7 @@ class ZoneEditor(QWidget):
             self.show()
         self.raise_()
         self.activateWindow()
+        runtime.force_foreground(int(self.winId()))  # over the game that has the focus
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         if event.key() == Qt.Key.Key_Escape:
