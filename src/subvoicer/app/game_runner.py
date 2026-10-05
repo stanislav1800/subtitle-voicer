@@ -17,6 +17,7 @@ from subvoicer.app.container import (
     build_speech,
     load_ocr,
 )
+from subvoicer.app.models_setup import engine_options
 from subvoicer.app.runtime import MonotonicClock, Session
 from subvoicer.config.paths import AppPaths
 from subvoicer.config.profile import MaskConfig, Profile, VoicingPolicy, Zone
@@ -480,10 +481,12 @@ def build_run(settings: Settings, bus: EventBus, paths: AppPaths, hotkeys: bool 
     from subvoicer.engines.system.windows import WindowsDesktop
 
     store = ProfileStore(paths.profiles_dir)
-    speech = build_speech(speech_config(settings, hotkeys), bus, None, settings.hotkeys)
+    ocr_options, tts_options = engine_options(paths)
+    config = replace(speech_config(settings, hotkeys), silero_model_path=tts_options["model_path"])
+    speech = build_speech(config, bus, None, settings.hotkeys)
     gender = GenderGuesser(gender_exceptions())
     router = ProfileRouter(store, CharacterBook(speech.voices, gender), gender)
-    engines = OcrEngines()
+    engines = OcrEngines({"rapidocr": ocr_options})
     engines.get("rapidocr")  # load before the first game, not on its first frame
 
     def build(profile: Profile, window: WindowRef, aspect: str, poll_hz: float) -> Session | None:

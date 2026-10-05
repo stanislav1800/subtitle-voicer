@@ -38,13 +38,17 @@ class SileroEngine:
         sample_rate: int = 48_000,
         threads: int = 4,
         catalog: Mapping[str, Voice] | None = None,
+        model_path: str | None = None,
     ) -> None:
-        """``catalog``: gender and display name per voice id (``resources/voices``)."""
+        """``catalog``: gender and display name per voice id (``resources/voices``).
+        ``model_path``: the package file downloaded by the app into ``models/`` (TZ 4.14);
+        without it the model comes from the ``silero`` package cache or its own download."""
         self.model_id = model
         self.language = language
         self.sample_rate = sample_rate
         self._threads = threads
         self._catalog = dict(catalog or {})
+        self._model_path = model_path
         self._model: Any = None
         self._voices: list[Voice] = []
 
@@ -99,7 +103,11 @@ class SileroEngine:
         import silero
         from torch import package
 
-        path = Path(silero.__file__).parent / "model" / f"{self.model_id}.pt"
+        path = Path(
+            self._model_path or Path(silero.__file__).parent / "model" / f"{self.model_id}.pt"
+        )
+        if self._model_path is not None and not path.is_file():
+            raise EngineError(f"Нет файла модели {path}")
         if path.is_file():
             return package.PackageImporter(str(path)).load_pickle("tts_models", "model")
         from silero import silero_tts

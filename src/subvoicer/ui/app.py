@@ -14,6 +14,7 @@ from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox
 from subvoicer.app import runtime, zone_tools
 from subvoicer.app.facade import AppFacade
 from subvoicer.app.log import setup_logging
+from subvoicer.app.models_setup import ModelSetup
 from subvoicer.config.paths import AppPaths
 from subvoicer.core.events import (
     DebugCaptured,
@@ -28,6 +29,7 @@ from subvoicer.core.events import (
 from subvoicer.core.models import HistoryEntry, WindowRef
 from subvoicer.ui import theme
 from subvoicer.ui.bridge import Bridge
+from subvoicer.ui.first_run import FirstRunWindow
 from subvoicer.ui.line_window import LineWindow
 from subvoicer.ui.notifications import Notification, Notifier, mono
 from subvoicer.ui.overlay import Overlay
@@ -130,6 +132,11 @@ class Application:
 
     def run(self) -> None:
         self.tray.show()
+        setup = ModelSetup(self.facade.paths)
+        if setup.missing():  # first run: models before OCR and TTS load (TZ 4.14)
+            self.first_run = FirstRunWindow(setup, self.loader.start, self.quit)
+            self.first_run.start()
+            return
         self.loader.start()
 
     def open_line(self, entry: HistoryEntry) -> None:

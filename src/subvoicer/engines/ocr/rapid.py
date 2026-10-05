@@ -35,8 +35,13 @@ class RapidOcrEngine:
         threads: int = 4,
         det_max_side: int = 1280,
         merge_rows: bool = True,
+        det_path: str | None = None,
+        rec_path: str | None = None,
     ) -> None:
         """``model``: recognition model, one of MODELS.
+
+        ``det_path`` / ``rec_path``: model files downloaded by the app into ``models/``
+        (TZ 4.14); without them RapidOCR uses its own cache (tools, benchmarks).
 
         ``det_max_side``: images whose longer side exceeds this are downscaled for the
         detector only; text lines are still cut from the full-size image for the recogniser.
@@ -57,6 +62,7 @@ class RapidOcrEngine:
         self._threads = threads
         self._det_max_side = det_max_side
         self._merge_rows = merge_rows
+        self._paths = {"Det.model_path": det_path, "Rec.model_path": rec_path}
         self._engine: Any = None
 
     @classmethod
@@ -81,6 +87,7 @@ class RapidOcrEngine:
                     "Rec.lang_type": lang,
                     "Rec.model_type": ModelType.MOBILE,
                     "EngineConfig.onnxruntime.intra_op_num_threads": self._threads,
+                    **{key: path for key, path in self._paths.items() if path},
                 }
             )
         except Exception as exc:

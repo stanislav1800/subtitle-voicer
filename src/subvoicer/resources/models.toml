@@ -1,0 +1,28 @@
+# Models downloaded on first run into %APPDATA%/SubtitleVoicer/models/ (TZ 4.14).
+# Addresses and SHA-256 of the OCR models are the ones RapidOCR 3.9 lists in its
+# default_models.yaml; Silero publishes no hashes, its SHA-256 is of the file checked
+# on stage 3 (the same size as on models.silero.ai).
+
+[[model]]
+id = "ocr_det"
+title = "Поиск строк текста (PP-OCRv5 mobile)"
+file = "rapidocr/ch_PP-OCRv5_det_mobile.onnx"
+url = "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.9.2/onnx/PP-OCRv5/det/ch_PP-OCRv5_det_mobile.onnx"
+sha256 = "4d97c44a20d30a81aad087d6a396b08f786c4635742afc391f6621f5c6ae78ae"
+size = 4819576
+
+[[model]]
+id = "ocr_rec_eslav"
+title = "Распознавание русского текста (PP-OCRv5 eslav)"
+file = "rapidocr/eslav_PP-OCRv5_rec_mobile.onnx"
+url = "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.9.2/onnx/PP-OCRv5/rec/eslav_PP-OCRv5_rec_mobile.onnx"
+sha256 = "08705d6721849b1347d26187f15a5e362c431963a2a62bfff4feac578c489aab"
+size = 7911802
+
+[[model]]
+id = "tts_silero"
+title = "Голоса Silero v5 (v5_cis_base)"
+file = "silero/v5_cis_base.pt"
+url = "https://models.silero.ai/models/tts/ru/v5_cis_base.pt"
+sha256 = "ba41b18f6a707ad93605a162998865e7c087153d2e010a26dd02229dab0e672a"
+size = 91680514

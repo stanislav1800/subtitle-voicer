@@ -10,6 +10,7 @@ import logging
 import queue
 import sys
 from collections.abc import Sequence
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
@@ -31,9 +32,11 @@ from subvoicer.app.container import (
 )
 from subvoicer.app.game_runner import build_run
 from subvoicer.app.log import setup_logging
+from subvoicer.app.models_setup import ConsoleProgress, ModelSetup, engine_options
 from subvoicer.config.paths import AppPaths
 from subvoicer.config.profile_store import format_error
 from subvoicer.config.settings import load_settings
+from subvoicer.core.errors import ModelsError
 from subvoicer.core.events import (
     CaptureFailed,
     CaptureStopped,
@@ -249,6 +252,10 @@ def run_watch(args: argparse.Namespace) -> int:
     bus = Bus()
     events: queue.Queue[Event] = queue.Queue()
     bus.subscribe(Event, events.put)
+    ocr_options, tts_options = engine_options(AppPaths.default())
+    speech = speech_config(args)
+    if speech is not None:
+        speech = replace(speech, silero_model_path=tts_options["model_path"])
     config = WatchConfig(
         hwnd=window.hwnd,
         pid=window.pid,
@@ -257,7 +264,8 @@ def run_watch(args: argparse.Namespace) -> int:
         colors_hsv=tuple(args.color_hsv),
         threshold=args.threshold,
         speaker=args.speaker,
-        speech=speech_config(args),
+        ocr_options=ocr_options,
+        speech=speech,
     )
     print("Загрузка OCR и озвучки…" if args.speak else "Загрузка OCR…", file=sys.stderr)
     session = build_watch(config, bus)
@@ -454,6 +462,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         if instance is None:
             print("Subtitle Voicer уже запущен — второй экземпляр не нужен.", file=sys.stderr)
             return EXIT_ALREADY_RUNNING
+        try:
+            ModelSetup(AppPaths.default()).download_missing(ConsoleProgress())
+        except ModelsError as exc:
+            print(exc, file=sys.stderr)
+            runtime.release_single_instance(instance)
+            return 1
         try:
             return run_watch(args) if args.command == "watch" else run_profiles(args)
         finally:
