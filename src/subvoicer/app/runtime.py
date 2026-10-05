@@ -97,13 +97,16 @@ def release_single_instance(handle: object | None) -> None:
         release()
 
 
+AUTOSTART_FLAG = "--autostart"  # started at logon: tray only, no settings window
+
+
 def autostart_command() -> str:
-    """``pythonw -m subvoicer`` of this environment: no console window at logon."""
+    """``pythonw -m subvoicer --autostart`` of this environment: no console window at logon."""
     from pathlib import Path
 
     exe = Path(sys.executable)
     windowed = exe.with_name("pythonw.exe")
-    return f'"{windowed if windowed.exists() else exe}" -m subvoicer'
+    return f'"{windowed if windowed.exists() else exe}" -m subvoicer {AUTOSTART_FLAG}'
 
 
 def set_autostart(enabled: bool) -> None:

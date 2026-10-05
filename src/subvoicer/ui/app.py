@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import sys
 import threading
 from pathlib import Path
@@ -310,22 +311,36 @@ class Application:
 
 
 def main() -> int:
+    paths = AppPaths.default()
+    # first of all: a start that ends early (second copy, Qt error) must leave a trace
+    log_file = setup_logging(paths.logs_dir, level=logging.INFO, console=False)
+    autostart = runtime.AUTOSTART_FLAG in sys.argv
+    log.info(
+        "Subtitle Voicer запущен%s (pid %d), лог: %s",
+        " с Windows" if autostart else "",
+        os.getpid(),
+        log_file,
+    )
     runtime.prepare_process()
     qt = QApplication(sys.argv)
     qt.setApplicationName("Subtitle Voicer")
     qt.setQuitOnLastWindowClosed(False)
     instance = runtime.acquire_single_instance()
     if instance is None:
+        log.info("Уже запущен другой экземпляр — показываю его окно и выхожу")
         tell_first_copy()
         return 0
-    paths = AppPaths.default()
-    log_file = setup_logging(paths.logs_dir, level=logging.INFO, console=False)
-    log.info("Subtitle Voicer запущен, лог: %s", log_file)
     theme.apply(qt)
     facade = AppFacade(paths)
+    if facade.settings.autostart:
+        try:  # the command follows the environment (venv moved, new flags)
+            runtime.set_autostart(True)
+        except OSError:
+            log.exception("Не удалось обновить автозапуск")
     app = Application(qt, facade)
     app.run()
-    QTimer.singleShot(0, app.window.bring_up)
+    if not autostart:  # at logon: only the tray icon
+        QTimer.singleShot(0, app.window.bring_up)
     try:
         return qt.exec()
     finally:

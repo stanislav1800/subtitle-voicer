@@ -11,16 +11,23 @@ RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 VALUE_NAME = "SubtitleVoicer"
 
 
-def is_enabled() -> bool:
+def current_command() -> str | None:
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as key:
-            winreg.QueryValueEx(key, VALUE_NAME)
-            return True
+            value, _ = winreg.QueryValueEx(key, VALUE_NAME)
+            return str(value)
     except FileNotFoundError:
-        return False
+        return None
+
+
+def is_enabled() -> bool:
+    return current_command() is not None
 
 
 def set_enabled(enabled: bool, command: str) -> None:
+    """Writes only on a change, so it can run on every start to keep the command current."""
+    if (current_command() == command) if enabled else not is_enabled():
+        return
     with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, winreg.KEY_SET_VALUE) as key:
         if enabled:
             winreg.SetValueEx(key, VALUE_NAME, 0, winreg.REG_SZ, command)
