@@ -30,13 +30,18 @@ def gender_text(gender: Gender) -> str:
     return "—" if gender is Gender.UNKNOWN else dict(GENDERS)[gender]
 
 
+PREFERRED_MARK = "★"  # better voices (Silero v5.5, TZ 1.19)
+PREFERRED_HINT = "★ — улучшенное качество (Silero v5.5)"
+
+
 def voice_text(voice_id: str | None, voices: Sequence[Voice]) -> str:
     if not voice_id:
         return "—"
     for voice in voices:
         if voice.id == voice_id:
             short = {Gender.MALE: " · муж.", Gender.FEMALE: " · жен."}.get(voice.gender, "")
-            return f"{voice.display_name}{short}"
+            star = f" {PREFERRED_MARK}" if voice.preferred else ""
+            return f"{voice.display_name}{star}{short}"
     return voice_id
 
 

@@ -59,5 +59,7 @@ def voice_catalog(engine: str) -> dict[str, Voice]:
     catalog = {}
     for item in data.get("voice", []):
         gender = Gender(item.get("gender", "unknown"))
-        catalog[item["id"]] = Voice(item["id"], gender, item.get("name", item["id"]))
+        catalog[item["id"]] = Voice(
+            item["id"], gender, item.get("name", item["id"]), bool(item.get("preferred", False))
+        )
     return catalog

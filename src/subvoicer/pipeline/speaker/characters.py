@@ -57,23 +57,30 @@ def find_character(characters: Sequence[Character], name: str) -> int | None:
 def pick_voice(
     character: Character, characters: Sequence[Character], voices: Sequence[Voice]
 ) -> str | None:
-    """TZ 4.6: voices of the character's gender (all for unknown) sorted by id, start at
-    sha1(name) % n, skip voices other characters have, all taken -> the start one."""
+    """TZ 4.6, 1.19: voices of the character's gender (all for unknown) sorted by id, start at
+    sha1(name) % n, skip voices other characters have — first among the better voices
+    (``preferred``), then among the rest; all taken -> the start one of the better voices."""
     if character.gender is Gender.UNKNOWN:
         pool = list(voices)
     else:
         pool = [v for v in voices if v.gender is character.gender] or list(voices)
-    ids = sorted(v.id for v in pool)
-    if not ids:
+    if not pool:
         return None
-    digest = hashlib.sha1(character.name.lower().encode("utf-8")).hexdigest()
-    start = int(digest, 16) % len(ids)
+    digest = int(hashlib.sha1(character.name.lower().encode("utf-8")).hexdigest(), 16)
     taken = {c.voice for c in characters if c.voice and c.name != character.name}
-    for step in range(len(ids)):
-        candidate = ids[(start + step) % len(ids)]
-        if candidate not in taken:
-            return candidate
-    return ids[start]
+    tiers = [
+        sorted(v.id for v in pool if v.preferred),
+        sorted(v.id for v in pool if not v.preferred),
+    ]
+    tiers = [ids for ids in tiers if ids]
+    for ids in tiers:
+        start = digest % len(ids)
+        for step in range(len(ids)):
+            candidate = ids[(start + step) % len(ids)]
+            if candidate not in taken:
+                return candidate
+    first = tiers[0]
+    return first[digest % len(first)]
 
 
 @dataclass(frozen=True, slots=True)

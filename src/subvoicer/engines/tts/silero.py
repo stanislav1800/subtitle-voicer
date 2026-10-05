@@ -1,4 +1,9 @@
-"""Silero TTS v5 (``v5_cis_base``), CPU. Expects stress marks (``+``) in the text."""
+"""Silero TTS v5, CPU: one or more models behind one voice list (TZ 4.8, 1.19).
+
+``v5_cis_base`` — 29 voices ``ru_*``; ``v5_5_ru`` — 5 better voices, exposed as ``v55_<speaker>``
+(the prefix picks the model). Both take SSML ``<prosody rate>`` and respect ``+`` stress marks,
+so the text comes prepared the same way for any voice.
+"""
 
 from __future__ import annotations
 
@@ -21,8 +26,14 @@ log = logging.getLogger(__name__)
 
 PAUSE = "…"  # TextPreparer marks pauses with a single ellipsis character
 PAUSE_SSML = '<break time="300ms"/>'
+VOICE_PREFIX = {"v5_cis_base": "", "v5_5_ru": "v55_"}  # model -> prefix of its voice ids
+SPEAKER_PREFIX = {"v5_cis_base": "ru_"}  # only the Russian speakers of a multi-language model
 
 _load_lock = threading.Lock()
+
+
+def voice_id(model_id: str, speaker: str) -> str:
+    return VOICE_PREFIX.get(model_id, f"{model_id}_") + speaker
 
 
 class SileroEngine:
@@ -33,24 +44,28 @@ class SileroEngine:
 
     def __init__(
         self,
-        model: str = "v5_cis_base",
+        models: Mapping[str, str | None] | None = None,
         language: str = "ru",
         sample_rate: int = 48_000,
         threads: int = 4,
         catalog: Mapping[str, Voice] | None = None,
-        model_path: str | None = None,
     ) -> None:
-        """``catalog``: gender and display name per voice id (``resources/voices``).
-        ``model_path``: the package file downloaded by the app into ``models/`` (TZ 4.14);
-        without it the model comes from the ``silero`` package cache or its own download."""
-        self.model_id = model
+        """``models``: model id -> the package file downloaded by the app into ``models/``
+        (TZ 4.14), or None to use the ``silero`` package cache or its own download (tools).
+        ``catalog``: gender, display name and ``preferred`` per voice id (``resources/voices``).
+        """
+        self.models = dict(models or {"v5_cis_base": None})
         self.language = language
         self.sample_rate = sample_rate
         self._threads = threads
         self._catalog = dict(catalog or {})
-        self._model_path = model_path
-        self._model: Any = None
+        self._loaded: dict[str, Any] = {}
+        self._speaker: dict[str, tuple[Any, str]] = {}  # voice id -> (model, speaker)
         self._voices: list[Voice] = []
+
+    @property
+    def model_id(self) -> str:
+        return ", ".join(self.models)
 
     @classmethod
     def is_available(cls) -> bool:
@@ -61,52 +76,56 @@ class SileroEngine:
 
         torch.set_num_threads(self._threads)
         torch.set_grad_enabled(False)
-        try:
-            self._model = self._load_model()
-        except Exception as exc:
-            raise EngineError(f"Silero не загрузился: {exc}") from exc
-        prefix = f"{self.language}_"
-        ids = sorted(s for s in self._model.speakers if s.startswith(prefix))
-        if not ids:
-            raise EngineError(f"В модели {self.model_id} нет голосов {prefix}*")
-        self._voices = [
-            self._catalog.get(i, Voice(i, Gender.UNKNOWN, i.removeprefix(prefix).capitalize()))
-            for i in ids
-        ]
-        self.synthesize("Прив+ет.", ids[0], 1.0)  # warm-up: the first call is ~20x slower
-        log.info("Silero загружен: %s, голосов %d", self.model_id, len(ids))
+        for model_id, path in self.models.items():
+            try:
+                model = self._load_model(model_id, path)
+            except Exception as exc:
+                raise EngineError(f"Silero {model_id} не загрузился: {exc}") from exc
+            only = SPEAKER_PREFIX.get(model_id, "")
+            speakers = sorted(s for s in model.speakers if s.startswith(only))
+            if not speakers:
+                raise EngineError(f"В модели {model_id} нет голосов {only}*")
+            self._loaded[model_id] = model
+            for speaker in speakers:
+                vid = voice_id(model_id, speaker)
+                self._speaker[vid] = (model, speaker)
+                name = speaker.removeprefix(only).capitalize()
+                self._voices.append(self._catalog.get(vid, Voice(vid, Gender.UNKNOWN, name)))
+            first = voice_id(model_id, speakers[0])
+            self.synthesize("Прив+ет.", first, 1.0)  # warm-up: the first call is ~20x slower
+            log.info("Silero загружен: %s, голосов %d", model_id, len(speakers))
 
     def close(self) -> None:
-        self._model = None
+        self._loaded.clear()
+        self._speaker.clear()
 
     def voices(self) -> list[Voice]:
         return list(self._voices)
 
     def synthesize(self, text: str, voice_id: str, rate: float) -> AudioClip:
-        if self._model is None:
+        if not self._loaded:
             raise EngineError("Silero не загружен: вызовите load()")
-        if voice_id not in {v.id for v in self._voices}:
+        if voice_id not in self._speaker:
             raise EngineError(f"Silero: нет голоса {voice_id!r}")
+        model, speaker = self._speaker[voice_id]
         if rate == 1.0 and PAUSE not in text:
-            audio = self._model.apply_tts(text=text, speaker=voice_id, sample_rate=self.sample_rate)
+            audio = model.apply_tts(text=text, speaker=speaker, sample_rate=self.sample_rate)
         else:
-            audio = self._model.apply_tts(
-                ssml_text=to_ssml(text, rate), speaker=voice_id, sample_rate=self.sample_rate
+            audio = model.apply_tts(
+                ssml_text=to_ssml(text, rate), speaker=speaker, sample_rate=self.sample_rate
             )
         samples = np.asarray(audio.numpy(), dtype=np.float32)
         return AudioClip(samples, self.sample_rate)
 
-    def _load_model(self) -> Any:
+    def _load_model(self, model_id: str, model_path: str | None) -> Any:
         """The package file is loaded directly when present; the first download goes through
         ``silero_tts``, which also fetches ``latest_silero_models.yml`` into the current
         directory — so that call runs in a temporary directory."""
         import silero
         from torch import package
 
-        path = Path(
-            self._model_path or Path(silero.__file__).parent / "model" / f"{self.model_id}.pt"
-        )
-        if self._model_path is not None and not path.is_file():
+        path = Path(model_path or Path(silero.__file__).parent / "model" / f"{model_id}.pt")
+        if model_path is not None and not path.is_file():
             raise EngineError(f"Нет файла модели {path}")
         if path.is_file():
             return package.PackageImporter(str(path)).load_pickle("tts_models", "model")
@@ -116,7 +135,7 @@ class SileroEngine:
             previous = os.getcwd()
             os.chdir(tmp)
             try:
-                model, _ = silero_tts(language=self.language, speaker=self.model_id)
+                model, _ = silero_tts(language=self.language, speaker=model_id)
             finally:
                 os.chdir(previous)
         return model

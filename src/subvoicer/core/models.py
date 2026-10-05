@@ -101,6 +101,7 @@ class Voice:
     id: str
     gender: Gender
     display_name: str
+    preferred: bool = False  # better quality: first in lists and for assignment (TZ 1.19)
 
 
 @dataclass(frozen=True, slots=True)

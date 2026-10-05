@@ -1,4 +1,4 @@
-# Каталог голосов Silero v5_cis_base (ТЗ 4.6).
+# Каталог голосов Silero (ТЗ 4.6): v5_cis_base (ru_*) и улучшенные v5_5_ru (v55_*, ТЗ 1.19).
 # id берутся из модели; пол проставляет пользователь:
 # uv run python tools/voice_samples.py --label
 
@@ -146,3 +146,33 @@ gender = "female"
 id = "ru_zinaida"
 name = "Zinaida"
 gender = "female"
+
+[[voice]]
+id = "v55_aidar"
+name = "Aidar"
+gender = "male"
+preferred = true
+
+[[voice]]
+id = "v55_baya"
+name = "Baya"
+gender = "female"
+preferred = true
+
+[[voice]]
+id = "v55_eugene"
+name = "Eugene"
+gender = "male"
+preferred = true
+
+[[voice]]
+id = "v55_kseniya"
+name = "Kseniya"
+gender = "female"
+preferred = true
+
+[[voice]]
+id = "v55_xenia"
+name = "Xenia"
+gender = "female"
+preferred = true

@@ -41,6 +41,7 @@ from subvoicer.pipeline.ocr.junk_filter import JunkFilter
 from subvoicer.pipeline.ocr.runner import OcrRunner, OcrSettings
 from subvoicer.pipeline.speaker.gender import GenderGuesser
 from subvoicer.pipeline.speech.scheduler import OverlapMode
+from subvoicer.pipeline.speech.voices import by_preference
 from subvoicer.services.history import History
 from subvoicer.services.speech_service import SpeechTuning
 from subvoicer.sources.manual import ManualReader, selection_spec
@@ -307,8 +308,8 @@ class AppFacade:
     def voices(self) -> list[Voice]:
         """Voices of the loaded engine; before it loads, the catalog (same ids for Silero)."""
         if self._parts is not None:
-            return list(self._parts.speech.voices)
-        return sorted(voice_catalog(pc.TTS_CATALOG).values(), key=lambda v: v.id)
+            return by_preference(list(self._parts.speech.voices))
+        return by_preference(list(voice_catalog(pc.TTS_CATALOG).values()))
 
     # ------------------------------------------------------------------ developer mode
 

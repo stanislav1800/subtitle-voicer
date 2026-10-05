@@ -1,7 +1,8 @@
 # Models downloaded on first run into %APPDATA%/SubtitleVoicer/models/ (TZ 4.14).
 # Addresses and SHA-256 of the OCR models are the ones RapidOCR 3.9 lists in its
 # default_models.yaml; Silero publishes no hashes, its SHA-256 is of the file checked
-# on stage 3 (the same size as on models.silero.ai).
+# on stage 3 (the same size as on models.silero.ai); v5_5_ru — of the file the user listened
+# to on stage 10 (TZ 1.19).
 
 [[model]]
 id = "ocr_det"
@@ -26,3 +27,11 @@ file = "silero/v5_cis_base.pt"
 url = "https://models.silero.ai/models/tts/ru/v5_cis_base.pt"
 sha256 = "ba41b18f6a707ad93605a162998865e7c087153d2e010a26dd02229dab0e672a"
 size = 91680514
+
+[[model]]
+id = "tts_silero_v55"
+title = "Улучшенные голоса Silero v5.5 (v5_5_ru)"
+file = "silero/v5_5_ru.pt"
+url = "https://models.silero.ai/models/tts/ru/v5_5_ru.pt"
+sha256 = "50081637b602126ee06cb3bc8a744d25651d2da149ee8864b9a379bfdd934437"
+size = 145420684

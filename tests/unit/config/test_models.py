@@ -9,7 +9,7 @@ from subvoicer.config.models import missing, model_files, model_path
 
 def test_manifest_is_valid_and_unique() -> None:
     files = model_files()
-    assert {m.id for m in files} == {"ocr_det", "ocr_rec_eslav", "tts_silero"}
+    assert {m.id for m in files} == {"ocr_det", "ocr_rec_eslav", "tts_silero", "tts_silero_v55"}
     assert len({m.file for m in files}) == len(files)
     assert all(m.url.startswith("https://") for m in files)
 

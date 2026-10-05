@@ -32,6 +32,7 @@ from subvoicer.config.profile_store import format_error
 from subvoicer.core.models import Gender
 from subvoicer.ui import theme
 from subvoicer.ui.settings.dialogs import (
+    PREFERRED_HINT,
     CharacterDialog,
     EntryDialog,
     ImportDialog,
@@ -441,6 +442,8 @@ class ProfilesPage(Page):
                 )
             )
             card.body.addLayout(line)
+        if any(v.preferred for v in voices):
+            card.body.addWidget(label(PREFERRED_HINT, "hint"))
         return card
 
     def _characters(self, path: Path, profile: Profile) -> QWidget:

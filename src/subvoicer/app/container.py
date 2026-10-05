@@ -72,7 +72,7 @@ class SpeechConfig:
     volume: float = 1.0
     output_device: str = ""
     tts: tuple[str, ...] = TTS_CHAIN
-    silero_model_path: str | None = None  # downloaded into models/ (TZ 4.14)
+    silero_models: tuple[tuple[str, str], ...] = ()  # (model id, file in models/), TZ 4.14
     hotkeys: bool = True
     low_priority_ttl_s: float = 5.0
     cache_size: int = 200
@@ -110,7 +110,9 @@ def load_ocr(engine_id: str, options: dict[str, Any]) -> Any:
 
 
 def load_tts(
-    chain: tuple[str, ...], publisher: EventPublisher, silero_model_path: str | None = None
+    chain: tuple[str, ...],
+    publisher: EventPublisher,
+    silero_models: tuple[tuple[str, str], ...] = (),
 ) -> Any:
     """The first engine of the chain that is available and loads (TZ 5 / ARCHITECTURE 5)."""
     for engine_id in chain:
@@ -119,7 +121,9 @@ def load_tts(
             continue
         options: dict[str, Any] = {}
         if engine_id == "silero":
-            options = {"catalog": voice_catalog("silero_v5"), "model_path": silero_model_path}
+            options = {"catalog": voice_catalog("silero_v5")}
+            if silero_models:  # else the library's own cache (tools)
+                options["models"] = dict(silero_models)
         engine = cls(**options)
         try:
             engine.load()
@@ -178,7 +182,7 @@ def build_speech(
     from subvoicer.engines.audio.output import SoundDeviceOutput
     from subvoicer.engines.tts.silero_stress import SileroStressMarker
 
-    tts = load_tts(config.tts, bus, config.silero_model_path)
+    tts = load_tts(config.tts, bus, config.silero_models)
     stress = SileroStressMarker()
     stress.load()
     preparer = TextPreparer(

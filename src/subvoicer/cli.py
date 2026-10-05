@@ -255,7 +255,7 @@ def run_watch(args: argparse.Namespace) -> int:
     ocr_options, tts_options = engine_options(AppPaths.default())
     speech = speech_config(args)
     if speech is not None:
-        speech = replace(speech, silero_model_path=tts_options["model_path"])
+        speech = replace(speech, silero_models=tuple(tts_options["models"].items()))
     config = WatchConfig(
         hwnd=window.hwnd,
         pid=window.pid,

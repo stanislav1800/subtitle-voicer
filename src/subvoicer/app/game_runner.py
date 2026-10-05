@@ -482,7 +482,9 @@ def build_run(settings: Settings, bus: EventBus, paths: AppPaths, hotkeys: bool 
 
     store = ProfileStore(paths.profiles_dir)
     ocr_options, tts_options = engine_options(paths)
-    config = replace(speech_config(settings, hotkeys), silero_model_path=tts_options["model_path"])
+    config = replace(
+        speech_config(settings, hotkeys), silero_models=tuple(tts_options["models"].items())
+    )
     speech = build_speech(config, bus, None, settings.hotkeys)
     gender = GenderGuesser(gender_exceptions())
     router = ProfileRouter(store, CharacterBook(speech.voices, gender), gender)

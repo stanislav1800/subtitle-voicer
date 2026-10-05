@@ -86,7 +86,12 @@ def engine_options(paths: AppPaths) -> tuple[dict[str, Any], dict[str, Any]]:
         "det_path": str(model_path(models, "ocr_det")),
         "rec_path": str(model_path(models, "ocr_rec_eslav")),
     }
-    tts = {"model_path": str(model_path(models, "tts_silero"))}
+    tts = {
+        "models": {
+            "v5_cis_base": str(model_path(models, "tts_silero")),
+            "v5_5_ru": str(model_path(models, "tts_silero_v55")),
+        }
+    }
     return ocr, tts
 
 
