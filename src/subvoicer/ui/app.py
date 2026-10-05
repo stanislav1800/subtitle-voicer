@@ -23,6 +23,7 @@ from subvoicer.core.events import (
     GameActivated,
     GameClosed,
     LayoutMissing,
+    LibraryScanned,
     ProfileBound,
     ProfileOffered,
     SettingsApplied,
@@ -238,6 +239,8 @@ class Application:
             self.tray.showMessage("Subtitle Voicer", f"Озвучка не запустилась: {error}")
         self.tray.refresh()
         self.window.refresh_status()
+        # TZ 4.16: installed games are looked up at start (after OCR and TTS have loaded)
+        threading.Thread(target=self.facade.scan_library, name="Library", daemon=True).start()
 
     def _on_event(self, event: Event) -> None:
         if isinstance(event, STATUS_EVENTS):
@@ -273,6 +276,20 @@ class Application:
                 )
             case ProfileBound(title=title):
                 self.notifier.show(Notification("Игра привязана", f"{title} — профиль готов."))
+                self.profiles.refresh()
+            case LibraryScanned(added=added):
+                self.profiles.library_scanned()
+                if added:
+                    names = ", ".join(added[:5]) + (
+                        f" и ещё {len(added) - 5}" if len(added) > 5 else ""
+                    )
+                    self.notifier.show(
+                        Notification(
+                            "Найдены игры",
+                            f"{names} — в «Профилях и голосах»; "
+                            "зоны настраиваются при запуске игры.",
+                        )
+                    )
             case DebugCaptured(folder=folder):
                 profile = self.facade.status().profile_path
                 frame = Path(folder) / "frame.png"

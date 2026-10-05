@@ -204,13 +204,16 @@ class Segmented(QFrame):
 
 
 class ElidedLabel(QLabel):
-    """One line that shortens itself with «…» in the middle instead of widening the window
-    (long game paths); the full text is in the tooltip."""
+    """One line that shortens itself with «…» instead of widening the window — in the middle
+    for paths, at the end for names; the full text is in the tooltip."""
 
-    def __init__(self, text: str, name: str = "") -> None:
+    def __init__(
+        self, text: str, name: str = "", mode: Qt.TextElideMode = Qt.TextElideMode.ElideMiddle
+    ) -> None:
         super().__init__()
         if name:
             self.setObjectName(name)
+        self._mode = mode
         self._full = text
         self.setToolTip(text)
         self.setMinimumWidth(40)
@@ -223,6 +226,4 @@ class ElidedLabel(QLabel):
 
     def _update(self) -> None:
         metrics = self.fontMetrics()
-        self.setText(
-            metrics.elidedText(self._full, Qt.TextElideMode.ElideMiddle, max(self.width(), 40))
-        )
+        self.setText(metrics.elidedText(self._full, self._mode, max(self.width(), 40)))

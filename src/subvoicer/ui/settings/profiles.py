@@ -4,10 +4,12 @@ pronunciation and the speaker stop-list of the selected profile."""
 from __future__ import annotations
 
 import logging
+import threading
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSize, Qt
+from PySide6.QtGui import QPainter, QPainterPath, QPixmap
 from PySide6.QtWidgets import (
     QFileDialog,
     QFrame,
@@ -40,6 +42,7 @@ from subvoicer.ui.settings.dialogs import (
     voice_text,
 )
 from subvoicer.ui.settings.window import Page
+from subvoicer.ui.tray import pretty
 from subvoicer.ui.widgets.common import (
     Card,
     ElidedLabel,
@@ -79,7 +82,7 @@ def zone_behaviour(zone: Zone) -> str:
         return "Имя говорящего"
     policy = zone.policy
     if zone.trigger == "hotkey":
-        return f"По клавише {zone.hotkey or ''}".strip()
+        return f"По клавише {pretty(zone.hotkey) if zone.hotkey else ''}".strip()
     parts = [TRIGGER_TEXT.get(zone.trigger or "", "")]
     if zone.trigger == "auto" and policy is not None:
         parts.append(f"{PRIORITY_TEXT[policy.priority]} приоритет")
@@ -98,6 +101,66 @@ def assigned_chip(character: Character) -> QLabel:
     if character.source == "import":
         return chip("из списка", "import")
     return chip("авто", "info")
+
+
+GAME_TILE = 38  # docs/design/Profiles.html
+
+
+def is_configured(profile: Profile, missing_aspect: str | None = None) -> bool:
+    return not missing_aspect and any(layout.zones for layout in profile.layouts.values())
+
+
+def rounded(pixmap: QPixmap, size: int, radius: int = 8) -> QPixmap:
+    """A game icon as a tile with rounded corners."""
+    ratio = pixmap.devicePixelRatio() or 1.0
+    scaled = pixmap.scaled(
+        round(size * ratio),
+        round(size * ratio),
+        Qt.AspectRatioMode.KeepAspectRatio,
+        Qt.TransformationMode.SmoothTransformation,
+    )
+    result = QPixmap(scaled.size())
+    result.setDevicePixelRatio(ratio)
+    result.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(result)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    clip = QPainterPath()
+    clip.addRoundedRect(0, 0, size, size, radius, radius)
+    painter.setClipPath(clip)
+    painter.drawPixmap(0, 0, size, size, scaled)
+    painter.end()
+    return result
+
+
+class GameRow(QWidget):
+    """One game of the list: icon (or initials), title, coloured status."""
+
+    def __init__(self, title: str, status: str, configured: bool, icon: Path | None) -> None:
+        super().__init__()
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setSpacing(12)
+        pixmap = QPixmap(str(icon)) if icon is not None else QPixmap()
+        if pixmap.isNull():
+            tile = badge(initials(title), GAME_TILE)
+        else:
+            tile = QLabel()
+            tile.setFixedSize(GAME_TILE, GAME_TILE)
+            tile.setPixmap(rounded(pixmap, GAME_TILE))
+        layout.addWidget(tile)
+        texts = QVBoxLayout()
+        texts.setSpacing(3)
+        name = ElidedLabel(title, mode=Qt.TextElideMode.ElideRight)
+        name.setStyleSheet("font-size: 14px; font-weight: 600; background: transparent;")
+        texts.addWidget(name)
+        kind = "success" if configured else "warning"
+        state = ElidedLabel(status, mode=Qt.TextElideMode.ElideRight)
+        state.setStyleSheet(
+            f"font-size: 11px; color: {theme.CHIPS[kind].text}; background: transparent;"
+        )
+        texts.addWidget(state)
+        layout.addLayout(texts, 1)
 
 
 def badge(text: str, size: int = 40) -> QLabel:
@@ -124,7 +187,12 @@ class ProfilesPage(Page):
 
         left = QVBoxLayout()
         left.setSpacing(16)
-        games = Card("Игры")
+        games = Card()
+        header = QHBoxLayout()
+        header.addWidget(label("ИГРЫ", "sectionTitle"), 1)
+        self._rescan = icon_button("refresh-cw", "Обновить список игр", self._scan_library)
+        header.addWidget(self._rescan)
+        games.body.addLayout(header)
         self._games = QListWidget()
         self._games.setMinimumHeight(220)
         self._games.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -146,7 +214,7 @@ class ProfilesPage(Page):
         left.addStretch(1)
         left_box = QWidget()
         left_box.setLayout(left)
-        left_box.setFixedWidth(230)
+        left_box.setFixedWidth(250)  # design: 270; the detail column needs the rest at 1100 px
         columns.addWidget(left_box)
 
         columns.setContentsMargins(0, 0, 12, 0)  # room for the vertical scroll bar
@@ -169,13 +237,23 @@ class ProfilesPage(Page):
             missing = None
             if status.profile_path == str(stored.path) and not status.has_zones:
                 missing = status.aspect
-            item = QListWidgetItem(
-                f"{stored.profile.title or stored.path.stem}\n"
-                f"{profile_status(stored.profile, missing)}"
+            title = stored.profile.title or stored.path.stem
+            status_text = profile_status(stored.profile, missing)
+            tip = f"{title}\n{status_text}"
+            if stored.profile.exe is None:
+                tip += "\nexe игры привяжется при первом запуске (полный экран)"
+            row = GameRow(
+                title,
+                status_text,
+                is_configured(stored.profile, missing),
+                self._facade.icon_path(stored.profile),
             )
+            item = QListWidgetItem()
             item.setData(Qt.ItemDataRole.UserRole, str(stored.path))
-            item.setIcon(theme.icon("gamepad-2", theme.ACCENT, 20))
+            item.setToolTip(tip)
+            item.setSizeHint(row.sizeHint().expandedTo(QSize(0, GAME_TILE + 22)))
             self._games.addItem(item)
+            self._games.setItemWidget(item, row)
             if selected is not None and stored.path == selected:
                 self._games.setCurrentItem(item)
         self._games.blockSignals(False)
@@ -215,6 +293,16 @@ class ProfilesPage(Page):
             QMessageBox.warning(self, "Профиль не создан", format_error(exc))
             return
         self._selected = stored.path
+        self.refresh()
+
+    def _scan_library(self) -> None:
+        """«Обновить»: installed games of Steam / Epic / GOG (TZ 4.16), off the Qt thread;
+        the list refreshes on LibraryScanned."""
+        self._rescan.setEnabled(False)
+        threading.Thread(target=self._facade.scan_library, name="Library", daemon=True).start()
+
+    def library_scanned(self) -> None:
+        self._rescan.setEnabled(True)
         self.refresh()
 
     def _import_profile(self) -> None:

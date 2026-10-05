@@ -397,5 +397,5 @@ TTS: dict[str, str] = {
 | 6 | `ui/`, `app/facade.py`, `app/zone_tools.py`, `services/history.py`, `engines/system/single_instance.py`, `autostart.py` (в ТЗ — этап 8, нужен для «Общих»), `__main__.py`, `tools/ui_snapshot.py` |
 | 7 | `sources/manual.py`, `engines/system/hotkeys.py` целиком, `ui/select_area.py` (клавиши зон — в `app/facade.py`) |
 | 8 | `resources/models.toml`, `config/models.py`, `engines/system/download.py`, `app/models_setup.py`, `ui/first_run.py` (`autostart.py` — сделан на этапе 6) |
-| 9 | `engines/library/`, `engines/system/icons.py` |
+| 9 | `engines/library/` (steam, epic, gog), `engines/system/icons.py`, `pipeline/games/library.py`, `app/library.py`, `resources/library_ignore.txt` |
 | 11 | `engines/hook/` (client + host), `engines/system/anticheat.py`, `sources/hook.py`, `config/profile.py: HookSettings`, вкладка «Текст из игры» в `ui/settings/` |
