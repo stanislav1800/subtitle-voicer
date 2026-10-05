@@ -50,17 +50,23 @@ def find_profile(store: ProfileStore, ref: str) -> StoredProfile:
 
 
 def new_profile(
-    store: ProfileStore, exe: str, title: str | None = None, install_dir: str | None = None
+    store: ProfileStore,
+    exe: str | None,
+    title: str | None = None,
+    install_dir: str | None = None,
+    icon: str | None = None,
 ) -> StoredProfile:
-    """Voices by TZ 4.6 from the voice catalog, the default speaker stop-list, no zones."""
+    """Voices by TZ 4.6 from the voice catalog, the default speaker stop-list, no zones.
+    ``exe`` is None for a Steam game: it is bound on the first run (4.11)."""
     profiles = store.load_all()
-    if store.match(profiles, exe, None) is not None and install_dir is None:
+    if exe is not None and install_dir is None and store.match(profiles, exe, None) is not None:
         raise FileExistsError(f"Профиль для {exe} уже есть")
     defaults = default_voices(list(voice_catalog(TTS_CATALOG).values()))
     profile = Profile(
         exe=exe,
         install_dir=install_dir,
-        title=title or Path(exe).stem,
+        icon=icon,
+        title=title or (Path(exe).stem if exe else Path(install_dir or "").name),
         narrator_voice=defaults.narrator,
         default_voices=DefaultVoices(male=defaults.male, female=defaults.female),
         speaker_stoplist=speaker_stoplist(),

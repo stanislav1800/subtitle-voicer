@@ -1,0 +1,15 @@
+# Не игры: служебные записи лаунчеров, инструменты, программы (ТЗ 4.16, 1.18).
+# Строка — название целиком (без учёта регистра); «*» в конце — любое начало названия.
+Steamworks Common Redistributables
+Steam Linux Runtime*
+Proton *
+Steam Audio*
+SteamVR*
+Source SDK*
+Source Filmmaker
+Steam Controller Configs
+Wallpaper Engine
+*Dedicated Server
+*SDK
+*Soundtrack
+*Editor

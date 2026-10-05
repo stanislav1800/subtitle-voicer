@@ -6,6 +6,7 @@ import logging
 import sys
 import time
 from collections.abc import Callable, Sequence
+from pathlib import Path
 from typing import Protocol
 
 from subvoicer.core.models import WindowRef
@@ -107,6 +108,15 @@ def autostart_command() -> str:
     exe = Path(sys.executable)
     windowed = exe.with_name("pythonw.exe")
     return f'"{windowed if windowed.exists() else exe}" -m subvoicer {AUTOSTART_FLAG}'
+
+
+def product_name(exe: Path) -> str | None:
+    """ProductName from the exe's version info (TZ 4.16)."""
+    if sys.platform != "win32":
+        return None
+    from subvoicer.engines.system.icons import product_name as read
+
+    return read(exe)
 
 
 def set_autostart(enabled: bool) -> None:

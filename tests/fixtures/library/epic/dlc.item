@@ -1,0 +1,8 @@
+{
+	"LaunchExecutable": "bin/x64/witcher3.exe",
+	"AppName": "PeweeDlc1",
+	"AppCategories": ["public", "addons"],
+	"DisplayName": "Hearts of Stone",
+	"InstallLocation": "INSTALL_DIR",
+	"MainGameAppName": "Pewee"
+}

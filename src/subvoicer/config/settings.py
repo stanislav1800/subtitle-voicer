@@ -5,11 +5,12 @@ from __future__ import annotations
 import os
 import tomllib
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import tomlkit
 from pydantic import Field
 
+from subvoicer.config.migrations import Migration, ProfileTooNewError, migrate
 from subvoicer.config.profile import StrictModel
 from subvoicer.config.resources import read_list
 
@@ -23,11 +24,24 @@ DEFAULT_HOTKEYS = {  # TZ 4.12
 }
 
 
+SETTINGS_SCHEMA_VERSION = 2  # 1: before stage 9, without the key (TZ 1.18)
+
+
+def _v1_to_v2(data: dict[str, Any]) -> dict[str, Any]:
+    data.setdefault("library_hidden", [])
+    return data
+
+
+# from version N to N+1, each with a unit test on an old file
+SETTINGS_MIGRATIONS: dict[int, Migration] = {1: _v1_to_v2}
+
+
 def default_excluded_exes() -> list[str]:
     return read_list("excluded_exes.txt")
 
 
 class Settings(StrictModel):
+    schema_version: int = SETTINGS_SCHEMA_VERSION
     enabled: bool = True
     poll_hz: float = Field(default=10, gt=0, le=60)
     output_device: str = ""
@@ -48,6 +62,7 @@ class Settings(StrictModel):
     excluded_exes: list[str] = Field(default_factory=default_excluded_exes)
     never_ask_exes: list[str] = Field(default_factory=list)
     library_sources: list[str] = Field(default_factory=lambda: ["steam", "epic", "gog"])
+    library_hidden: list[str] = Field(default_factory=list)  # install dirs (TZ 1.18)
     hotkeys: dict[str, str] = Field(default_factory=lambda: dict(DEFAULT_HOTKEYS))
 
 
@@ -55,7 +70,21 @@ def load_settings(path: Path) -> Settings:
     """Defaults when the file does not exist yet; a bad file is an error with the key names."""
     if not path.exists():
         return Settings()
-    return Settings.model_validate(tomllib.loads(path.read_text(encoding="utf-8")))
+    return Settings.model_validate(
+        migrate_settings(tomllib.loads(path.read_text(encoding="utf-8")))
+    )
+
+
+def migrate_settings(data: dict[str, Any]) -> dict[str, Any]:
+    """Old files up to SETTINGS_SCHEMA_VERSION; a file without the key is version 1."""
+    data = {"schema_version": 1, **data}
+    try:
+        return migrate(data, SETTINGS_SCHEMA_VERSION, SETTINGS_MIGRATIONS)
+    except ProfileTooNewError as exc:
+        raise ValueError(
+            f"settings.toml создан более новой версией приложения "
+            f"(формат {data['schema_version']}, известен до {SETTINGS_SCHEMA_VERSION})"
+        ) from exc
 
 
 def save_settings(path: Path, settings: Settings) -> None:

@@ -114,6 +114,13 @@ class ProfileBound(Event):
 
 
 @dataclass(frozen=True, slots=True)
+class LibraryScanned(Event):
+    """Installed games were looked up (TZ 4.16); ``added`` — titles of new profiles."""
+
+    added: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class DebugCaptured(Event):
     """Ctrl+Alt+D saved a frame, zone crops and OCR results (TZ 4.13.2)."""
 

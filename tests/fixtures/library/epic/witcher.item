@@ -1,0 +1,19 @@
+{
+	"FormatVersion": 0,
+	"bIsIncompleteInstall": false,
+	"LaunchCommand": "",
+	"LaunchExecutable": "bin/x64/witcher3.exe",
+	"ManifestLocation": "C:\\Games\\Epic\\TheWitcher3\\.egstore",
+	"bIsApplication": true,
+	"bIsExecutable": true,
+	"bRequiresAuth": true,
+	"bCanRunOffline": true,
+	"AppName": "Pewee",
+	"CatalogNamespace": "witcher",
+	"CatalogItemId": "6ba9a4a6b0f646a6a2e1d1c1b8a4c3d2",
+	"AppCategories": ["public", "games", "applications"],
+	"DisplayName": "The Witcher 3: Wild Hunt",
+	"InstallLocation": "INSTALL_DIR",
+	"MainGameAppName": "Pewee",
+	"InstallSize": 50000000000
+}

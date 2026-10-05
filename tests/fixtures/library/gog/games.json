@@ -1,0 +1,24 @@
+[
+  {
+    "gameID": "1207664663",
+    "gameName": "Disco Elysium",
+    "path": "C:\\GOG Games\\Disco Elysium",
+    "exe": "C:\\GOG Games\\Disco Elysium\\disco.exe",
+    "exeFile": "disco.exe",
+    "launchCommand": "\"C:\\GOG Games\\Disco Elysium\\disco.exe\"",
+    "workingDir": "C:\\GOG Games\\Disco Elysium"
+  },
+  {
+    "gameID": "1207664690",
+    "gameName": "Disco Elysium - Artbook",
+    "path": "C:\\GOG Games\\Disco Elysium",
+    "dependsOn": "1207664663",
+    "launchCommand": "",
+    "workingDir": "C:\\GOG Games\\Disco Elysium"
+  },
+  {
+    "gameID": "1",
+    "gameName": "Old entry without exe",
+    "workingDir": "C:\\GOG Games\\Old"
+  }
+]

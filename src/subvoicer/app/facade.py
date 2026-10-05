@@ -17,7 +17,7 @@ from pathlib import Path
 
 import numpy as np
 
-from subvoicer.app import game_runner, runtime, zone_tools
+from subvoicer.app import game_runner, library, runtime, zone_tools
 from subvoicer.app import profile_commands as pc
 from subvoicer.app.bus import Bus
 from subvoicer.app.game_runner import RunParts, build_run, pronunciation
@@ -32,9 +32,11 @@ from subvoicer.core.events import (
     GameActivated,
     GameClosed,
     LayoutMissing,
+    LibraryScanned,
     SettingsApplied,
 )
 from subvoicer.core.models import HistoryEntry, Priority, Rect, SpeechRequest, Voice, WindowRef
+from subvoicer.pipeline.games.library import folder_key
 from subvoicer.pipeline.ocr.junk_filter import JunkFilter
 from subvoicer.pipeline.ocr.runner import OcrRunner, OcrSettings
 from subvoicer.pipeline.speaker.gender import GenderGuesser
@@ -108,6 +110,7 @@ class AppFacade:
         }
         self._zone_keys: dict[str, str] = {}  # hotkey zones of the active layout: combo -> id
         self._reader: ManualReader | None = None
+        self._library_lock = threading.Lock()
         self.bus.subscribe(GameActivated, self._on_activated)
         self.bus.subscribe(LayoutMissing, self._on_missing)
         self.bus.subscribe(GameClosed, self._on_closed)
@@ -440,9 +443,33 @@ class AppFacade:
         return stored
 
     def add_game(self, exe_path: str) -> StoredProfile:
-        """«Добавить игру по exe»: exe name + its folder as install_dir (TZ 4.16 for stage 9)."""
+        """«Добавить игру по exe» (TZ 4.16): the title from the file's ProductName, else its
+        name; install_dir is the exe's folder; the icon comes from the exe."""
         exe = Path(exe_path)
-        return pc.new_profile(self.store, exe.name, exe.stem, str(exe.parent))
+        install_dir = str(exe.parent)
+        title = runtime.product_name(exe) or exe.stem
+        icon = library.cache_icon(self.paths, title, install_dir, exe, library.default_icon_saver())
+        self._unhide(install_dir)
+        return pc.new_profile(self.store, exe.name, title, install_dir, icon=icon)
+
+    def scan_library(self) -> library.LibraryScan:
+        """Installed Steam / Epic / GOG games -> profiles (at start and by «Обновить»)."""
+        with self._library_lock:
+            result = library.scan_library(self.store, self.paths, self.settings)
+        self.bus.publish(LibraryScanned(tuple(s.profile.title for s in result.added)))
+        return result
+
+    def icon_path(self, profile: Profile) -> Path | None:
+        if not profile.icon:
+            return None
+        path = self.paths.root / profile.icon
+        return path if path.is_file() else None
+
+    def _unhide(self, install_dir: str) -> None:
+        key = folder_key(install_dir)
+        hidden = [d for d in self.settings.library_hidden if folder_key(d) != key]
+        if len(hidden) != len(self.settings.library_hidden):
+            self.apply_settings(self.settings.model_copy(update={"library_hidden": hidden}))
 
     def create_profile(self, exe: str, title: str | None = None) -> StoredProfile:
         return pc.new_profile(self.store, exe, title)
@@ -461,9 +488,20 @@ class AppFacade:
             self.apply_settings(self.settings.model_copy(update={"never_ask_exes": exes}))
 
     def delete_profile(self, path: Path) -> None:
-        """The profile only, never the game; the file goes to backup."""
+        """The profile only, never the game; the file goes to backup. Its install folder is
+        remembered so the library scan does not bring it back (TZ 1.18)."""
+        install_dir = None
+        try:
+            install_dir = self.store.load(path).install_dir
+        except (OSError, ValueError):
+            log.debug("Удаляемый профиль %s не прочитан", path.name)
         self.store.backup_dir.mkdir(parents=True, exist_ok=True)
         path.replace(self.store.backup_dir / f"{path.stem}.deleted.json")
+        if install_dir:
+            key = folder_key(install_dir)
+            if all(folder_key(d) != key for d in self.settings.library_hidden):
+                hidden = [*self.settings.library_hidden, install_dir]
+                self.apply_settings(self.settings.model_copy(update={"library_hidden": hidden}))
 
     def export_profile(self, path: Path, target: Path) -> None:
         self.store.export(path, target)

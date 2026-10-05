@@ -1,0 +1,22 @@
+"libraryfolders"
+{
+	"0"
+	{
+		"path"		"STEAM_DIR"
+		"label"		""
+		"apps"
+		{
+			"1091500"		"0"
+			"228980"		"0"
+		}
+	}
+	"1"
+	{
+		"path"		"LIB2_DIR"
+		"label"		""
+	}
+	"2"
+	{
+		"path"		"D:\\NoSuchLibrary"
+	}
+}
