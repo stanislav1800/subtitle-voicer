@@ -240,3 +240,28 @@ def test_objective_waits_while_the_dialog_speaks(rig: Rig) -> None:
     clock.advance(0.1)
     service.step()
     assert out.log == [("start", 1), ("start", 2)]
+
+
+def test_manual_reading_gets_manual_priority_and_follows_itself(rig: Rig) -> None:
+    first = line("Кто ты?", speaker="Ви")
+    second = replace(line("Вылезай.", speaker="Джеки"), id=2)
+    requests = rig.router.manual([first, second])
+    assert [r.priority for r in requests] == [Priority.MANUAL, Priority.MANUAL]
+    assert [r.continuation for r in requests] == [False, True]
+    assert requests[0].voice_id != requests[1].voice_id  # each speaker keeps a voice
+
+
+def test_selection_is_read_by_the_narrator(rig: Rig) -> None:
+    from subvoicer.sources.manual import SELECT_CHANNEL
+
+    (request,) = rig.router.manual([line("Записка на столе.", SELECT_CHANNEL)])
+    assert (request.voice_id, request.priority, request.duck) == ("n", Priority.MANUAL, True)
+    assert request.zone_name == "Выделение"
+    rig.router.set_profile(None, None)
+    assert rig.router.manual([line("Записка.", SELECT_CHANNEL)]) == []
+
+
+def test_zone_lookup_for_hotkey_reading(rig: Rig) -> None:
+    found = rig.router.zone("objective")
+    assert found is not None and found[1].id == "objective" and len(found[2]) == 2
+    assert rig.router.zone("nope") is None

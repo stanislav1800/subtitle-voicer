@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from subvoicer.app.facade import AppFacade
+from subvoicer.ui import theme
 from subvoicer.ui.settings.window import Page
 from subvoicer.ui.tray import pretty
 from subvoicer.ui.widgets.common import Card, clear_layout, keycap, label, titled
@@ -189,7 +190,7 @@ class HotkeysPage(Page):
         conflict = self._conflict(key, hotkey)
         if conflict:
             self._error.setText(f"{pretty(hotkey)} уже занято: {conflict}. Не сохранено.")
-            self._error.setStyleSheet("color: #ffab9e;")
+            self._error.setStyleSheet(f"color: {theme.CHIPS['error'].text};")
             return
         self._error.setText("")
         hotkeys = {**self._facade.settings.hotkeys, key: hotkey}

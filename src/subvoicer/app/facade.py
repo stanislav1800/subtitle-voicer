@@ -11,7 +11,7 @@ import json
 import logging
 import threading
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 
@@ -24,7 +24,7 @@ from subvoicer.app.game_runner import RunParts, build_run, pronunciation
 from subvoicer.config.paths import AppPaths
 from subvoicer.config.profile import Layout, Profile, Zone
 from subvoicer.config.profile_store import ProfileStore, StoredProfile
-from subvoicer.config.resources import gender_exceptions, voice_catalog
+from subvoicer.config.resources import gender_exceptions, short_words, voice_catalog
 from subvoicer.config.settings import Settings, load_settings, save_settings
 from subvoicer.core.events import (
     DebugCaptured,
@@ -34,12 +34,15 @@ from subvoicer.core.events import (
     LayoutMissing,
     SettingsApplied,
 )
-from subvoicer.core.models import HistoryEntry, Priority, SpeechRequest, Voice, WindowRef
+from subvoicer.core.models import HistoryEntry, Priority, Rect, SpeechRequest, Voice, WindowRef
+from subvoicer.pipeline.ocr.junk_filter import JunkFilter
+from subvoicer.pipeline.ocr.runner import OcrRunner, OcrSettings
 from subvoicer.pipeline.speaker.gender import GenderGuesser
 from subvoicer.pipeline.speech.scheduler import OverlapMode
 from subvoicer.services.history import History
 from subvoicer.services.speech_service import SpeechTuning
-from subvoicer.sources.zone_ocr import read_once
+from subvoicer.sources.manual import ManualReader, selection_spec
+from subvoicer.sources.zone_ocr import ZoneSpec, read_once
 
 log = logging.getLogger(__name__)
 
@@ -103,6 +106,8 @@ class AppFacade:
             "skip": self.skip,
             "debug_capture": self._capture_in_background,
         }
+        self._zone_keys: dict[str, str] = {}  # hotkey zones of the active layout: combo -> id
+        self._reader: ManualReader | None = None
         self.bus.subscribe(GameActivated, self._on_activated)
         self.bus.subscribe(LayoutMissing, self._on_missing)
         self.bus.subscribe(GameClosed, self._on_closed)
@@ -114,6 +119,11 @@ class AppFacade:
         parts = build_run(self.settings, self.bus, self.paths, hotkeys=False)
         parts.session.start()
         parts.speech.service.set_paused(not self.settings.enabled)
+        self._reader = ManualReader(
+            OcrRunner(parts.engines.get("rapidocr")),
+            JunkFilter(short_words()),
+            runtime.MonotonicClock(),
+        )
         self._parts = parts
         if hotkeys:
             self._hotkeys = runtime.make_hotkeys()
@@ -170,6 +180,11 @@ class AppFacade:
             for name, action in actions.items()
             if name in self.settings.hotkeys
         }
+        for combo, zone_id in self._zone_keys.items():
+            if combo in bindings:
+                log.warning("Клавиша %s зоны %s занята общим действием", combo, zone_id)
+                continue
+            bindings[combo] = lambda zone_id=zone_id: self.read_zone(zone_id)
         try:
             start(bindings)
         except Exception:
@@ -219,6 +234,58 @@ class AppFacade:
             pronunciation=pronunciation,
         )
         self._parts.speech.service.submit(request)
+
+    # ------------------------------------------------------------------ manual reading
+
+    def read_zone(self, zone_id: str) -> None:
+        """A ``hotkey`` zone of the active game, read once (TZ 4.9). Blocks for the OCR."""
+        parts = self._parts
+        found = parts.router.zone(zone_id) if parts is not None else None
+        if parts is None or found is None:
+            log.warning("Зона %s не прочитана: нет активной игры с этой зоной", zone_id)
+            return
+        profile, zone, zones = found
+        if zone.kind != "text" or zone.policy is None:
+            return
+        frame = self.game_frame()
+        if frame is None:
+            log.warning("Зона %s не прочитана: нет кадра игры", zone_id)
+            return
+        self._read(game_runner.zone_spec(profile, zone, zones, parts.engines), frame)
+
+    def read_area(self, frame: zone_tools.Image, rect: tuple[float, float, float, float]) -> None:
+        """«Выделить и прочитать» (Ctrl+Alt+A): ``rect`` in fractions of ``frame``."""
+        parts = self._parts
+        profile = parts.router.profile() if parts is not None else None
+        if parts is None or profile is None:
+            return
+        ocr = profile.ocr
+        spec = replace(
+            selection_spec(Rect(*rect), profile.speaker_stoplist),
+            runner=OcrRunner(parts.engines.get(ocr.engine), OcrSettings(upscale=ocr.upscale)),
+            junk=JunkFilter(short_words(), min_confidence=ocr.min_confidence),
+        )
+        self._read(spec, frame)
+
+    def _read(self, spec: ZoneSpec, frame: zone_tools.Image) -> None:
+        parts, reader = self._parts, self._reader
+        if parts is None or reader is None:
+            return
+        try:
+            utterances = reader.read(spec, frame)
+        except Exception:
+            log.exception("Зона %s не прочитана", spec.id)
+            return
+        for request in parts.router.manual(utterances):
+            parts.speech.service.submit(request)
+
+    def game_frame(self) -> zone_tools.Image | None:
+        """The latest frame of the running capture, or a fresh one (no ``auto`` zones)."""
+        parts = self._parts
+        frame = parts.runner.latest_frame() if parts is not None else None
+        if frame is not None:
+            return np.ascontiguousarray(frame[:, :, :3])
+        return self.grab_game_frame()
 
     def zone_hotkeys(self) -> dict[str, str]:
         """Hotkeys of hotkey zones in all profiles: combo -> «game · zone» (TZ 4.12)."""
@@ -439,6 +506,29 @@ class AppFacade:
             log.debug("Профиль %s не прочитан для статуса", event.profile_path)
         with self._lock:
             self._game, self._missing, self._title = event, False, title
+        self._set_zone_keys(self._hotkey_zones(Path(event.profile_path), event.aspect))
+
+    def _hotkey_zones(self, path: Path, aspect: str) -> dict[str, str]:
+        """Hotkeys of the active layout: registered only while the profile is active (4.12)."""
+        try:
+            layout = self.store.load(path).layouts.get(aspect)
+        except (OSError, ValueError):
+            return {}
+        if layout is None:
+            return {}
+        return {
+            zone.hotkey: zone.id
+            for zone in layout.zones
+            if zone.kind == "text" and zone.trigger == "hotkey" and zone.hotkey
+        }
+
+    def _set_zone_keys(self, keys: dict[str, str]) -> None:
+        if keys == self._zone_keys:
+            return
+        self._zone_keys = keys
+        if keys:
+            log.info("Клавиши зон: %s", ", ".join(f"{k} → {v}" for k, v in keys.items()))
+        self._register_hotkeys()
 
     def _on_missing(self, _event: Event) -> None:
         with self._lock:
@@ -447,6 +537,7 @@ class AppFacade:
     def _on_closed(self, _event: Event) -> None:
         with self._lock:
             self._game, self._missing, self._title = None, False, None
+        self._set_zone_keys({})
 
 
 def tuning(settings: Settings) -> SpeechTuning:

@@ -177,6 +177,30 @@ def test_manual_cuts_manual(s: SpeechScheduler) -> None:
     assert stopped(commands) == [m1] and played(commands) == [m2]
 
 
+def test_manual_reading_of_several_speakers_plays_in_turn(s: SpeechScheduler) -> None:
+    first, second = req(M, "note"), req(M, "note", continuation=True)
+    s.submit(first, 0)
+    assert s.submit(second, 0.1) == []  # waits for the first speaker
+    auto = req(H)
+    assert dropped(s.submit(auto, 0.5)) == [(auto, DropReason.MANUAL)]
+    assert played(s.finished(first.id, True, 2)) == [second]
+
+
+def test_manual_continuation_of_another_reading_takes_over(s: SpeechScheduler) -> None:
+    first, other = req(M, "note"), req(M, "select", continuation=True)
+    s.submit(first, 0)
+    commands = s.submit(other, 1)
+    assert stopped(commands) == [first] and played(commands) == [other]
+
+
+def test_pause_keeps_the_rest_of_a_manual_reading(s: SpeechScheduler) -> None:
+    first, second = req(M, "note"), req(M, "note", continuation=True)
+    s.submit(first, 0)
+    s.submit(second, 0.1)
+    assert s.set_paused(True) == []
+    assert played(s.finished(first.id, True, 2)) == [second]
+
+
 def test_late_finish_of_a_cut_line_is_ignored(s: SpeechScheduler) -> None:
     a, b = req(H), req(H)
     s.submit(a, 0)

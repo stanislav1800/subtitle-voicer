@@ -119,6 +119,10 @@ class SpeechScheduler:
 
     def submit(self, request: SpeechRequest, now: float) -> list[Command]:
         if request.priority is Priority.MANUAL:
+            if request.continuation and self._manual_running(request.channel):
+                # the next speaker of a manual reading follows it (TZ 1.17, several speakers)
+                self._queue_continuation(request, now)
+                return []
             return self._take_over(request, now)
         if self.paused:
             return [Dropped(request, DropReason.PAUSED)]
@@ -177,8 +181,9 @@ class SpeechScheduler:
         self.paused = paused
         if not paused:
             return []
-        commands: list[Command] = [Dropped(q.request, DropReason.PAUSED) for q in self._queue]
-        self._queue.clear()
+        dropped = [q for q in self._queue if q.request.priority is not Priority.MANUAL]
+        commands: list[Command] = [Dropped(q.request, DropReason.PAUSED) for q in dropped]
+        self._queue = [q for q in self._queue if q.request.priority is Priority.MANUAL]
         if self.current is not None and self.current.priority is not Priority.MANUAL:
             commands.append(self._stop_current())
         return commands
@@ -190,6 +195,12 @@ class SpeechScheduler:
         return [Dropped(q.request, DropReason.EXPIRED) for q in expired]
 
     # ------------------------------------------------------------------ internals
+
+    def _manual_running(self, channel: str) -> bool:
+        current = self.current
+        if current is not None:
+            return current.priority is Priority.MANUAL and current.channel == channel
+        return False
 
     def _take_over(self, request: SpeechRequest, now: float) -> list[Command]:
         commands: list[Command] = [Dropped(q.request, DropReason.MANUAL) for q in self._queue]

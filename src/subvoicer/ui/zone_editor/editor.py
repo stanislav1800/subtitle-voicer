@@ -24,6 +24,7 @@ from subvoicer.config.profile import Layout, Profile, Zone
 from subvoicer.config.profile_store import format_error
 from subvoicer.ui import theme
 from subvoicer.ui.settings.hotkeys import ACTIONS
+from subvoicer.ui.tray import pretty
 from subvoicer.ui.widgets.common import chip, label, primary
 from subvoicer.ui.widgets.screens import screen_for
 from subvoicer.ui.zone_editor.canvas import Fractions, ZoneBox, ZoneCanvas
@@ -266,10 +267,21 @@ class ZoneEditor(QWidget):
 
     def _validated(self) -> list[Zone] | None:
         try:
-            return Layout(zones=[Zone.model_validate(z) for z in self._zones]).zones
+            zones = Layout(zones=[Zone.model_validate(z) for z in self._zones]).zones
         except ValueError as exc:
             self._message.setText(format_error(exc))
             return None
+        for zone in zones:
+            if zone.trigger != "hotkey" or not zone.hotkey:
+                continue
+            conflict = self._taken_hotkeys(zone.id).get(zone.hotkey)
+            if conflict:
+                name = zone.name or zone.id
+                self._message.setText(
+                    f"Клавиша зоны «{name}» {pretty(zone.hotkey)} уже занята: {conflict}"
+                )
+                return None
+        return zones
 
     def _preview(self) -> None:
         zone_data = self._zone(self._selected)

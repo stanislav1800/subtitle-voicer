@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 import threading
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -43,6 +43,7 @@ from subvoicer.services.capture_service import CaptureService
 from subvoicer.services.game_watcher import GameWatcher
 from subvoicer.services.speech_service import SpeechService
 from subvoicer.services.zone_service import ZoneService
+from subvoicer.sources.manual import SELECT_CHANNEL
 from subvoicer.sources.zone_ocr import NameSource, ZoneOcrSource, ZoneSpec
 
 log = logging.getLogger(__name__)
@@ -89,7 +90,8 @@ class OcrEngines:
 
 
 def zone_specs(profile: Profile, aspect: str, engines: OcrEngines) -> list[ZoneSpec]:
-    """``auto`` text zones of the layout; ``hotkey`` zones wait for stage 7, ``off`` are skipped."""
+    """``auto`` text zones of the layout; ``hotkey`` zones are read by their key (ManualReader),
+    ``off`` are skipped."""
     layout = profile.layouts.get(aspect)
     if layout is None:
         return []
@@ -240,6 +242,50 @@ class ProfileRouter:
             voice_reason=reason,
             zone_name=zone.name or zone.id,
         )
+
+    def manual(self, utterances: list[Utterance]) -> list[SpeechRequest]:
+        """A hotkey zone or a selection read on request (TZ 4.9): manual priority; the next
+        speakers of the same reading follow the first one instead of cutting it."""
+        requests: list[SpeechRequest] = []
+        for utterance in utterances:
+            request = (
+                self._selection(utterance)
+                if utterance.channel == SELECT_CHANNEL
+                else self.request(utterance)
+            )
+            if request is not None:
+                requests.append(
+                    replace(request, priority=Priority.MANUAL, continuation=bool(requests))
+                )
+        return requests
+
+    def _selection(self, utterance: Utterance) -> SpeechRequest | None:
+        with self._lock:
+            active = self._active
+        if active is None:
+            return None
+        return SpeechRequest(
+            id=utterance.id,
+            text=utterance.text,
+            voice_id=active.profile.narrator_voice,
+            priority=Priority.MANUAL,
+            channel=utterance.channel,
+            t_change=utterance.t_change,
+            voice_reason="выделение — рассказчик",
+            zone_name="Выделение",
+        )
+
+    def zone(self, zone_id: str) -> tuple[Profile, Zone, list[Zone]] | None:
+        """A zone of the active layout with its profile and neighbours (for manual reading)."""
+        with self._lock:
+            active = self._active
+        if active is None or zone_id not in active.zones:
+            return None
+        return active.profile, active.zones[zone_id], list(active.zones.values())
+
+    def profile(self) -> Profile | None:
+        with self._lock:
+            return self._active.profile if self._active is not None else None
 
     def _voice(
         self, active: _Active, policy: VoicingPolicy, utterance: Utterance
