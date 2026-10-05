@@ -230,7 +230,7 @@ subtitle-voicer/
 │   │   ├── zone_service.py        # цикл poll_hz по зонам auto (через sources/zone_ocr)
 │   │   ├── speech_service.py      # планировщик + синтез + плеер + ducking
 │   │   ├── game_watcher.py        # 1 Гц, переключение профиля, уведомления
-│   │   ├── hotkey_service.py      # общие хоткеи и хоткеи зон активного профиля
+│   │   ├── (hotkey_service.py)    # не понадобился: общие клавиши и клавиши зон регистрирует app/facade.py
 │   │   └── history.py             # последние реплики и метрики (режим разработчика)
 │   │
 │   ├── app/
@@ -395,7 +395,7 @@ TTS: dict[str, str] = {
 | 4 | `engines/audio/ducker.py`, `pipeline/speech/ducking.py` |
 | 5 | `config/profile*.py`, `config/settings.py`, `config/migrations.py`, `config/characters_csv.py`, `pipeline/speaker/characters.py`, `pipeline/games/`, `pipeline/vision/regions.py`, `engines/system/windows.py` (окно переднего плана, порт `Desktop`), `services/game_watcher.py`, `app/game_runner.py`, `app/profile_commands.py`, `resources/zone_templates.toml`, `excluded_exes.txt`, `cli.py run / profiles / characters`, сценарий `subtitle_player.py --scenario profiles`; после этапа (ТЗ 1.17) — `tools/real_bench.py`, `tests/fixtures/real/cyberpunk` |
 | 6 | `ui/`, `app/facade.py`, `app/zone_tools.py`, `services/history.py`, `engines/system/single_instance.py`, `autostart.py` (в ТЗ — этап 8, нужен для «Общих»), `__main__.py`, `tools/ui_snapshot.py` |
-| 7 | `sources/manual.py`, `engines/system/hotkeys.py` целиком, `services/hotkey_service.py` |
+| 7 | `sources/manual.py`, `engines/system/hotkeys.py` целиком, `ui/select_area.py` (клавиши зон — в `app/facade.py`) |
 | 8 | загрузка моделей в `config/` + `engines/`, `engines/system/autostart.py` |
 | 9 | `engines/library/`, `engines/system/icons.py` |
 | 11 | `engines/hook/` (client + host), `engines/system/anticheat.py`, `sources/hook.py`, `config/profile.py: HookSettings`, вкладка «Текст из игры» в `ui/settings/` |

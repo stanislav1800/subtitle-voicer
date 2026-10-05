@@ -31,6 +31,7 @@ from subvoicer.ui.bridge import Bridge
 from subvoicer.ui.line_window import LineWindow
 from subvoicer.ui.notifications import Notification, Notifier, mono
 from subvoicer.ui.overlay import Overlay
+from subvoicer.ui.select_area import AreaSelector, Fractions
 from subvoicer.ui.settings.general import GeneralPage
 from subvoicer.ui.settings.history import HistoryPage
 from subvoicer.ui.settings.hotkeys import HotkeysPage
@@ -58,6 +59,7 @@ class HotkeySignals(QObject):
     """Hotkeys fire in the pynput thread; windows open in the Qt one."""
 
     zone_editor = Signal()
+    select_read = Signal()
 
 
 class Loader(QObject):
@@ -109,6 +111,9 @@ class Application:
         self.hotkey_signals = HotkeySignals()
         self.hotkey_signals.zone_editor.connect(self.open_zone_editor)
         facade.set_hotkey_action("zone_editor", self.hotkey_signals.zone_editor.emit)
+        self.hotkey_signals.select_read.connect(self.select_and_read)
+        facade.set_hotkey_action("select_read", self.hotkey_signals.select_read.emit)
+        self.selector: AreaSelector | None = None
         self.loader = Loader(facade)
         self.loader.done.connect(self._on_loaded)
 
@@ -144,12 +149,16 @@ class Application:
                 return
             self.open_zone_editor()
             return
+        start = str(self.facade.paths.captures_dir) if self.facade.settings.dev_mode else ""
         name, _ = QFileDialog.getOpenFileName(
-            self.window, "Полный кадр игры", "", "Изображения (*.png *.jpg *.jpeg *.bmp)"
+            self.window, "Полный кадр игры", start, "Изображения (*.png *.jpg *.jpeg *.bmp)"
         )
-        if not name:
-            return
-        image = zone_tools.load_image(Path(name))
+        if name:
+            self.open_screenshot(path, Path(name))
+
+    def open_screenshot(self, path: Path, name: Path) -> None:
+        """The zone editor «по скриншоту» of profile ``path`` on the picture ``name``."""
+        image = zone_tools.load_image(name)
         if image is None:
             QMessageBox.warning(self.window, "Скриншот", "Не удалось открыть картинку")
             return
@@ -160,7 +169,7 @@ class Application:
                 f"Картинка {width}×{height} — не 16:9, 16:10, 21:9, 32:9 или 4:3. Нужен полный "
                 "кадр игры, иначе зоны могут съехать."
             )
-        if Path(name).suffix.lower() in (".jpg", ".jpeg"):
+        if name.suffix.lower() in (".jpg", ".jpeg"):
             warnings.append(
                 "JPEG: цвета могут быть неточными (сжатие, кадр из видео) — проверьте маску в игре."
             )
@@ -177,6 +186,30 @@ class Application:
             self.tray.showMessage("Subtitle Voicer", "Не удалось получить кадр игры")
             return
         self._show_editor(ZoneEditor(self.facade, Path(status.profile_path), frame, "game"))
+
+    def select_and_read(self) -> None:
+        """Ctrl+Alt+A: select an area on the frozen game frame, it is read once (TZ 4.12)."""
+        status = self.facade.status()
+        if status.window is None or status.profile_path is None:
+            return  # available only with an active game
+        frame = self.facade.game_frame()
+        if frame is None:
+            self.tray.showMessage("Subtitle Voicer", "Не удалось получить кадр игры")
+            return
+        if self.selector is not None:
+            self.selector.close()
+
+        def read(rect: Fractions) -> None:
+            threading.Thread(
+                target=self.facade.read_area, args=(frame, rect), name="ReadArea", daemon=True
+            ).start()
+
+        hwnd = status.window.hwnd
+        self.selector = AreaSelector(
+            frame, runtime.client_rect(hwnd), self.facade.game_monitor(), read
+        )
+        self.selector.destroyed.connect(lambda: setattr(self, "selector", None))
+        self.selector.open()
 
     def _show_editor(self, editor: ZoneEditor) -> None:
         if self.editor is not None:
@@ -233,7 +266,14 @@ class Application:
             case ProfileBound(title=title):
                 self.notifier.show(Notification("Игра привязана", f"{title} — профиль готов."))
             case DebugCaptured(folder=folder):
-                self.notifier.show(Notification("Кадр сохранён", mono(folder)))
+                profile = self.facade.status().profile_path
+                frame = Path(folder) / "frame.png"
+                action = (
+                    ("Открыть в редакторе", lambda: self.open_screenshot(Path(profile), frame))
+                    if profile is not None
+                    else None
+                )
+                self.notifier.show(Notification("Кадр сохранён", mono(folder), action))
             case _:
                 pass
         if isinstance(event, SettingsApplied):
