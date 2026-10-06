@@ -100,6 +100,7 @@ core      → (ничего из проекта)
 - Модули, которые трогают Windows (`pywin32`, `comtypes`, `pycaw`, `winrt`, `windows_capture`, `winreg`), допустимы **только** в `engines/`. Это тоже контракт `import-linter` (forbidden для остальных слоёв).
 - `PySide6` допустим **только** в `ui/`.
 - `engines/hook/host.py` — отдельная программа: импортирует только `core/` и `lunahook-py`, ничего из остального приложения (отдельный контракт `import-linter`).
+- `engines/tts/convert_host.py` — отдельная программа в своём окружении (этап 16): импортирует только stdlib, `numpy` и пакеты преобразования, ничего из `subvoicer` (отдельный контракт `import-linter`).
 
 ---
 
@@ -202,7 +203,11 @@ subtitle-voicer/
 │   │   │   ├── silero.py
 │   │   │   ├── silero_stress.py   # StressMarker: расстановка ударений (silero-stress)
 │   │   │   ├── sapi5.py
-│   │   │   └── qwen3.py           # этап 10
+│   │   │   ├── character.py       # этап 16: голоса персонажей = основа + преобразование (обёртка TtsEngine)
+│   │   │   ├── convert_client.py  # этап 16: запускает convert_host, обмен по stdin/stdout
+│   │   │   ├── convert_host.py    # ВСПОМОГАТЕЛЬНЫЙ ПРОЦЕСС в своём окружении (RVC, so-vits-svc, GPU);
+│   │   │   │                      # ничего из приложения не импортирует
+│   │   │   └── qwen3.py           # этап 15
 │   │   ├── audio/
 │   │   │   ├── output.py          # sounddevice
 │   │   │   └── ducker.py          # pycaw + ducking_state.json
@@ -266,8 +271,12 @@ subtitle-voicer/
 │       ├── excluded_exes.txt
 │       ├── library_ignore.txt     # служебные записи Steam и т.п.
 │       ├── anticheat_games.txt    # игры и процессы античитов, где хуки запрещены
+│       ├── voice_convert/
+│       │   ├── requirements.txt   # окружение вспомогательного процесса голосов персонажей (этап 16)
+│       │   └── models.toml        # модели преобразования: ссылки, размеры, SHA-256
 │       └── voices/
-│           └── silero_v5.toml     # каталог голосов с полом (4.6)
+│           ├── silero_v5.toml     # каталог голосов с полом (4.6)
+│           └── characters.toml    # голоса персонажей: основа, модель, параметры (этап 16)
 │
 ├── tools/                         # скрипты разработчика (не часть приложения)
 │   ├── data/phrases_ru.txt
@@ -353,6 +362,12 @@ TTS: dict[str, str] = {
 - Падение хоста или игры → событие `EngineUnavailable`, приложение продолжает работать (зоны OCR не затронуты).
 - Основное приложение **никогда** не запускается с правами администратора целиком.
 
+### 6.3 Вспомогательный процесс голосов персонажей (этап 16)
+
+- `engines/tts/character.py` — `CharacterVoices`: обёртка над движком TTS. Голоса персонажей из `resources/voices/characters.toml` добавляются в `voices()` (если включены и установлены); `synthesize` для такого голоса синтезирует основу и отдаёт её на преобразование; при любой ошибке — звук основы и одно событие `EngineUnavailable`.
+- `engines/tts/convert_client.py` запускает `<voice_convert/env>/python convert_host.py` при первой реплике голосом персонажа и общается с ним по stdin/stdout: строка JSON + сырой float32 в обе стороны. Процесс завершается вместе с приложением (закрытие stdin, затем `terminate`).
+- `app/character_setup.py` — установка (`subvoicer voices install`): окружение через `uv`, модели через `engines/system/download.py`.
+
 ---
 
 ## 7. Тесты
@@ -399,4 +414,5 @@ TTS: dict[str, str] = {
 | 8 | `resources/models.toml`, `config/models.py`, `engines/system/download.py`, `app/models_setup.py`, `ui/first_run.py` (`autostart.py` — сделан на этапе 6) |
 | 10 | `engines/tts/silero.py` (несколько моделей), `resources/voices/silero_v5.toml` (`preferred`), `resources/models.toml` (`v5_5_ru`) |
 | 9 | `engines/library/` (steam, epic, gog), `engines/system/icons.py`, `pipeline/games/library.py`, `app/library.py`, `resources/library_ignore.txt` |
+| 16 | `engines/tts/character.py`, `convert_client.py`, `convert_host.py`, `app/character_setup.py`, `resources/voices/characters.toml`, `resources/voice_convert/`, настройка `character_voices` (версия формата 3), `cli.py voices` |
 | 11 | `engines/hook/` (client + host), `engines/system/anticheat.py`, `sources/hook.py`, `config/profile.py: HookSettings`, вкладка «Текст из игры» в `ui/settings/` |
