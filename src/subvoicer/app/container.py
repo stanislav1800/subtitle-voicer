@@ -12,6 +12,7 @@ from typing import Any
 from subvoicer.app.runtime import MonotonicClock, Session
 from subvoicer.config.paths import AppPaths
 from subvoicer.config.resources import (
+    character_voices,
     gender_exceptions,
     letter_names,
     short_words,
@@ -73,6 +74,8 @@ class SpeechConfig:
     output_device: str = ""
     tts: tuple[str, ...] = TTS_CHAIN
     silero_models: tuple[tuple[str, str], ...] = ()  # (model id, file in models/), TZ 4.14
+    paths: AppPaths | None = None  # app data: character voices are looked up there (stage 16)
+    character_voices: bool = False  # the setting: GPU conversion on (stage 16, TZ 1.21)
     hotkeys: bool = True
     low_priority_ttl_s: float = 5.0
     cache_size: int = 200
@@ -168,7 +171,25 @@ class SpeechParts:
     session: Session
     service: SpeechService
     preparer: TextPreparer
-    voices: list[Voice]  # of the loaded TTS engine
+    voices: list[Voice]  # of the loaded TTS engine (automatic assignment picks from these)
+    characters: Any = None  # CharacterVoices when installed (stage 16), else None
+
+
+def build_characters(tts: Any, config: SpeechConfig, publisher: EventPublisher) -> Any:
+    """Character voices over the loaded engine when their helper is installed (stage 16);
+    the setting only decides whether the helper runs. None: nothing to add."""
+    if config.paths is None:
+        return None
+    from subvoicer.app.character_setup import CharacterSetup
+    from subvoicer.engines.tts.character import CharacterVoices
+
+    base_ids = {v.id for v in tts.voices()}
+    voices = [v for v in character_voices() if v.base in base_ids]  # none on the SAPI5 fallback
+    setup = CharacterSetup(config.paths)
+    if not voices or not setup.status().installed:
+        log.info("Голоса персонажей не установлены")
+        return None
+    return CharacterVoices(tts, voices, setup.converter(), publisher, config.character_voices)
 
 
 def build_speech(
@@ -183,6 +204,7 @@ def build_speech(
     from subvoicer.engines.tts.silero_stress import SileroStressMarker
 
     tts = load_tts(config.tts, bus, config.silero_models)
+    characters = build_characters(tts, config, bus)
     stress = SileroStressMarker()
     stress.load()
     preparer = TextPreparer(
@@ -202,7 +224,7 @@ def build_speech(
             max_lag_s=config.max_lag_s,
         ),
         preparer,
-        tts,
+        characters or tts,
         output,
         SpeechCache(config.cache_size),
         clock,
@@ -210,6 +232,8 @@ def build_speech(
         ducking,
     )
     closers: list[Callable[[], None]] = [output.close]
+    if characters is not None:
+        closers.append(characters.close)  # the helper process ends with the app
     if ducker is not None:
         closers.insert(0, ducker.restore_all)
     starters: list[Callable[[], None]] = []
@@ -222,7 +246,7 @@ def build_speech(
         starters.append(lambda: listener.start(bindings))
         closers.insert(0, listener.stop)
     session = Session([service], closers, starters)
-    return SpeechParts(session, service, preparer, tts.voices())
+    return SpeechParts(session, service, preparer, tts.voices(), characters)
 
 
 class LineRouter:

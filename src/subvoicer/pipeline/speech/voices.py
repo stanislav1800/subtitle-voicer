@@ -25,17 +25,23 @@ class VoiceDefaults:
 
 
 def by_preference(voices: Sequence[Voice]) -> list[Voice]:
-    """Better voices first (``preferred``, TZ 1.19), then by id."""
-    return sorted(voices, key=lambda v: (not v.preferred, v.id))
+    """Better voices first (``preferred``, TZ 1.19), then character voices (stage 16), then the
+    rest; by id within each group."""
+    return sorted(voices, key=lambda v: (not v.preferred, not v.character, v.id))
+
+
+def automatic(voices: Sequence[Voice]) -> list[Voice]:
+    """What the automatic assignment may pick (TZ 4.6): character voices only by hand (1.21)."""
+    return [v for v in voices if not v.character]
 
 
 def default_voices(voices: Sequence[Voice]) -> VoiceDefaults:
     """Profile defaults (TZ 4.6, 1.19): narrator — first male, male — second male (or the
     first), female — first female, better voices first; the first voice of the catalog if a
     gender is missing."""
-    if not voices:
+    ordered = by_preference(automatic(voices))
+    if not ordered:
         raise ValueError("Нет ни одного голоса")
-    ordered = by_preference(voices)
     males = [v.id for v in ordered if v.gender is Gender.MALE]
     females = [v.id for v in ordered if v.gender is Gender.FEMALE]
     first = ordered[0].id

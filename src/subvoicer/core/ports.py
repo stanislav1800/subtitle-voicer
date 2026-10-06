@@ -52,6 +52,22 @@ class TtsEngine(Protocol):
     def synthesize(self, text: str, voice_id: str, rate: float) -> AudioClip: ...
 
 
+class VoiceConverter(Protocol):
+    """Timbre conversion in the helper process (stage 16): RVC or so-vits-svc on the GPU."""
+
+    def load(self, kind: str, model: str) -> None:
+        """Load a model ahead of its first line (with a warm-up); raises EngineError."""
+        ...
+
+    def convert(
+        self, clip: AudioClip, kind: str, model: str, params: Mapping[str, float | str]
+    ) -> AudioClip:
+        """Raises EngineError when the helper is unavailable or the conversion failed."""
+        ...
+
+    def close(self) -> None: ...
+
+
 class StressMarker(Protocol):
     def mark(self, text: str) -> str:
         """Put ``+`` before stressed vowels, leaving words that already contain ``+`` intact."""

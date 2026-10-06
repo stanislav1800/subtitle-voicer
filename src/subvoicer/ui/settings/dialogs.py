@@ -31,7 +31,10 @@ def gender_text(gender: Gender) -> str:
 
 
 PREFERRED_MARK = "★"  # better voices (Silero v5.5, TZ 1.19)
-PREFERRED_HINT = "★ — улучшенное качество (Silero v5.5)"
+CHARACTER_MARK = "⚡"  # character voices on the GPU (stage 16, TZ 1.21)
+PREFERRED_HINT = (
+    f"★ — улучшенное качество (Silero v5.5); {CHARACTER_MARK} — голос персонажа на видеокарте"
+)
 
 
 def voice_text(voice_id: str | None, voices: Sequence[Voice]) -> str:
@@ -41,13 +44,20 @@ def voice_text(voice_id: str | None, voices: Sequence[Voice]) -> str:
         if voice.id == voice_id:
             short = {Gender.MALE: " · муж.", Gender.FEMALE: " · жен."}.get(voice.gender, "")
             star = f" {PREFERRED_MARK}" if voice.preferred else ""
+            star += f" {CHARACTER_MARK}" if voice.character else ""
             return f"{voice.display_name}{star}{short}"
     return voice_id
 
 
-def voice_items(voices: Sequence[Voice], empty: str | None = None) -> list[tuple[str, object]]:
+def voice_items(
+    voices: Sequence[Voice], empty: str | None = None, current: str | None = None
+) -> list[tuple[str, object]]:
+    """``current``: an assigned voice that is not in the list (a character voice that is not
+    installed) stays an item — otherwise the drop-down would pick another and save it."""
     items: list[tuple[str, object]] = [(empty, "")] if empty is not None else []
     items += [(voice_text(v.id, voices), v.id) for v in voices]
+    if current and all(v.id != current for v in voices):
+        items.append((current, current))
     return items
 
 
@@ -97,7 +107,7 @@ class CharacterDialog(Form):
         )
         current = character.voice if character else None
         self._voice = combo(
-            voice_items(voices, "назначить при первой реплике"), current or "", "Голос"
+            voice_items(voices, "назначить при первой реплике", current), current or "", "Голос"
         )
         listen_button = QPushButton("Прослушать")
         listen_button.clicked.connect(

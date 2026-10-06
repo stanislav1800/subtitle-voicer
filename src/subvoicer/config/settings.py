@@ -24,7 +24,7 @@ DEFAULT_HOTKEYS = {  # TZ 4.12
 }
 
 
-SETTINGS_SCHEMA_VERSION = 2  # 1: before stage 9, without the key (TZ 1.18)
+SETTINGS_SCHEMA_VERSION = 3  # 1: before stage 9, without the key (TZ 1.18); 3: TZ 1.21
 
 
 def _v1_to_v2(data: dict[str, Any]) -> dict[str, Any]:
@@ -32,8 +32,13 @@ def _v1_to_v2(data: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
+def _v2_to_v3(data: dict[str, Any]) -> dict[str, Any]:
+    data.setdefault("character_voices", False)
+    return data
+
+
 # from version N to N+1, each with a unit test on an old file
-SETTINGS_MIGRATIONS: dict[int, Migration] = {1: _v1_to_v2}
+SETTINGS_MIGRATIONS: dict[int, Migration] = {1: _v1_to_v2, 2: _v2_to_v3}
 
 
 def default_excluded_exes() -> list[str]:
@@ -63,6 +68,7 @@ class Settings(StrictModel):
     never_ask_exes: list[str] = Field(default_factory=list)
     library_sources: list[str] = Field(default_factory=lambda: ["steam", "epic", "gog"])
     library_hidden: list[str] = Field(default_factory=list)  # install dirs (TZ 1.18)
+    character_voices: bool = False  # GPU character voices, if installed (stage 16, TZ 1.21)
     hotkeys: dict[str, str] = Field(default_factory=lambda: dict(DEFAULT_HOTKEYS))
 
 

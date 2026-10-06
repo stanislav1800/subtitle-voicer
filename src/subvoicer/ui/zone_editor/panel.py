@@ -234,7 +234,8 @@ class ZonePanel(QScrollArea):
         voice_mode.changed.connect(self._set_voice_mode)
         self._props.addWidget(voice_mode)
         if voice.get("mode") == "fixed":
-            choose = combo(voice_items(self._voices), voice.get("id") or "", "Голос зоны")
+            fixed_id = voice.get("id") or ""
+            choose = combo(voice_items(self._voices, current=fixed_id), fixed_id, "Голос зоны")
             choose.currentIndexChanged.connect(
                 lambda _i: self._update_policy(voice={"mode": "fixed", "id": choose.currentData()})
             )

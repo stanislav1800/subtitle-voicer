@@ -483,7 +483,10 @@ def build_run(settings: Settings, bus: EventBus, paths: AppPaths, hotkeys: bool 
     store = ProfileStore(paths.profiles_dir)
     ocr_options, tts_options = engine_options(paths)
     config = replace(
-        speech_config(settings, hotkeys), silero_models=tuple(tts_options["models"].items())
+        speech_config(settings, hotkeys),
+        silero_models=tuple(tts_options["models"].items()),
+        paths=paths,
+        character_voices=settings.character_voices,
     )
     speech = build_speech(config, bus, None, settings.hotkeys)
     gender = GenderGuesser(gender_exceptions())

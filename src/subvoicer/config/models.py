@@ -18,6 +18,7 @@ class ModelFile(BaseModel):
     url: str
     sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     size: int = Field(gt=0)
+    unpack: bool = False  # a zip, extracted next to it (character voices, stage 16)
 
     def path(self, models_dir: Path) -> Path:
         return models_dir / self.file
@@ -29,8 +30,12 @@ class ModelFile(BaseModel):
         return path.is_file() and path.stat().st_size == self.size
 
 
-def model_files() -> list[ModelFile]:
-    return [ModelFile.model_validate(item) for item in read_toml("models.toml")["model"]]
+MODELS_MANIFEST = "models.toml"
+VOICE_CONVERT_MANIFEST = "voice_convert/models.toml"  # character voices (stage 16)
+
+
+def model_files(manifest: str = MODELS_MANIFEST) -> list[ModelFile]:
+    return [ModelFile.model_validate(item) for item in read_toml(manifest)["model"]]
 
 
 def missing(models_dir: Path, files: list[ModelFile] | None = None) -> list[ModelFile]:

@@ -7,7 +7,7 @@ from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
-from subvoicer.core.models import Gender, Voice
+from subvoicer.core.models import CharacterVoice, Gender, Voice
 
 RESOURCES = "subvoicer.resources"
 
@@ -63,3 +63,31 @@ def voice_catalog(engine: str) -> dict[str, Voice]:
             item["id"], gender, item.get("name", item["id"]), bool(item.get("preferred", False))
         )
     return catalog
+
+
+CHARACTER_KINDS = ("rvc", "svc")
+
+
+def character_voices() -> list[CharacterVoice]:
+    """``resources/voices/characters.toml``: character voices (stage 16, TZ 1.21)."""
+    voices = []
+    for item in read_toml("voices/characters.toml").get("voice", []):
+        if item["kind"] not in CHARACTER_KINDS:
+            raise ValueError(f"Голос {item['id']}: неизвестный тип модели {item['kind']!r}")
+        params = tuple(
+            (str(k), v if isinstance(v, str) else float(v))
+            for k, v in item.get("params", {}).items()
+        )
+        voices.append(
+            CharacterVoice(
+                id=item["id"],
+                name=item["name"],
+                gender=Gender(item.get("gender", "unknown")),
+                base=item["base"],
+                kind=item["kind"],
+                model=item["model"],
+                params=params,
+                gain_db=float(item.get("gain_db", 0.0)),
+            )
+        )
+    return voices

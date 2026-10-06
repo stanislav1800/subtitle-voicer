@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import numpy as np
 import pytest
 
 from subvoicer.config.resources import letter_names, translit_table
 from subvoicer.core.events import SpeechDropped, SpeechFinished, SpeechStarted
-from subvoicer.core.models import Priority, SpeechRequest
+from subvoicer.core.models import AudioClip, Priority, SpeechRequest
 from subvoicer.pipeline.speech.cache import SpeechCache
 from subvoicer.pipeline.speech.ducking import DuckEnvelope
 from subvoicer.pipeline.speech.scheduler import OverlapMode, SpeechScheduler
@@ -209,3 +210,22 @@ def test_line_with_extra_pronunciation(rig: Rig) -> None:
     )
     rig.step()
     assert rig.tts.calls[0][0].startswith("Арас+ака")
+
+
+class StandInTts(FakeTts):
+    """A character voice falling back to its base voice (stage 16): not cacheable."""
+
+    def synthesize(self, text: str, voice_id: str, rate: float) -> AudioClip:
+        self.calls.append((text, voice_id, rate))
+        return AudioClip(np.zeros(480, dtype=np.float32), 48_000, cacheable=False)
+
+
+def test_a_stand_in_clip_is_not_cached() -> None:
+    rig = Rig()
+    rig.tts = StandInTts()
+    rig.service._tts = rig.tts
+    rig.service.submit(request(1, "Привет.", channel="a"))
+    rig.step()
+    rig.service.submit(request(2, "Привет.", channel="b"))  # the same text cuts the first line
+    rig.step()
+    assert len(rig.tts.calls) == 2  # synthesized again: the real voice may be ready by now

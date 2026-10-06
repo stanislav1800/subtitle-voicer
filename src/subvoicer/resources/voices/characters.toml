@@ -1,0 +1,45 @@
+# Character voices (stage 16, TZ 1.21): a Silero voice + a timbre conversion model, on the GPU.
+# Chosen and tuned by the user by ear (DECISIONS.md, stage 16). Listed with "⚡" next to the
+# other voices while the setting character_voices is on and `subvoicer voices install` is done;
+# assigned only by hand (TZ 4.6 never picks them).
+#   kind = "rvc": key — semitones, index — pull towards the character (0..1, 0 = no index),
+#                 protect — consonant protection (0.5 = off), rms — loudness envelope of the
+#                 character (1) or of the base voice (0)
+#   kind = "svc": key — semitones, noise — 0 smoother .. 1 livelier, f0 — pitch method
+#   model — folder in voice_convert/models/; gain_db — after matching the base loudness
+
+[[voice]]
+id = "char_vi"
+name = "Ви"
+gender = "female"
+base = "v55_xenia"
+kind = "rvc"
+model = "vi"
+params = { key = -3, index = 1.0, protect = 0.5, rms = 1.0 }
+
+[[voice]]
+id = "char_johnny"
+name = "Джонни"
+gender = "male"
+base = "v55_eugene"
+kind = "rvc"
+model = "johnny"
+params = { key = -2, index = 0.0, protect = 0.5, rms = 1.0 }
+
+[[voice]]
+id = "char_ciri"
+name = "Цири"
+gender = "female"
+base = "v55_xenia"
+kind = "svc"
+model = "ciri"
+params = { key = -2, noise = 1.0, f0 = "dio" }
+
+[[voice]]
+id = "char_geralt"
+name = "Геральт"
+gender = "male"
+base = "v55_eugene"
+kind = "svc"
+model = "geralt"
+params = { key = -2, noise = 1.0, f0 = "dio" }

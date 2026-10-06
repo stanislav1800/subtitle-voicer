@@ -19,6 +19,7 @@ from subvoicer.app.models_setup import ModelSetup
 from subvoicer.config.paths import AppPaths
 from subvoicer.core.events import (
     DebugCaptured,
+    EngineUnavailable,
     Event,
     GameActivated,
     GameClosed,
@@ -277,6 +278,14 @@ class Application:
             case ProfileBound(title=title):
                 self.notifier.show(Notification("Игра привязана", f"{title} — профиль готов."))
                 self.profiles.refresh()
+            case EngineUnavailable(family="characters", reason=reason):
+                self.notifier.show(
+                    Notification(
+                        "Голоса персонажей недоступны",
+                        f"{reason}. Пока звучат их голоса-основы (Xenia, Eugene).",
+                        timeout_ms=15_000,
+                    )
+                )
             case LibraryScanned(added=added):
                 self.profiles.library_scanned()
                 if added:

@@ -1,0 +1,13 @@
+# Environment of the character-voice helper process (stage 16, TZ 1.21): Python 3.11, torch for the GPU.
+# Installed by `subvoicer voices install`; not a dependency of the app itself.
+# rvc 0.3.5 is installed separately with --no-deps: its pins (numba rc, numpy<2, fairseq, av 11) do not
+# build on Windows — fairseq is replaced by ContentVec from transformers, av 11 by a current wheel.
+--extra-index-url https://download.pytorch.org/whl/cu128
+torch==2.11.0+cu128
+torchaudio==2.11.0+cu128
+so-vits-svc-fork==4.2.30
+transformers==5.18.0
+numpy==2.4.6
+faiss-cpu==1.15.1
+av==18.1.0
+python-dotenv==1.2.4

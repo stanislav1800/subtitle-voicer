@@ -16,6 +16,7 @@ from subvoicer.config.profile import Character
 from subvoicer.core.models import Gender, Voice
 from subvoicer.pipeline.normalize import normalize
 from subvoicer.pipeline.speaker.gender import GenderGuesser
+from subvoicer.pipeline.speech.voices import automatic
 
 
 def allowed_errors(name: str) -> int:
@@ -60,6 +61,7 @@ def pick_voice(
     """TZ 4.6, 1.19: voices of the character's gender (all for unknown) sorted by id, start at
     sha1(name) % n, skip voices other characters have — first among the better voices
     (``preferred``), then among the rest; all taken -> the start one of the better voices."""
+    voices = automatic(voices)  # character voices only by hand (TZ 1.21)
     if character.gender is Gender.UNKNOWN:
         pool = list(voices)
     else:

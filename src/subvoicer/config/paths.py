@@ -36,6 +36,11 @@ class AppPaths:
         return self.root / "models"
 
     @property
+    def voice_convert_dir(self) -> Path:
+        """Character voices (stage 16): ``env/`` of the helper process and ``models/``."""
+        return self.root / "voice_convert"
+
+    @property
     def logs_dir(self) -> Path:
         return self.root / "logs"
 

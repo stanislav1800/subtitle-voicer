@@ -102,12 +102,29 @@ class Voice:
     gender: Gender
     display_name: str
     preferred: bool = False  # better quality: first in lists and for assignment (TZ 1.19)
+    character: bool = False  # a character voice (stage 16): "⚡", assigned only by hand
+
+
+@dataclass(frozen=True, slots=True)
+class CharacterVoice:
+    """A character voice (stage 16, TZ 1.21): a base voice of the TTS engine + a voice
+    conversion model with the parameters the user chose by ear."""
+
+    id: str
+    name: str  # shown in voice lists
+    gender: Gender
+    base: str  # voice id of the TTS engine
+    kind: str  # "rvc" | "svc"
+    model: str  # folder in voice_convert/models/
+    params: tuple[tuple[str, float | str], ...] = ()
+    gain_db: float = 0.0  # after the loudness is matched to the base voice
 
 
 @dataclass(frozen=True, slots=True)
 class AudioClip:
     samples: npt.NDArray[np.float32]  # mono
     sample_rate: int
+    cacheable: bool = True  # False: a stand-in (a character voice fell back to its base voice)
 
     @property
     def duration(self) -> float:

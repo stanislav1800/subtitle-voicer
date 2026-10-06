@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 
 from subvoicer.app.facade import AppFacade
 from subvoicer.config.settings import Settings
+from subvoicer.ui.settings.dialogs import CHARACTER_MARK
 from subvoicer.ui.settings.window import Page
 from subvoicer.ui.tray import pretty
 from subvoicer.ui.widgets.common import (
@@ -160,6 +161,19 @@ class GeneralPage(Page):
             lambda _i: self._set(output_device=device.currentData(), now=True)
         )
         card.body.addWidget(row(label("Устройство вывода", wrap=True), device))
+        installed = self._facade.characters_installed()
+        hint = (
+            f"{CHARACTER_MARK} Ви, Джонни, Цири, Геральт — ~1,9 ГБ видеопамяти; "
+            "выкл. — звучит основа"
+            if installed
+            else "Не установлены: uv run python -m subvoicer.cli voices install"
+        )
+        box, characters = toggle_row(
+            "Голоса персонажей (видеокарта)", hint, s.character_voices and installed
+        )
+        characters.setEnabled(installed)
+        characters.toggled.connect(lambda on: self._set(character_voices=on, now=True))
+        card.body.addWidget(box)
         return card
 
     def _queue(self, s: Settings) -> Card:

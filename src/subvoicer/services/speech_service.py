@@ -344,5 +344,6 @@ class SpeechService(Service):
         clip = self._cache.get(text, voice_id, rate)
         if clip is None:
             clip = self._tts.synthesize(text, voice_id, rate)
-            self._cache.put(text, voice_id, rate, clip)
+            if clip.cacheable:  # a stand-in must not stay in place of the real voice
+                self._cache.put(text, voice_id, rate, clip)
         return clip

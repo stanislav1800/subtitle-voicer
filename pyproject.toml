@@ -185,6 +185,24 @@ forbidden_modules = [
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
+name = "Вспомогательный процесс голосов персонажей не импортирует приложение"
+type = "forbidden"
+source_modules = ["subvoicer.engines.tts.convert_host"]
+forbidden_modules = [
+    "subvoicer.core",
+    "subvoicer.config",
+    "subvoicer.pipeline",
+    "subvoicer.sources",
+    "subvoicer.services",
+    "subvoicer.app",
+    "subvoicer.ui",
+    "subvoicer.cli",
+    "subvoicer.engines.tts.character",
+    "subvoicer.engines.tts.convert_client",
+    "subvoicer.engines.registry",
+]
+
+[[tool.importlinter.contracts]]
 name = "PySide6 только в ui"
 type = "forbidden"
 source_modules = [

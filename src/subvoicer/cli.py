@@ -1,6 +1,7 @@
 """Command line entry point: ``uv run python -m subvoicer.cli <command>`` (TZ 4.15).
 
-Commands: ``watch`` (stages 2-3); ``run``, ``profiles``, ``characters`` (stage 5).
+Commands: ``watch`` (stages 2-3); ``run``, ``profiles``, ``characters`` (stage 5);
+``voices`` — character voices (stage 16).
 """
 
 from __future__ import annotations
@@ -36,7 +37,7 @@ from subvoicer.app.models_setup import ConsoleProgress, ModelSetup, engine_optio
 from subvoicer.config.paths import AppPaths
 from subvoicer.config.profile_store import format_error
 from subvoicer.config.settings import load_settings
-from subvoicer.core.errors import ModelsError
+from subvoicer.core.errors import EngineError, ModelsError
 from subvoicer.core.events import (
     CaptureFailed,
     CaptureStopped,
@@ -136,6 +137,7 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--debug", action="store_true", help="подробный лог (DEBUG)")
     add_profile_commands(commands)
     add_character_commands(commands)
+    add_voice_commands(commands)
     return parser
 
 
@@ -188,6 +190,37 @@ def add_character_commands(commands: argparse._SubParsersAction) -> None:  # typ
     merge.add_argument("profile")
     merge.add_argument("a")
     merge.add_argument("b")
+
+
+def add_voice_commands(commands: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
+    voices = commands.add_parser("voices", help="голоса персонажей (этап 16)").add_subparsers(
+        dest="action", required=True
+    )
+    voices.add_parser(
+        "install", help="установить: окружение ~5 ГБ и модели ~1,8 ГБ, нужна видеокарта"
+    )
+    voices.add_parser("status", help="установлены ли голоса персонажей")
+
+
+def run_voices_command(args: argparse.Namespace) -> int:
+    from subvoicer.app.character_setup import CharacterSetup
+
+    setup = CharacterSetup(AppPaths.default())
+    if args.action == "install":
+        setup.install(say=print, progress=ConsoleProgress())
+    status = setup.status()
+    print(f"Окружение: {'есть' if status.env else 'нет'} ({setup.env_dir})")
+    print(f"Модели: {'на месте' if status.models else 'не все'} ({setup.models_dir})")
+    if not status.installed:
+        print("Установка: uv run python -m subvoicer.cli voices install")
+        return 0 if args.action == "status" else 1
+    try:
+        print(f"Видеокарта: {setup.check()}")
+    except EngineError as exc:
+        print(f"Вспомогательный процесс не запустился: {exc}", file=sys.stderr)
+        return 1
+    print("Готово. Включите «Голоса персонажей» в настройках («Общие»).")
+    return 0
 
 
 def format_window(w: WindowRef) -> str:
@@ -477,6 +510,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             return run_profiles_command(args)
         if args.command == "characters":
             return run_characters_command(args)
+        if args.command == "voices":
+            return run_voices_command(args)
+    except ModelsError as exc:  # downloads and the character-voice install
+        print(exc, file=sys.stderr)
+        return 1
     except (pc.ProfileNotFoundError, FileExistsError, KeyError) as exc:
         print(exc.args[0] if exc.args else exc, file=sys.stderr)
         return 1

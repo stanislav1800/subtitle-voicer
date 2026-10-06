@@ -431,7 +431,7 @@ class ProfilesPage(Page):
         for title, value, key in rows:
             line = QHBoxLayout()
             line.addWidget(label(title), 1)
-            choose = combo(voice_items(voices), value, title)
+            choose = combo(voice_items(voices, current=value), value, title)
             choose.currentIndexChanged.connect(
                 lambda _i, c=choose, k=key: self._set_voice(path, k, str(c.currentData()))
             )

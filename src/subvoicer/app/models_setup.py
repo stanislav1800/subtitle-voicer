@@ -8,9 +8,10 @@ import sys
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
-from subvoicer.config.models import ModelFile, missing, model_path
+from subvoicer.config.models import MODELS_MANIFEST, ModelFile, missing, model_files, model_path
 from subvoicer.config.paths import AppPaths
 
 log = logging.getLogger(__name__)
@@ -32,13 +33,23 @@ class Progress:
 
 
 class ModelSetup:
-    def __init__(self, paths: AppPaths, downloader: Downloader | None = None) -> None:
+    def __init__(
+        self,
+        paths: AppPaths,
+        downloader: Downloader | None = None,
+        manifest: str = MODELS_MANIFEST,
+        models_dir: Path | None = None,
+    ) -> None:
+        """``manifest``/``models_dir``: the first-run models by default; the character voices
+        use the same downloader with their own list and folder (stage 16)."""
         self._paths = paths
         self._downloader = downloader
+        self._manifest = manifest
+        self._models_dir = models_dir or paths.models_dir
         self._cancel = threading.Event()
 
     def missing(self) -> list[ModelFile]:
-        return missing(self._paths.models_dir)
+        return missing(self._models_dir, model_files(self._manifest))
 
     def cancel(self) -> None:
         self._cancel.set()
@@ -63,7 +74,7 @@ class ModelSetup:
             report(0)
             download(
                 model.url,
-                model.path(self._paths.models_dir),
+                model.path(self._models_dir),
                 model.sha256,
                 progress=report,
                 cancelled=self._cancel.is_set,

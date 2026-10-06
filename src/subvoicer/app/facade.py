@@ -160,6 +160,8 @@ class AppFacade:
             parts.speech.service.set_paused(not new.enabled)
             parts.offers.update(new.excluded_exes, new.never_ask_exes)
             parts.runner.set_poll_hz(new.poll_hz)
+            if parts.speech.characters is not None:
+                parts.speech.characters.set_enabled(new.character_voices)
         if new.hotkeys != old.hotkeys or new.dev_mode != old.dev_mode:
             self._register_hotkeys()
         self.bus.publish(SettingsApplied())
@@ -307,9 +309,17 @@ class AppFacade:
 
     def voices(self) -> list[Voice]:
         """Voices of the loaded engine; before it loads, the catalog (same ids for Silero)."""
-        if self._parts is not None:
-            return by_preference(list(self._parts.speech.voices))
+        parts = self._parts
+        if parts is not None:
+            source = parts.speech.characters
+            return by_preference(source.voices() if source is not None else parts.speech.voices)
         return by_preference(list(voice_catalog(pc.TTS_CATALOG).values()))
+
+    def characters_installed(self) -> bool:
+        """Character voices are installed (``subvoicer voices install``, stage 16)."""
+        from subvoicer.app.character_setup import CharacterSetup
+
+        return CharacterSetup(self.paths).status().installed
 
     # ------------------------------------------------------------------ developer mode
 
