@@ -8,15 +8,18 @@ The junk filter (step 1) runs before this module.
 from __future__ import annotations
 
 from collections import deque
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-from rapidfuzz.fuzz import ratio
+from rapidfuzz.fuzz import partial_ratio, ratio
 
 from subvoicer.pipeline.normalize import normalize, raw_tail
 
 CROSS_SOURCE_WINDOW_S = 3.0
 CONTINUATION_MIN_GROWTH = 3
+FRAGMENT_MIN_CHARS = 12  # a shorter piece may match by chance (TZ 1.22)
+REVEALED_MIN_SHARE = 0.4  # the earlier piece covers at least this much of the whole line
 
 
 class DedupKind(StrEnum):
@@ -43,6 +46,32 @@ class _Channel:
     last: str | None = None  # last voiced line (original text)
     last_norm: str = ""
     voiced_at: dict[str, float] = field(default_factory=dict)  # normalised text -> time
+
+
+def on_screen(text: str, previous: Sequence[str], match_ratio: float = 90) -> bool:
+    """TZ 1.22: ``text`` is a line of the previous reading still on screen — the same line
+    (any speaker: OCR mixes up names) or a visible part of it (the top cut by the zone edge,
+    the line moving up as the next one appears below) — or that line with its cut top
+    revealed again (the earlier piece is the end of ``text``)."""
+    norm = normalize(text)
+    if not norm:
+        return False
+    for line in previous:
+        before = normalize(line)
+        if ratio(norm, before) >= match_ratio:
+            return True
+        if (
+            FRAGMENT_MIN_CHARS <= len(norm) <= len(before)
+            and partial_ratio(norm, before) >= match_ratio
+        ):
+            return True
+        if (
+            FRAGMENT_MIN_CHARS <= len(before) < len(norm)
+            and len(before) >= REVEALED_MIN_SHARE * len(norm)
+            and ratio(norm[-len(before) :], before) >= match_ratio
+        ):
+            return True
+    return False
 
 
 class Deduplicator:
@@ -102,6 +131,10 @@ class Deduplicator:
                 norm[: len(last_norm)], last_norm
             ):
                 tail = raw_tail(text, len(last_norm))
+                if self._repeats_end(normalize(tail), last_norm):
+                    # OCR read the same line a few letters longer ("потерялсвязь" ->
+                    # "потерял связь"): the "tail" is the end of the line again (TZ 1.22)
+                    return DedupResult(DedupKind.SAME)
                 self._remember(state, channel, text, norm, now)
                 return DedupResult(DedupKind.CONTINUATION, tail)
             # 5. still the same line
@@ -111,6 +144,9 @@ class Deduplicator:
         # 6. anything else is a new line
         self._remember(state, channel, text, norm, now)
         return DedupResult(DedupKind.NEW, text.strip())
+
+    def _repeats_end(self, tail: str, last: str) -> bool:
+        return bool(tail) and len(tail) < len(last) and self._same(tail, last[-len(tail) :])
 
     def _same(self, a: str, b: str) -> bool:
         return ratio(a, b) >= self.match_ratio

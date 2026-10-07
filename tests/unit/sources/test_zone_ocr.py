@@ -371,3 +371,50 @@ def test_short_gap_before_a_different_line_is_still_a_new_line() -> None:
     s.show("Ну а чё, как по мне, это хорошее начало.")
     s.run(1)
     assert [u.text for u in s.out] == ["Без обид.", "Ну а чё, как по мне, это хорошее начало."]
+
+
+STACK_A = "Хелльман: Простите, я…"
+STACK_B = "Ёринобу: Располагайся пока, я закончу через минуту."
+STACK_C = "Ти-Баг: Надо послушать их разговор. Там может быть что-то важное."
+
+
+def test_stacked_subtitles_voice_each_line_once() -> None:
+    """TZ 1.22, Cyberpunk: a new line appears below, the old one moves up and goes away."""
+    s = Screen(SpeakerMode.PREFIX)
+    for text in (STACK_A, f"{STACK_A} {STACK_B}", f"{STACK_B} {STACK_C}", STACK_B):
+        s.show(text)
+        s.run(2)
+    assert [(u.speaker, u.text) for u in s.out] == [
+        ("Хелльман", "Простите, я…"),
+        ("Ёринобу", "Располагайся пока, я закончу через минуту."),
+        ("Ти-Баг", "Надо послушать их разговор. Там может быть что-то важное."),
+    ]
+    assert all(u.kind is UtteranceKind.NEW for u in s.out)  # names start new lines (TZ 1.22)
+
+
+def test_cut_top_and_revealed_line_are_not_voiced_again() -> None:
+    """The long upper line is cut by the zone edge while another is below, then seen whole."""
+    long_line = (
+        "Ёринобу: Сабуро безумный деспот, который потерял связь с реальностью. "
+        "Он живёт в мире, которого уже нет!"
+    )
+    s = Screen(SpeakerMode.PREFIX)
+    for text in (
+        long_line,
+        "связь с реальностью. Он живёт в мире, которого уже нет! Ти-Баг: Нет. Только цену.",
+        long_line,
+    ):
+        s.show(text)
+        s.run(2)
+    assert [(u.speaker, u.text) for u in s.out] == [
+        ("Ёринобу", long_line.removeprefix("Ёринобу: ")),
+        ("Ти-Баг", "Нет. Только цену."),
+    ]
+
+
+def test_a_line_that_came_back_after_another_one_is_voiced_again() -> None:
+    s = Screen(SpeakerMode.PREFIX)
+    for text in ("Ви: Пошли отсюда.", "Джеки: Не сейчас, чумба.", "Ви: Пошли отсюда."):
+        s.show(text)
+        s.run(2)
+    assert [u.text for u in s.out] == ["Пошли отсюда.", "Не сейчас, чумба.", "Пошли отсюда."]

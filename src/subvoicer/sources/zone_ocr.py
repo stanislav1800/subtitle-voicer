@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 
 from subvoicer.core.models import Frame, Rect, Utterance, UtteranceKind
 from subvoicer.core.ports import Clock
-from subvoicer.pipeline.dedup import DedupKind, Deduplicator
+from subvoicer.pipeline.dedup import DedupKind, Deduplicator, on_screen
 from subvoicer.pipeline.ocr.inputs import OcrInput
 from subvoicer.pipeline.ocr.junk_filter import JunkFilter
 from subvoicer.pipeline.ocr.runner import OcrOutcome, OcrRunner
@@ -74,6 +74,7 @@ class _ZoneState:
     mask: Image | None = None
     name_mask: Image | None = None  # name colour pixels (speaker mode color)
     speaker: str | None = None  # speaker of the last new line (a continuation keeps it)
+    shown: list[str] = field(default_factory=list)  # lines of the last reading (TZ 1.22)
 
 
 @dataclass(frozen=True)
@@ -215,16 +216,31 @@ class ZoneOcrSource:
         if not result.voiced:
             return []
 
+        # TZ 1.22: lines of the previous reading that are still on screen are not voiced again
+        previous = [] if was_empty else zone.shown
+        candidate = self._name_candidate(zone)
+        zone.shown = [part.text for part in spec.speaker.parts(text, candidate)]
         lines: list[tuple[UtteranceKind, str | None, str]] = []
-        if result.kind is DedupKind.NEW:
-            for speaker in spec.speaker.resolve_all(result.text, self._name_candidate(zone)):
-                lines.append((UtteranceKind.NEW, speaker.name, speaker.text))
+        speaker = spec.speaker
+        new_text = result.text
+        if result.kind is DedupKind.NEW and speaker.resolve(new_text).name is None:
+            split = speaker.split_at_first_name(new_text)
+            if split is not None and on_screen(split[0], previous):
+                new_text = split[1]  # the cut top of an older line, then a named line
+        if result.kind is DedupKind.NEW or speaker.resolve(new_text).name is not None:
+            # a new line, or a grown part that starts with a name: that speaker's line
+            for found in speaker.resolve_all(new_text, candidate):
+                lines.append((UtteranceKind.NEW, found.name, found.text))
         else:  # the head continues the last speaker, inner names start new lines (TZ 1.17)
-            for name, part in spec.speaker.split_inner(result.text):
+            for name, part in speaker.split_inner(new_text):
                 if name is None:
                     lines.append((UtteranceKind.CONTINUATION, zone.speaker, part))
                 else:
                     lines.append((UtteranceKind.NEW, name, part))
+        kept = [line for line in lines if not on_screen(line[2], previous)]
+        if len(kept) < len(lines):
+            log.debug("Зона %s: ещё на экране, не озвучиваю: %d", spec.id, len(lines) - len(kept))
+        lines = kept
         utterances = []
         for kind, speaker_name, text in lines:
             if not text:

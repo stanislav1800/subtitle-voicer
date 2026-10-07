@@ -125,3 +125,26 @@ def test_channels_are_independent(dedup: Deduplicator) -> None:
         dedup.process("Другая фраза целиком.", "b", was_empty=False, now=10).kind is DedupKind.NEW
     )
     assert dedup.process(LINE, "a", was_empty=False, now=11).kind is DedupKind.SAME
+
+
+def test_the_same_long_line_read_a_few_letters_longer_is_not_a_continuation() -> None:
+    """TZ 1.22: OCR splits a glued word ("потерялсвязь" -> "потерял связь"), the text grows by
+    a few letters, and its "tail" is just the end of the line again."""
+    d = Deduplicator()
+    first = "Ёринобу: Сабуро потерялсвязь срельностью, живёт вмире, которого нет! Может, и не было!"
+    again = (
+        "Ёринобу: Сабуро потерял связь с реальностью, живёт в мире, которого нет! Может, и не было!"
+    )
+    assert d.process(first, "z", was_empty=True, now=0).kind is DedupKind.NEW
+    assert d.process(again, "z", was_empty=False, now=1).kind is DedupKind.SAME
+
+
+def test_on_screen_lines() -> None:
+    from subvoicer.pipeline.dedup import on_screen
+
+    shown = ["Располагайся пока, я закончу через минуту.", "Может, никогда и не было!"]
+    assert on_screen("Располагайся пока, я зокончу через минуту.", shown)  # OCR noise
+    assert on_screen("пока, я закончу через минуту.", shown)  # the top cut
+    assert on_screen("Так послушай ещё. Может, никогда и не было!", shown)  # top revealed
+    assert not on_screen("Надо послушать их разговор.", shown)
+    assert not on_screen("и не было", shown)  # too short to tell
