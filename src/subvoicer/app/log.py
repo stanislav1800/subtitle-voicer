@@ -16,6 +16,9 @@ FORMAT = "%(asctime)s.%(msecs)03d %(levelname)-7s [%(threadName)s] %(name)s: %(m
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 log = logging.getLogger("subvoicer")
+# Timing points of every voiced line (``LATENCY ...``, tools/latency_report.py): written at any
+# log level — a few lines per line, so the GUI's own log can be measured.
+LATENCY_LOGGER = "subvoicer.latency"
 
 _HANDLER_MARK = "_subvoicer_handler"
 
@@ -46,6 +49,7 @@ def setup_logging(log_dir: Path, *, level: int = logging.INFO, console: bool = F
         log.addHandler(handler)
 
     log.setLevel(level)
+    logging.getLogger(LATENCY_LOGGER).setLevel(logging.DEBUG)
     install_exception_hooks()
     return log_file
 

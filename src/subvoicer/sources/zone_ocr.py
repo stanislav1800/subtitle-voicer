@@ -32,6 +32,7 @@ from subvoicer.pipeline.vision.stability import (
 )
 
 log = logging.getLogger(__name__)
+latency = logging.getLogger("subvoicer.latency")  # tools/latency_report.py
 
 
 def drop_last_word(text: str) -> str:
@@ -230,11 +231,12 @@ class ZoneOcrSource:
                 continue
             zone.speaker = speaker_name
             utterance_id = next(self._ids)
-            log.debug(
-                "LATENCY change id=%d t=%.3f detected=%.3f zone=%s",
+            latency.debug(
+                "LATENCY change id=%d t=%.3f detected=%.3f ocr=%.0f zone=%s",
                 utterance_id,
                 t_change,
                 now,
+                elapsed_ms,
                 spec.id,
             )
             utterances.append(

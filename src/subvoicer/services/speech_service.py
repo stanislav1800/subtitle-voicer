@@ -33,6 +33,7 @@ from subvoicer.pipeline.text.pronunciation import PronunciationEntry
 from subvoicer.services.base import Service
 
 log = logging.getLogger(__name__)
+latency = logging.getLogger("subvoicer.latency")  # tools/latency_report.py
 
 
 @dataclass
@@ -191,6 +192,7 @@ class SpeechService(Service):
         s = self._scheduler
         match message:
             case _Submit(request=request):
+                latency.debug("LATENCY submit id=%d t=%.3f", request.id, self._clock.now())
                 log.debug(
                     "Речь: реплика %d (%s, %s, голос %s) «%s»",
                     request.id,
@@ -219,7 +221,7 @@ class SpeechService(Service):
             case _Started(line_id=line_id, t_play=t_play):
                 line = self._lines.get(line_id)
                 if line is not None:
-                    log.debug("LATENCY play id=%d t=%.3f", line_id, t_play)
+                    latency.debug("LATENCY play id=%d t=%.3f", line_id, t_play)
                     self._publisher.publish(
                         SpeechStarted(line.request, line.rate, t_play, line.prepared)
                     )
@@ -252,18 +254,24 @@ class SpeechService(Service):
                 PronunciationEntry(source, target, regex)
                 for source, target, regex in request.pronunciation
             )
+        t_start = self._clock.now()
+        started = time.perf_counter()
         pieces = self._preparer.prepare(request.text, dictionary)
         if not pieces:
             self._execute(self._scheduler.finished(request.id, True, self._clock.now()))
             return
-        started = time.perf_counter()
+        prepared = time.perf_counter()
         clip = self._synthesize(pieces[0], request.voice_id, rate)
-        log.debug(
-            "Речь: синтез %d мс, скорость %.2f, «%s»",
-            (time.perf_counter() - started) * 1000,
-            rate,
-            pieces[0],
+        synth_ms = (time.perf_counter() - prepared) * 1000
+        latency.debug(
+            "LATENCY synth id=%d t=%.3f prep=%.0f synth=%.0f voice=%s",
+            request.id,
+            t_start,
+            (prepared - started) * 1000,
+            synth_ms,
+            request.voice_id,
         )
+        log.debug("Речь: синтез %d мс, скорость %.2f, «%s»", synth_ms, rate, pieces[0])
         self._lines[request.id] = _Line(request, rate, pieces[1:], [pieces[0]], " ".join(pieces))
         self._output.start_line(request.id, clip)
         if len(pieces) == 1:
