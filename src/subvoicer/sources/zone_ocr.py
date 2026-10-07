@@ -232,12 +232,14 @@ class ZoneOcrSource:
             zone.speaker = speaker_name
             utterance_id = next(self._ids)
             latency.debug(
-                "LATENCY change id=%d t=%.3f detected=%.3f ocr=%.0f zone=%s",
+                "LATENCY change id=%d t=%.3f detected=%.3f ocr=%.0f zone=%s kind=%s text=%r",
                 utterance_id,
                 t_change,
                 now,
                 elapsed_ms,
                 spec.id,
+                kind.value,
+                f"{speaker_name}: {text}" if speaker_name else text,
             )
             utterances.append(
                 Utterance(

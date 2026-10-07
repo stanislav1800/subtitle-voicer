@@ -6,6 +6,7 @@ Reads the log (by default %APPDATA%/SubtitleVoicer/logs/subvoicer.log*). Every v
 leaves timing points (logger ``subvoicer.latency``, written at any log level):
 
     LATENCY change id=N t=...  detected=...  ocr=MS   the zone mask first changed; OCR done
+                               ... kind=new text='...' (what was recognized)
     LATENCY submit id=N t=...                         the line reached the speech service
     LATENCY synth  id=N t=...  prep=MS synth=MS       text preparation and the first piece
     LATENCY play   id=N t=...                         the first audio buffer of the line
@@ -88,7 +89,8 @@ def collect(paths: list[Path]) -> list[Line]:
                 run = {}  # a new run of the app
             line = run.setdefault(line_id, Line())
             line.times[point] = t
-            line.values.update({k: float(x) for k, x in FIELD.findall(m.group(4))})
+            fields = m.group(4).split(" text=", 1)[0]  # the recognized text may hold "a=1"
+            line.values.update({k: float(x) for k, x in FIELD.findall(fields)})
             if point == "play" and "change" in line.times:
                 lines.append(run.pop(line_id))
     return lines
