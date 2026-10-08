@@ -418,3 +418,43 @@ def test_a_line_that_came_back_after_another_one_is_voiced_again() -> None:
         s.show(text)
         s.run(2)
     assert [u.text for u in s.out] == ["Пошли отсюда.", "Не сейчас, чумба.", "Пошли отсюда."]
+
+
+def test_a_bare_name_before_its_text_is_not_voiced() -> None:
+    """TZ 1.22: the next line fades in, its red name is readable before the text."""
+    s = Screen(SpeakerMode.PREFIX)
+    first = "Ёринобу: Ничего. Скоро пройдёт."
+    for text in (first, f"{first} Эвелин:", f"{first} Эвелин: Ага, я этим займусь."):
+        s.show(text)
+        s.run(2)
+    assert [(u.speaker, u.text) for u in s.out] == [
+        ("Ёринобу", "Ничего. Скоро пройдёт."),
+        ("Эвелин", "Ага, я этим займусь."),
+    ]
+
+
+def test_the_end_of_the_line_cut_by_length_is_not_voiced() -> None:
+    """TZ 1.22: OCR glues words in the second reading, the "new" part starts a few letters
+    too early ("ло! Ви: …") — only Ви's line is new."""
+    s = Screen(SpeakerMode.PREFIX)
+    s.show("Ёринобу: потерял связь с реальностью. Может, никогда и не было!")
+    s.run(2)
+    s.show("Ёринобу: потерялсвязь среальностью. Может, никогда и не было! Ви: Неплохо.")
+    s.run(2)
+    assert [(u.speaker, u.text) for u in s.out] == [
+        ("Ёринобу", "потерял связь с реальностью. Может, никогда и не было!"),
+        ("Ви", "Неплохо."),
+    ]
+
+
+def test_the_end_of_the_line_is_not_voiced_when_ocr_spaces_it_out() -> None:
+    """The other way round: more spaces in the second reading cut "ыло!" off the old line."""
+    s = Screen(SpeakerMode.PREFIX)
+    s.show("Ёринобу: потерялсвязь среальностью. Может, никогда и не было!")
+    s.run(2)
+    s.show("Ёринобу: потерял связь с реальностью. Может, никогда и не было! Ви: Неплохо.")
+    s.run(2)
+    assert [(u.speaker, u.text) for u in s.out] == [
+        ("Ёринобу", "потерялсвязь среальностью. Может, никогда и не было!"),
+        ("Ви", "Неплохо."),
+    ]

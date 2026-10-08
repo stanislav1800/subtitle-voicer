@@ -74,6 +74,21 @@ def on_screen(text: str, previous: Sequence[str], match_ratio: float = 90) -> bo
     return False
 
 
+def grown_from(text: str, previous: Sequence[str], match_ratio: float = 90) -> str | None:
+    """TZ 1.22: the new end of ``text`` when it is a line of the previous reading that grew
+    (typing went on), else None."""
+    norm = normalize(text)
+    for line in previous:
+        before = normalize(line)
+        if (
+            before
+            and len(norm) > len(before) + CONTINUATION_MIN_GROWTH
+            and ratio(norm[: len(before)], before) >= match_ratio
+        ):
+            return raw_tail(text, len(before))
+    return None
+
+
 class Deduplicator:
     def __init__(
         self, match_ratio: float = 90, cross_source_window_s: float = CROSS_SOURCE_WINDOW_S

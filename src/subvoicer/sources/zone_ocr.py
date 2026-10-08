@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 
 from subvoicer.core.models import Frame, Rect, Utterance, UtteranceKind
 from subvoicer.core.ports import Clock
-from subvoicer.pipeline.dedup import DedupKind, Deduplicator, on_screen
+from subvoicer.pipeline.dedup import DedupKind, Deduplicator, grown_from, on_screen
 from subvoicer.pipeline.ocr.inputs import OcrInput
 from subvoicer.pipeline.ocr.junk_filter import JunkFilter
 from subvoicer.pipeline.ocr.runner import OcrOutcome, OcrRunner
@@ -190,6 +190,8 @@ class ZoneOcrSource:
         if decision.still_typing:
             # read before typing ended: the last word is likely cut, it comes with the rest
             text = drop_last_word(text)
+        # the next line's name shows before its text: wait for the text (TZ 1.22)
+        text = spec.speaker.without_trailing_name(text)
         verdict = (spec.junk or self._junk).check(text, outcome.mean_confidence)
         if not verdict.ok:
             log.debug("Зона %s: отброшено фильтром (%s)", spec.id, verdict.reason)
@@ -227,7 +229,17 @@ class ZoneOcrSource:
             split = speaker.split_at_first_name(new_text)
             if split is not None and on_screen(split[0], previous):
                 new_text = split[1]  # the cut top of an older line, then a named line
-        if result.kind is DedupKind.NEW or speaker.resolve(new_text).name is not None:
+        whole = speaker.parts(text, candidate)
+        if result.kind is DedupKind.CONTINUATION and len(whole) > 1:
+            # another speaker's line appeared below: the tail cut by length may take letters of
+            # the previous line or of the new name, so the whole reading goes line by line
+            # (TZ 1.22) — a line that grew from a previous one gives only its new end
+            for found in whole:
+                grown = grown_from(found.text, previous)
+                kind = UtteranceKind.NEW if grown is None else UtteranceKind.CONTINUATION
+                name = found.name if grown is None or found.name else zone.speaker
+                lines.append((kind, name, found.text if grown is None else grown))
+        elif result.kind is DedupKind.NEW or speaker.resolve(new_text).name is not None:
             # a new line, or a grown part that starts with a name: that speaker's line
             for found in speaker.resolve_all(new_text, candidate):
                 lines.append((UtteranceKind.NEW, found.name, found.text))

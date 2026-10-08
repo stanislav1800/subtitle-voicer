@@ -12,6 +12,8 @@ from subvoicer.pipeline.speaker.validate import NameValidator
 
 # "…кто? Джеки: Вылезай." — a name after the end of a sentence starts another speaker's line
 INNER_NAME = re.compile(r"(?<=[.!?…»\"])\s+([^\s:.!?…][^:.!?…]{0,29}):\s+")
+# "…Скоро пройдёт. Эвелин:" — the next line's name shows up before its text (TZ 1.22)
+TRAILING_NAME = re.compile(r"(?<=[.!?…»\"])\s+([^\s:.!?…][^:.!?…]{0,29}):\s*$")
 
 
 class SpeakerMode(StrEnum):
@@ -69,6 +71,15 @@ class SpeakerResolver:
         if self.mode is SpeakerMode.PREFIX and self.resolve(text).name is None:
             return [SpeakerResult(name, part) for name, part in self.split_inner(text)]
         return self.resolve_all(text, candidate)
+
+    def without_trailing_name(self, text: str) -> str:
+        """``text`` without a bare name at its end, whose line has not appeared yet."""
+        if self.mode is not SpeakerMode.PREFIX:
+            return text
+        match = TRAILING_NAME.search(text)
+        if match is None or not self._validator.is_name(match.group(1).strip()):
+            return text
+        return text[: match.start()].rstrip()
 
     def split_at_first_name(self, text: str) -> tuple[str, str] | None:
         """``(head, rest)`` where ``rest`` starts with the first accepted inner name
