@@ -46,6 +46,16 @@ from subvoicer.ui.tray import Tray, pretty
 from subvoicer.ui.zone_editor.editor import ZoneEditor
 
 log = logging.getLogger("subvoicer.ui")
+QUIT_GUARD_S = 10  # after «Выход» the process must be gone by then
+
+
+def _force_exit() -> None:
+    """The volume is restored and settings are saved by now; a stuck exit must not leave a
+    copy that blocks the next start."""
+    log.warning("Выход не завершился за %d с — завершаю процесс принудительно", QUIT_GUARD_S)
+    logging.shutdown()
+    os._exit(0)
+
 
 SERVER_NAME = "SubtitleVoicer.Show"  # a second copy asks the first to show its window
 STATUS_EVENTS = (GameActivated, GameClosed, LayoutMissing)
@@ -230,10 +240,16 @@ class Application:
         editor.open()
 
     def quit(self) -> None:
+        log.info("Выход")
         self.overlay.hide()
         self.tray.hide()
         self.facade.stop()  # restores the game's volume
-        self.qt.quit()
+        # exit(), not quit(): quit() asks the windows first and was seen not to end the loop,
+        # leaving a copy without voicing that holds the single-instance lock
+        self.qt.exit(0)
+        guard = threading.Timer(QUIT_GUARD_S, _force_exit)
+        guard.daemon = True
+        guard.start()
 
     def _on_loaded(self, error: str) -> None:
         if error:
@@ -368,7 +384,9 @@ def main() -> int:
     if not autostart:  # at logon: only the tray icon
         QTimer.singleShot(0, app.window.bring_up)
     try:
-        return qt.exec()
+        code = qt.exec()
+        log.info("Цикл событий завершён (%d)", code)
+        return code
     finally:
         facade.stop()
         runtime.release_single_instance(instance)
