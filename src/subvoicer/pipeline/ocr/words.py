@@ -51,6 +51,16 @@ SHORT_GLUE = frozenset(
 )
 DEFAULT_CONFUSIONS: tuple[tuple[str, str], ...] = (("а", "о"),)
 
+# Pairs of common words the dictionary cannot tell apart, by context (TZ 1.23); only with the а/о
+# pair, and only о -> а: the font turns a real "а" into "о", never back.
+# "до" right before punctuation, or before a word in the nominative it cannot govern -> "да"
+DA = re.compile(
+    r"(?<![А-Яа-яЁё])([Дд])о(?=\s*(?:[.,!?…]|$)|\s+(?:я|ты|он|она|оно|мы|вы|они|что|кто|ничего)(?![А-Яа-яЁё]))",
+    re.IGNORECASE,
+)
+# "но" not after a comma, a dash, a colon or the end of a sentence -> the preposition "на"
+NA = re.compile(r"(?<=[А-Яа-яЁё»\"]) ([Нн])о(?= [А-Яа-яЁё])")
+
 
 def key(word: str) -> str:
     return word.lower().replace("ё", "е")
@@ -76,7 +86,11 @@ class WordFixer:
         return self._known.get(word) or self._counts.get(word, 0)
 
     def fix(self, text: str) -> str:
-        return WORD.sub(lambda m: self.fix_word(m.group(0)), text)
+        text = WORD.sub(lambda m: self.fix_word(m.group(0)), text)
+        if self._swap.get("о") == "а":
+            text = DA.sub(lambda m: m.group(1) + "а", text)
+            text = NA.sub(lambda m: f" {m.group(1)}а", text)
+        return text
 
     def fix_word(self, word: str) -> str:
         low = key(word)

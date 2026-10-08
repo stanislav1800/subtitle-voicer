@@ -59,6 +59,31 @@ def test_fix(fixer: WordFixer, ocr: str, fixed: str) -> None:
     assert fixer.fix(ocr) == fixed
 
 
+@pytest.mark.parametrize(
+    ("ocr", "fixed"),
+    [
+        ("Ти-Бог: До. Иначе повредишь.", "Ти-Бог: Да. Иначе повредишь."),
+        ("Круто, до?", "Круто, да?"),
+        ("До, всё нормально.", "Да, всё нормально."),
+        ("До ты что?", "Да ты что?"),
+        ("Эй, до ничего, беспокоится", "Эй, да ничего, беспокоится"),
+        ("До скорого. С утра до ночи. До сих пор.", "До скорого. С утра до ночи. До сих пор."),
+        ("Переключись в редакторе но тепловой слой.", "Переключись в редакторе на тепловой слой."),
+        ("Смотрю я но вас.", "Смотрю я на вас."),
+        ("Хорош, но сойдёт. Но при одном условии.", "Хорош, но сойдёт. Но при одном условии."),
+        ("в документах,но чип тут", "в документах,но чип тут"),
+        ("займусь — но потом", "займусь — но потом"),
+    ],
+)
+def test_no_na_do_da_by_context(ocr: str, fixed: str) -> None:
+    """TZ 1.23: pairs of common words, by punctuation and the next word."""
+    assert WordFixer({}).fix(ocr) == fixed
+
+
+def test_context_rules_only_with_the_a_o_pair() -> None:
+    assert WordFixer({}, confusions=[("г", "ф")]).fix("Круто, до?") == "Круто, до?"
+
+
 def test_yo_is_kept_when_the_word_is_fixed() -> None:
     """The dictionary keys have ``е`` for ``ё`` (the loader does it); the text keeps its ``ё``."""
     assert WordFixer({"елка": 500}).fix("Ёлко") == "Ёлка"
