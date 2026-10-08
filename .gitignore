@@ -3,8 +3,8 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .venv/
-build/
-dist/
+/build/
+/dist/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
@@ -35,3 +35,7 @@ reports/
 
 # Образцы голосов (tools/voice_samples.py)
 samples/
+
+# stage 12 build outputs (tools/build.py)
+tools/build/app.ico
+tools/build/version.txt

@@ -414,5 +414,6 @@ TTS: dict[str, str] = {
 | 8 | `resources/models.toml`, `config/models.py`, `engines/system/download.py`, `app/models_setup.py`, `ui/first_run.py` (`autostart.py` — сделан на этапе 6) |
 | 10 | `engines/tts/silero.py` (несколько моделей), `resources/voices/silero_v5.toml` (`preferred`), `resources/models.toml` (`v5_5_ru`) |
 | 9 | `engines/library/` (steam, epic, gog), `engines/system/icons.py`, `pipeline/games/library.py`, `app/library.py`, `resources/library_ignore.txt` |
+| 12 | `tools/build.py`, `tools/build/` (`entry.py`, `subvoicer.spec`, `installer.iss`), `engines/system/gpu.py`, `ui/settings/characters.py`; голоса персонажей по одному в `app/character_setup.py` (ТЗ 1.24) |
 | 16 | `engines/tts/character.py`, `convert_client.py`, `convert_host.py`, `app/character_setup.py`, `resources/voices/characters.toml`, `resources/voice_convert/`, настройка `character_voices` (версия формата 3), `cli.py voices` |
 | 11 | `engines/hook/` (client + host), `engines/system/anticheat.py`, `sources/hook.py`, `config/profile.py: HookSettings`, вкладка «Текст из игры» в `ui/settings/` |

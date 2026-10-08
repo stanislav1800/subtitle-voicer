@@ -102,10 +102,13 @@ AUTOSTART_FLAG = "--autostart"  # started at logon: tray only, no settings windo
 
 
 def autostart_command() -> str:
-    """``pythonw -m subvoicer --autostart`` of this environment: no console window at logon."""
+    """The installed app: ``SubtitleVoicer.exe --autostart`` (TZ 1.24); from the source:
+    ``pythonw -m subvoicer --autostart`` of this environment (no console window at logon)."""
     from pathlib import Path
 
     exe = Path(sys.executable)
+    if getattr(sys, "frozen", False):
+        return f'"{exe}" {AUTOSTART_FLAG}'
     windowed = exe.with_name("pythonw.exe")
     return f'"{windowed if windowed.exists() else exe}" -m subvoicer {AUTOSTART_FLAG}'
 
