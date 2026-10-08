@@ -158,9 +158,13 @@ def test_zone_specs_skip_hotkey_and_off(tmp_path: Path) -> None:
         def get(self, _engine: str) -> object:
             return object()
 
+        def word_counts(self) -> dict[str, int]:
+            return {"такое": 10}
+
     specs = zone_specs(profile, "16:9", Engines())  # type: ignore[arg-type]
     assert [s.id for s in specs] == ["dialog"]
     assert specs[0].speaker.mode is SpeakerMode.ZONE and specs[0].name is not None
+    assert specs[0].words is not None and specs[0].words.fix("токое") == "такое"  # TZ 1.23
     assert zone_specs(profile, "4:3", Engines()) == []  # type: ignore[arg-type]
 
 

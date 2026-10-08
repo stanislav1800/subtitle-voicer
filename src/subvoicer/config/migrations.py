@@ -10,8 +10,18 @@ from subvoicer.config.profile import SCHEMA_VERSION
 Data = dict[str, Any]
 Migration = Callable[[Data], Data]
 
+
+def _v1_to_v2(data: Data) -> Data:
+    """TZ 1.23: words are fixed by the dictionary in every game, the а/о pair by default."""
+    ocr = dict(data.get("ocr") or {})
+    ocr.setdefault("fix_words", True)
+    ocr.setdefault("confusions", [["а", "о"]])
+    data["ocr"] = ocr
+    return data
+
+
 # from version N to N+1; every entry has a unit test on an example of the old file
-MIGRATIONS: dict[int, Migration] = {}
+MIGRATIONS: dict[int, Migration] = {1: _v1_to_v2}
 
 
 class ProfileFormatError(ValueError):

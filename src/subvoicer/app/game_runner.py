@@ -19,11 +19,13 @@ from subvoicer.app.container import (
 )
 from subvoicer.app.models_setup import engine_options
 from subvoicer.app.runtime import MonotonicClock, Session
+from subvoicer.config.models import model_path
 from subvoicer.config.paths import AppPaths
-from subvoicer.config.profile import MaskConfig, Profile, VoicingPolicy, Zone
+from subvoicer.config.profile import MaskConfig, OcrConfig, Profile, VoicingPolicy, Zone
 from subvoicer.config.profile_store import ProfileStore, format_error
 from subvoicer.config.resources import gender_exceptions, short_words
 from subvoicer.config.settings import Settings
+from subvoicer.config.words import load_word_counts
 from subvoicer.core.events import CaptureStopped, GameActivated, GameClosed, UtteranceDetected
 from subvoicer.core.models import Priority, Rect, SpeechRequest, Utterance, UtteranceKind, WindowRef
 from subvoicer.core.ports import EventBus
@@ -32,6 +34,7 @@ from subvoicer.pipeline.dedup import Deduplicator
 from subvoicer.pipeline.games.matching import OfferPolicy
 from subvoicer.pipeline.ocr.junk_filter import JunkFilter
 from subvoicer.pipeline.ocr.runner import OcrRunner, OcrSettings
+from subvoicer.pipeline.ocr.words import WordFixer
 from subvoicer.pipeline.speaker.characters import CharacterBook
 from subvoicer.pipeline.speaker.gender import GenderGuesser
 from subvoicer.pipeline.speaker.resolver import SpeakerMode, SpeakerResolver
@@ -76,10 +79,23 @@ def pronunciation(profile: Profile) -> PronunciationDict:
 class OcrEngines:
     """OCR engines by id, loaded once and shared by all zones and sessions."""
 
-    def __init__(self, options: Mapping[str, dict[str, Any]] | None = None) -> None:
+    def __init__(
+        self, options: Mapping[str, dict[str, Any]] | None = None, words: Path | None = None
+    ) -> None:
+        """``words``: the dictionary of word forms for fixing OCR words (TZ 1.23)."""
         self._options = options or {"rapidocr": {"model": "eslav"}}
         self._engines: dict[str, Any] = {}
         self._lock = threading.Lock()
+        self._words_path = words
+        self._words: dict[str, int] | None = None
+
+    def word_counts(self) -> dict[str, int]:
+        """Loaded once (~1-2 s, ~60 MB); empty without the file — words are left as read."""
+        with self._lock:
+            if self._words is None:
+                path = self._words_path
+                self._words = load_word_counts(path) if path is not None else {}
+            return self._words
 
     def get(self, engine_id: str) -> Any:
         with self._lock:
@@ -134,7 +150,20 @@ def zone_spec(profile: Profile, zone: Zone, zones: list[Zone], engines: OcrEngin
         name=name,
         runner=OcrRunner(engines.get(ocr.engine), OcrSettings(upscale=ocr.upscale)),
         junk=JunkFilter(short_words(), min_confidence=ocr.min_confidence),
+        words=word_fixer(profile, ocr, engines),
     )
+
+
+def word_fixer(profile: Profile, ocr: OcrConfig, engines: OcrEngines) -> WordFixer | None:
+    """TZ 1.23: on in every game unless the profile turns it off; the profile's character
+    names are known words."""
+    if not ocr.fix_words:
+        return None
+    counts = engines.word_counts()
+    if not counts:
+        return None
+    names = [name for c in profile.characters for name in (c.name, *c.aliases)]
+    return WordFixer(counts, [(a, b) for a, b in ocr.confusions], names)
 
 
 def capture_factories() -> dict[str, Any]:
@@ -491,8 +520,9 @@ def build_run(settings: Settings, bus: EventBus, paths: AppPaths, hotkeys: bool 
     speech = build_speech(config, bus, None, settings.hotkeys)
     gender = GenderGuesser(gender_exceptions())
     router = ProfileRouter(store, CharacterBook(speech.voices, gender), gender)
-    engines = OcrEngines({"rapidocr": ocr_options})
+    engines = OcrEngines({"rapidocr": ocr_options}, model_path(paths.models_dir, "words_ru"))
     engines.get("rapidocr")  # load before the first game, not on its first frame
+    engines.word_counts()
 
     def build(profile: Profile, window: WindowRef, aspect: str, poll_hz: float) -> Session | None:
         return build_game_session(profile, window, aspect, engines, bus, poll_hz)

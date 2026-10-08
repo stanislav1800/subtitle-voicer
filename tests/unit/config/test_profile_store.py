@@ -158,3 +158,19 @@ def test_store_migrates_and_backs_up_the_old_file(tmp_path: Path) -> None:
 def test_is_inside() -> None:
     assert is_inside("D:\\Games\\X\\bin\\x.exe", "d:\\games\\x")
     assert not is_inside("D:\\Games\\XY\\x.exe", "D:\\Games\\X")
+
+
+def test_v1_profile_gets_word_fixing_on(tmp_path: Path) -> None:
+    """TZ 1.23: version 1 -> 2 turns on fixing words with the а/о pair; the rest stays."""
+    old = profile_data(schema_version=1, ocr={"engine": "rapidocr", "min_confidence": 0.5})
+    new = migrate(old)
+    assert new["schema_version"] == 2
+    assert new["ocr"] == {
+        "engine": "rapidocr",
+        "min_confidence": 0.5,
+        "fix_words": True,
+        "confusions": [["а", "о"]],
+    }
+    without_ocr = migrate(profile_data(schema_version=1))
+    loaded = Profile.model_validate(without_ocr)
+    assert loaded.ocr.fix_words and loaded.ocr.confusions == [("а", "о")]

@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from subvoicer.core.models import Gender
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2  # 2: ocr.fix_words, ocr.confusions (TZ 1.23)
 MAX_ZONES = 12  # per layout (TZ 4.2)
 
 Hsv = tuple[int, int, int]
@@ -113,16 +113,24 @@ class Stabilization(StrictModel):
         return self.model_copy(update=override.model_dump(exclude_none=True))
 
 
+Letter = Annotated[str, Field(min_length=1, max_length=1)]
+Confusion = tuple[Letter, Letter]  # letters OCR mixes up in a game's font (TZ 1.23)
+
+
 class OcrOverride(StrictModel):
     engine: str | None = None
     min_confidence: float | None = Field(default=None, ge=0, le=1)
     upscale: float | None = Field(default=None, ge=1)
+    fix_words: bool | None = None
+    confusions: list[Confusion] | None = None
 
 
 class OcrConfig(StrictModel):
     engine: str = "rapidocr"
     min_confidence: float = Field(default=0.6, ge=0, le=1)
     upscale: float = Field(default=2.0, ge=1)
+    fix_words: bool = True  # fix words by the dictionary of word forms (TZ 1.23)
+    confusions: list[Confusion] = Field(default_factory=lambda: [("а", "о")])
 
     def merged(self, override: OcrOverride | None) -> OcrConfig:
         if override is None:

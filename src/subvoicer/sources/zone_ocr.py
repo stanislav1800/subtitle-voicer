@@ -19,6 +19,7 @@ from subvoicer.pipeline.dedup import DedupKind, Deduplicator, grown_from, on_scr
 from subvoicer.pipeline.ocr.inputs import OcrInput
 from subvoicer.pipeline.ocr.junk_filter import JunkFilter
 from subvoicer.pipeline.ocr.runner import OcrOutcome, OcrRunner
+from subvoicer.pipeline.ocr.words import WordFixer
 from subvoicer.pipeline.speaker.resolver import SpeakerMode, SpeakerResolver, SpeakerResult
 from subvoicer.pipeline.vision.change import mask_empty
 from subvoicer.pipeline.vision.crop import crop
@@ -62,6 +63,7 @@ class ZoneSpec:
     name: NameSource | None = None
     runner: OcrRunner | None = None  # per-zone OCR engine or settings; else the source's
     junk: JunkFilter | None = None  # per-zone min_confidence; else the source's
+    words: WordFixer | None = None  # fixing OCR words by the dictionary (TZ 1.23)
 
 
 @dataclass
@@ -91,6 +93,11 @@ class ZoneReading:
     lines: list[SpeakerResult]  # per speaker (TZ 1.17), names already taken out
 
 
+def fixed_words(spec: ZoneSpec, text: str) -> str:
+    """TZ 1.23: OCR words fixed by the dictionary, before the junk filter and dedup."""
+    return spec.words.fix(text) if spec.words is not None else text
+
+
 def read_once(spec: ZoneSpec, frame: Image, runner: OcrRunner, separator: str = " ") -> ZoneReading:
     state = _ZoneState(spec, ZoneStabilizer(spec.stabilization))
     state.frame = frame
@@ -104,7 +111,7 @@ def read_once(spec: ZoneSpec, frame: Image, runner: OcrRunner, separator: str = 
     started = time.perf_counter()
     outcome = active.run(image, state.mask, spec.ocr_input, separator=separator)
     elapsed = (time.perf_counter() - started) * 1000
-    text = ZoneOcrSource._keep_prefix_name(spec, outcome, text=outcome.text)
+    text = fixed_words(spec, ZoneOcrSource._keep_prefix_name(spec, outcome, text=outcome.text))
     candidate = ZoneOcrSource._read_name(state, active)
     lines = spec.speaker.resolve_all(text, candidate) if text else []
     return ZoneReading(
@@ -186,7 +193,7 @@ class ZoneOcrSource:
             outcome.mean_confidence,
             outcome.text,
         )
-        text = self._keep_prefix_name(spec, outcome, text=outcome.text)
+        text = fixed_words(spec, self._keep_prefix_name(spec, outcome, text=outcome.text))
         if decision.still_typing:
             # read before typing ended: the last word is likely cut, it comes with the rest
             text = drop_last_word(text)

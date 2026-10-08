@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from subvoicer.config.profile import SCHEMA_VERSION
+
 
 def dialog_zone(**policy: Any) -> dict[str, Any]:
     return {
@@ -19,7 +21,7 @@ def dialog_zone(**policy: Any) -> dict[str, Any]:
 
 def profile_data(**fields: Any) -> dict[str, Any]:
     data: dict[str, Any] = {
-        "schema_version": 1,
+        "schema_version": SCHEMA_VERSION,
         "exe": "Game.exe",
         "install_dir": None,
         "title": "Игра",

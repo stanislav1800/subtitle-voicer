@@ -37,12 +37,12 @@ def test_downloads_only_missing_once(tmp_path: Path) -> None:
     setup = ModelSetup(paths, fake)
     seen: list[Progress] = []
     setup.download_missing(seen.append)
-    assert len(fake.urls) == 4 and setup.missing() == []
+    assert len(fake.urls) == 5 and setup.missing() == []  # OCR, Silero x2, word forms
     total = sum(m.size for m in model_files())
     assert seen[-1].done == total and seen[-1].fraction == 1.0
     assert [p.done for p in seen] == sorted(p.done for p in seen)
     setup.download_missing(seen.append)  # nothing again
-    assert len(fake.urls) == 4
+    assert len(fake.urls) == 5
 
 
 def test_engine_options_point_into_models(tmp_path: Path) -> None:

@@ -35,3 +35,13 @@ file = "silero/v5_5_ru.pt"
 url = "https://models.silero.ai/models/tts/ru/v5_5_ru.pt"
 sha256 = "50081637b602126ee06cb3bc8a744d25651d2da149ee8864b9a379bfdd934437"
 size = 145420684
+
+# TZ 1.23: word forms with frequencies from Russian OpenSubtitles (FrequencyWords by Hermit Dave,
+# content CC-BY-SA 4.0), pinned to a commit; used to fix OCR words (а/о and others).
+[[model]]
+id = "words_ru"
+title = "Словарь словоформ (исправление распознавания)"
+file = "words/ru_full.txt"
+url = "https://raw.githubusercontent.com/hermitdave/FrequencyWords/f8a65e6ddc17e0baa2e366a909986798d8dbe55b/content/2018/ru/ru_full.txt"
+sha256 = "32dfd94138aea2667ec455dcc8512029e39bd4b8ea70b09410d569b69d511a30"
+size = 28999417
