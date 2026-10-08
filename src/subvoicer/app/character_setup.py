@@ -352,6 +352,7 @@ def _run(command: list[str], cancelled: Callable[[], bool]) -> None:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
             creationflags=NO_WINDOW if sys.platform == "win32" else 0,
+            cwd=Path.home(),  # a folder that exists, whoever started the app (see convert_client)
         )
     except OSError as exc:
         raise SetupError(f"Команда не запустилась: {command[0]}: {exc}") from exc

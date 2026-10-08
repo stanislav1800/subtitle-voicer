@@ -123,6 +123,9 @@ class HostConverter:
                 stdout=subprocess.PIPE,
                 stderr=self._log if self._log is not None else subprocess.DEVNULL,
                 creationflags=NO_WINDOW if sys.platform == "win32" else 0,
+                # not the app's own: started by the installer it is a temp folder that is gone,
+                # and uv's python.exe then fails to start the real one ("entity not found")
+                cwd=self.models_dir if self.models_dir.is_dir() else self.python.parent,
             )
         except OSError as exc:
             raise EngineError(f"Голоса персонажей: процесс не запустился: {exc}") from exc

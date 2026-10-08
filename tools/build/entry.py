@@ -9,6 +9,10 @@ if sys.stdout is None:
 if sys.stderr is None:
     sys.stderr = open(os.devnull, "w", encoding="utf-8")  # noqa: SIM115
 
-from subvoicer.ui.app import main
+# started by the installer, the working folder is its temp folder that is deleted afterwards:
+# work from the app's own folder
+os.chdir(os.path.dirname(sys.executable))
+
+from subvoicer.ui.app import main  # noqa: E402
 
 raise SystemExit(main())
