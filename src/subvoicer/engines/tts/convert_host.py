@@ -4,6 +4,7 @@ A separate program, run by ``convert_client.py`` with the interpreter of its own
 (``voice_convert/env``, ``resources/voice_convert/requirements.txt``)::
 
     python convert_host.py <models dir>
+    python convert_host.py --strip <G.pth>   (installer: keep only the weights of a so-vits model)
 
 It imports nothing from the app. Protocol over stdin/stdout, one request at a time: a JSON line,
 then ``frames`` little-endian float32 samples; the answer has the same shape.
@@ -37,7 +38,28 @@ CONTENTVEC_HUB_ID = "lengyue233/content-vec-best"  # the name so-vits-svc-fork a
 SEED = 0
 
 
+def strip(path: Path) -> None:
+    """A so-vits-svc checkpoint without its training state: the optimizer is two thirds of the
+    file and is never used for conversion (``load_checkpoint`` reads model, iteration and
+    learning_rate only)."""
+    import torch
+
+    data = torch.load(path, map_location="cpu", weights_only=True)
+    slim = {
+        "model": data["model"],
+        "iteration": data.get("iteration", 0),
+        "learning_rate": data.get("learning_rate", 0.0),
+        "optimizer": None,
+    }
+    temporary = path.with_suffix(".slim")
+    torch.save(slim, temporary)
+    os.replace(temporary, path)
+
+
 def main() -> None:
+    if sys.argv[1] == "--strip":
+        strip(Path(sys.argv[2]))
+        return
     models_dir = Path(sys.argv[1])
     # The protocol owns the real stdout; anything the libraries print goes to stderr.
     protocol = os.fdopen(os.dup(1), "wb")

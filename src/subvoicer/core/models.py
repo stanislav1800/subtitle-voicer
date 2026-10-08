@@ -118,6 +118,7 @@ class CharacterVoice:
     model: str  # folder in voice_convert/models/
     params: tuple[tuple[str, float | str], ...] = ()
     gain_db: float = 0.0  # after the loudness is matched to the base voice
+    game: str = ""  # where the voice comes from, shown in the list (TZ 1.24)
 
 
 @dataclass(frozen=True, slots=True)

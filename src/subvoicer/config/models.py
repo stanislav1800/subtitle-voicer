@@ -19,6 +19,7 @@ class ModelFile(BaseModel):
     sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     size: int = Field(gt=0)
     unpack: bool = False  # a zip, extracted next to it (character voices, stage 16)
+    group: str = ""  # character voices: "engine" or the voice's model folder (TZ 1.24)
 
     def path(self, models_dir: Path) -> Path:
         return models_dir / self.file

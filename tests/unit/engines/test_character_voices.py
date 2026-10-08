@@ -186,3 +186,20 @@ def test_not_installed_helper_is_an_engine_error(tmp_path: Path) -> None:
     converter = HostConverter(tmp_path / "env" / "python.exe", tmp_path)
     with pytest.raises(EngineError, match="не установлены"):
         converter.ping()
+
+
+def test_only_installed_voices_are_listed_and_converted() -> None:
+    """TZ 1.24: voices are downloaded one by one; a removed one sounds as its base voice."""
+    converter = FakeConverter()
+    voices = CharacterVoices(LoudTts(), [VI, GERALT], converter, enabled=True, installed=["vi"])
+    wait_ready(voices, 1)
+    assert [v.id for v in voices.voices() if v.character] == ["char_vi"]
+    assert converter.loaded == [("rvc", "vi")]
+    assert not voices.synthesize("Привет.", "char_geralt", 1.0).cacheable  # not installed
+    voices.set_installed(["vi", "geralt"])
+    wait_ready(voices, 2)
+    assert {v.id for v in voices.voices() if v.character} == {"char_vi", "char_geralt"}
+    assert voices.synthesize("Привет.", "char_geralt", 1.0).cacheable
+    voices.set_installed([])
+    assert not voices.installed and not [v for v in voices.voices() if v.character]
+    assert not voices.synthesize("Привет.", "char_vi", 1.0).cacheable

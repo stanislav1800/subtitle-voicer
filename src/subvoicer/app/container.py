@@ -176,8 +176,9 @@ class SpeechParts:
 
 
 def build_characters(tts: Any, config: SpeechConfig, publisher: EventPublisher) -> Any:
-    """Character voices over the loaded engine when their helper is installed (stage 16);
-    the setting only decides whether the helper runs. None: nothing to add."""
+    """Character voices over the loaded engine (stage 16): the downloaded ones are listed, the
+    rest sound as their base voice; voices can be downloaded and removed while the app runs
+    (TZ 1.24). The setting only decides whether the helper runs. None: no Silero (SAPI5)."""
     if config.paths is None:
         return None
     from subvoicer.app.character_setup import CharacterSetup
@@ -185,11 +186,21 @@ def build_characters(tts: Any, config: SpeechConfig, publisher: EventPublisher) 
 
     base_ids = {v.id for v in tts.voices()}
     voices = [v for v in character_voices() if v.base in base_ids]  # none on the SAPI5 fallback
-    setup = CharacterSetup(config.paths)
-    if not voices or not setup.status().installed:
-        log.info("Голоса персонажей не установлены")
+    if not voices:
         return None
-    return CharacterVoices(tts, voices, setup.converter(), publisher, config.character_voices)
+    setup = CharacterSetup(config.paths)
+    installed = installed_character_models(setup)
+    log.info("Голоса персонажей установлены: %s", ", ".join(installed) or "нет")
+    return CharacterVoices(
+        tts, voices, setup.converter(), publisher, config.character_voices, installed
+    )
+
+
+def installed_character_models(setup: Any) -> list[str]:
+    """Voices that can be used: downloaded, and the engine is there too."""
+    if not setup.engine_installed():
+        return []
+    return [model for model in setup.voices() if setup.installed(model)]
 
 
 def build_speech(

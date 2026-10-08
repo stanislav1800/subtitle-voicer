@@ -1,9 +1,12 @@
 # Character voice models (stage 16, TZ 1.21), downloaded by `subvoicer voices install` into
 # %APPDATA%/SubtitleVoicer/voice_convert/models/. SHA-256 — of the files the user listened to
 # (DECISIONS.md, stage 16). unpack = true: a zip, extracted into the folder of the file.
+# group: "engine" — shared by every voice, installed with the first one; else the voice's model
+# folder (resources/voices/characters.toml) — installed and removed one by one (TZ 1.24).
 
 [[model]]
 id = "rmvpe"
+group = "engine"
 title = "Определение высоты голоса RMVPE"
 file = "assets/rmvpe.pt"
 url = "https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/main/rmvpe.pt"
@@ -12,6 +15,7 @@ size = 181184272
 
 [[model]]
 id = "contentvec_config"
+group = "engine"
 title = "ContentVec (описание)"
 file = "assets/contentvec/config.json"
 url = "https://huggingface.co/lengyue233/content-vec-best/resolve/main/config.json"
@@ -20,6 +24,7 @@ size = 1388
 
 [[model]]
 id = "contentvec"
+group = "engine"
 title = "ContentVec — признаки речи"
 file = "assets/contentvec/pytorch_model.bin"
 url = "https://huggingface.co/lengyue233/content-vec-best/resolve/main/pytorch_model.bin"
@@ -28,6 +33,7 @@ size = 378342945
 
 [[model]]
 id = "vi"
+group = "vi"
 title = "Ви (Cyberpunk 2077, RVC)"
 file = "vi/CyberpunkV.zip"
 url = "https://huggingface.co/JHmashups/CyberpunkV/resolve/main/CyberpunkV.zip"
@@ -37,6 +43,7 @@ unpack = true
 
 [[model]]
 id = "johnny"
+group = "johnny"
 title = "Джонни Сильверхенд (Cyberpunk 2077, RVC)"
 file = "johnny/JohnnySilverhandRus.zip"
 url = "https://huggingface.co/Joxi/RVCv2_models/resolve/main/Johnny%20Silverhand%20RUS%20(Cyberpunk%202077)%20(Ov2).zip"
@@ -46,6 +53,7 @@ unpack = true
 
 [[model]]
 id = "ciri"
+group = "ciri"
 title = "Цири (The Witcher 3, so-vits-svc)"
 file = "ciri/G.pth"
 url = "https://huggingface.co/Rootreck/so-vits-svc-4.0-ru-The_Witcher_3_Wild_Hunt/resolve/main/TW3_F_Cirilla_Rus/TW3_F_Cirilla_Rus%20%28G_100%29.pth"
@@ -54,6 +62,7 @@ size = 548688142
 
 [[model]]
 id = "ciri_config"
+group = "ciri"
 title = "Цири (описание модели)"
 file = "ciri/config.json"
 url = "https://huggingface.co/Rootreck/so-vits-svc-4.0-ru-The_Witcher_3_Wild_Hunt/resolve/main/TW3_F_Cirilla_Rus/TW3_F_Cirilla_Rus%20%28config%29.json"
@@ -62,6 +71,7 @@ size = 2102
 
 [[model]]
 id = "geralt"
+group = "geralt"
 title = "Геральт (The Witcher 3, so-vits-svc)"
 file = "geralt/G.pth"
 url = "https://huggingface.co/Rootreck/so-vits-svc-4.0-ru-The_Witcher_3_Wild_Hunt/resolve/main/TW3_M_Geralt_Rus/TW3_M_Geralt_Rus%20%28G_200%29.pth"
@@ -70,6 +80,7 @@ size = 548688142
 
 [[model]]
 id = "geralt_config"
+group = "geralt"
 title = "Геральт (описание модели)"
 file = "geralt/config.json"
 url = "https://huggingface.co/Rootreck/so-vits-svc-4.0-ru-The_Witcher_3_Wild_Hunt/resolve/main/TW3_M_Geralt_Rus/TW3_M_Geralt_Rus%20%28config%29.json"

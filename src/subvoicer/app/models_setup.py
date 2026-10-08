@@ -39,17 +39,20 @@ class ModelSetup:
         downloader: Downloader | None = None,
         manifest: str = MODELS_MANIFEST,
         models_dir: Path | None = None,
+        files: list[ModelFile] | None = None,
     ) -> None:
         """``manifest``/``models_dir``: the first-run models by default; the character voices
         use the same downloader with their own list and folder (stage 16)."""
         self._paths = paths
         self._downloader = downloader
         self._manifest = manifest
+        self._files = files  # a part of the manifest (one character voice), else all of it
         self._models_dir = models_dir or paths.models_dir
         self._cancel = threading.Event()
 
     def missing(self) -> list[ModelFile]:
-        return missing(self._models_dir, model_files(self._manifest))
+        files = self._files if self._files is not None else model_files(self._manifest)
+        return missing(self._models_dir, files)
 
     def cancel(self) -> None:
         self._cancel.set()

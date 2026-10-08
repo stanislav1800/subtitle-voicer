@@ -10,6 +10,7 @@
 
 [[voice]]
 id = "char_vi"
+game = "Cyberpunk 2077"
 name = "Ви"
 gender = "female"
 base = "v55_xenia"
@@ -19,6 +20,7 @@ params = { key = -3, index = 1.0, protect = 0.5, rms = 1.0 }
 
 [[voice]]
 id = "char_johnny"
+game = "Cyberpunk 2077"
 name = "Джонни"
 gender = "male"
 base = "v55_eugene"
@@ -28,6 +30,7 @@ params = { key = -2, index = 0.0, protect = 0.5, rms = 1.0 }
 
 [[voice]]
 id = "char_ciri"
+game = "The Witcher 3"
 name = "Цири"
 gender = "female"
 base = "v55_xenia"
@@ -37,6 +40,7 @@ params = { key = -2, noise = 1.0, f0 = "dio" }
 
 [[voice]]
 id = "char_geralt"
+game = "The Witcher 3"
 name = "Геральт"
 gender = "male"
 base = "v55_eugene"

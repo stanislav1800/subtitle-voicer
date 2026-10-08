@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 
 import numpy as np
 
@@ -35,11 +35,15 @@ class CharacterVoices:
         converter: VoiceConverter | None,
         publisher: EventPublisher | None = None,
         enabled: bool = False,
+        installed: Iterable[str] | None = None,
     ) -> None:
-        """``converter`` is None when the helper is not installed."""
+        """``voices``: every character voice (``characters.toml``); ``installed``: the model
+        folders that are downloaded (TZ 1.24; None — all). A voice that is not installed sounds
+        as its base voice. ``converter`` is None without the engine."""
         self.base = base
         self.name = getattr(base, "name", "tts")
         self._voices = {v.id: v for v in voices}
+        self._installed = set(installed) if installed is not None else {v.model for v in voices}
         self._converter = converter
         self._publisher = publisher
         self._lock = threading.Lock()
@@ -55,7 +59,17 @@ class CharacterVoices:
 
     @property
     def installed(self) -> bool:
-        return self._converter is not None
+        return self._converter is not None and bool(self._installed)
+
+    def set_installed(self, models: Iterable[str]) -> None:
+        """A voice was downloaded or removed (TZ 1.24): the lists change at once; while on, the
+        helper loads the new set (a removed model is dropped with the restart)."""
+        with self._lock:
+            self._installed = set(models)
+            enabled = self._enabled
+        if enabled:
+            self.set_enabled(False)
+            self.set_enabled(True)
 
     def set_enabled(self, enabled: bool) -> None:
         """On: start the helper and load the models in the background. Off: stop the helper,
@@ -81,7 +95,8 @@ class CharacterVoices:
         own = self.base.voices()
         if self._converter is None:
             return own
-        return own + [Voice(v.id, v.gender, v.name, character=True) for v in self._voices.values()]
+        mine = [v for v in self._voices.values() if v.model in self._installed]
+        return own + [Voice(v.id, v.gender, v.name, character=True) for v in mine]
 
     def is_character(self, voice_id: str) -> bool:
         return voice_id in self._voices
@@ -93,7 +108,7 @@ class CharacterVoices:
         base = self.base.synthesize(text, voice.base, rate)
         stand_in = AudioClip(base.samples, base.sample_rate, cacheable=False)
         with self._lock:
-            ready = self.active and voice.model in self._ready
+            ready = self.active and voice.model in self._ready and voice.model in self._installed
             generation = self._generation
         if not ready or self._converter is None:
             return stand_in
@@ -117,7 +132,11 @@ class CharacterVoices:
 
     def _warm_up(self, generation: int) -> None:
         assert self._converter is not None
-        for model, kind in sorted({(v.model, v.kind) for v in self._voices.values()}):
+        with self._lock:
+            wanted = {
+                (v.model, v.kind) for v in self._voices.values() if v.model in self._installed
+            }
+        for model, kind in sorted(wanted):
             with self._lock:
                 if generation != self._generation:
                     return

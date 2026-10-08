@@ -193,27 +193,38 @@ def add_character_commands(commands: argparse._SubParsersAction) -> None:  # typ
 
 
 def add_voice_commands(commands: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
-    voices = commands.add_parser("voices", help="голоса персонажей (этап 16)").add_subparsers(
+    voices = commands.add_parser("voices", help="голоса персонажей (этапы 16, 12)").add_subparsers(
         dest="action", required=True
     )
-    voices.add_parser(
-        "install", help="установить: окружение ~5 ГБ и модели ~1,8 ГБ, нужна видеокарта"
-    )
-    voices.add_parser("status", help="установлены ли голоса персонажей")
+    install = voices.add_parser("install", help="скачать голос (с первым — движок ~5,6 ГБ)")
+    install.add_argument("voice", help="vi, johnny, ciri, geralt")
+    remove = voices.add_parser("remove", help="удалить голос или движок (engine)")
+    remove.add_argument("voice", help="vi, johnny, ciri, geralt или engine")
+    voices.add_parser("status", help="что установлено и сколько весит")
 
 
 def run_voices_command(args: argparse.Namespace) -> int:
-    from subvoicer.app.character_setup import CharacterSetup
+    from subvoicer.app.character_setup import ENGINE, CharacterSetup
 
     setup = CharacterSetup(AppPaths.default())
     if args.action == "install":
-        setup.install(say=print, progress=ConsoleProgress())
-    status = setup.status()
-    print(f"Окружение: {'есть' if status.env else 'нет'} ({setup.env_dir})")
-    print(f"Модели: {'на месте' if status.models else 'не все'} ({setup.models_dir})")
-    if not status.installed:
-        print("Установка: uv run python -m subvoicer.cli voices install")
-        return 0 if args.action == "status" else 1
+        setup.install(args.voice, say=print, progress=ConsoleProgress())
+    elif args.action == "remove":
+        if args.voice == ENGINE:
+            setup.remove_engine()
+        else:
+            setup.remove(args.voice)
+    gb = 2**30
+    engine = setup.engine_installed()
+    print(
+        f"Движок: {'есть' if engine else 'нет'}, {setup.engine_size() / gb:.1f} ГБ ({setup.root})"
+    )
+    for model in setup.voices():
+        package = setup.package(model)
+        state = "установлен" if package.installed else f"скачать {package.download / 2**20:.0f} МБ"
+        print(f"  {model:<8} {state}, на диске {package.disk / 2**20:.0f} МБ")
+    if args.action != "install":
+        return 0
     try:
         print(f"Видеокарта: {setup.check()}")
     except EngineError as exc:

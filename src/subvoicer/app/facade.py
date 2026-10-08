@@ -20,11 +20,18 @@ import numpy as np
 from subvoicer.app import game_runner, library, runtime, zone_tools
 from subvoicer.app import profile_commands as pc
 from subvoicer.app.bus import Bus
+from subvoicer.app.character_setup import CharacterSetup
+from subvoicer.app.container import installed_character_models
 from subvoicer.app.game_runner import RunParts, build_run, pronunciation
 from subvoicer.config.paths import AppPaths
 from subvoicer.config.profile import Layout, Profile, Zone
 from subvoicer.config.profile_store import ProfileStore, StoredProfile
-from subvoicer.config.resources import gender_exceptions, short_words, voice_catalog
+from subvoicer.config.resources import (
+    character_voices,
+    gender_exceptions,
+    short_words,
+    voice_catalog,
+)
 from subvoicer.config.settings import Settings, load_settings, save_settings
 from subvoicer.core.events import (
     DebugCaptured,
@@ -35,7 +42,15 @@ from subvoicer.core.events import (
     LibraryScanned,
     SettingsApplied,
 )
-from subvoicer.core.models import HistoryEntry, Priority, Rect, SpeechRequest, Voice, WindowRef
+from subvoicer.core.models import (
+    CharacterVoice,
+    HistoryEntry,
+    Priority,
+    Rect,
+    SpeechRequest,
+    Voice,
+    WindowRef,
+)
 from subvoicer.pipeline.games.library import folder_key
 from subvoicer.pipeline.ocr.junk_filter import JunkFilter
 from subvoicer.pipeline.ocr.runner import OcrRunner, OcrSettings
@@ -76,6 +91,19 @@ class DebugState:
 
 
 @dataclass(frozen=True, slots=True)
+class CharacterRow:
+    """A character voice in the list of «Общие» (TZ 1.24)."""
+
+    model: str
+    name: str
+    game: str
+    base: str
+    installed: bool
+    download: int  # bytes
+    disk: int  # bytes on disk (expected before the install)
+
+
+@dataclass(frozen=True, slots=True)
 class GameStatus:
     """What the tray and the settings sidebar show."""
 
@@ -112,6 +140,8 @@ class AppFacade:
         self._zone_keys: dict[str, str] = {}  # hotkey zones of the active layout: combo -> id
         self._reader: ManualReader | None = None
         self._library_lock = threading.Lock()
+        self._gpu: str | None = None  # "" — none
+        self._installing: CharacterSetup | None = None
         self.bus.subscribe(GameActivated, self._on_activated)
         self.bus.subscribe(LayoutMissing, self._on_missing)
         self.bus.subscribe(GameClosed, self._on_closed)
@@ -316,10 +346,131 @@ class AppFacade:
         return by_preference(list(voice_catalog(pc.TTS_CATALOG).values()))
 
     def characters_installed(self) -> bool:
-        """Character voices are installed (``subvoicer voices install``, stage 16)."""
-        from subvoicer.app.character_setup import CharacterSetup
+        """At least one character voice and the engine are installed (stage 16, TZ 1.24)."""
+        return bool(installed_character_models(self._character_setup()))
 
-        return CharacterSetup(self.paths).status().installed
+    # ------------------------------------------------------------------ character voices (TZ 1.24)
+
+    def gpu_name(self) -> str | None:
+        """The NVIDIA GPU the character voices need, or None (asked once)."""
+        if self._gpu is None:
+            from subvoicer.engines.system.gpu import nvidia_gpu
+
+            self._gpu = nvidia_gpu() or ""
+        return self._gpu or None
+
+    def character_rows(self) -> list[CharacterRow]:
+        setup = self._character_setup()
+        by_model: dict[str, list[CharacterVoice]] = {}
+        for voice in character_voices():
+            by_model.setdefault(voice.model, []).append(voice)
+        rows = []
+        for model in setup.voices():
+            voices = by_model.get(model, [])
+            package = setup.package(model)
+            rows.append(
+                CharacterRow(
+                    model=model,
+                    name=", ".join(v.name for v in voices) or model,
+                    game=voices[0].game if voices else "",
+                    base=voices[0].base if voices else "",
+                    installed=package.installed,
+                    download=package.download,
+                    disk=package.disk,
+                )
+            )
+        return rows
+
+    def character_engine(self) -> tuple[bool, int]:
+        """(installed, bytes on disk) of the shared engine."""
+        setup = self._character_setup()
+        return setup.engine_installed(), setup.engine_size()
+
+    def install_character(
+        self,
+        model: str,
+        on_progress: Callable[[str, float | None], None],
+        on_done: Callable[[str | None], None],
+    ) -> None:
+        """Download a voice (and the engine with the first one) in the background.
+        ``on_progress(text, fraction or None while it cannot be measured)``, ``on_done(error or
+        None)`` — from the worker thread."""
+        from subvoicer.app.character_setup import SetupCancelled, SetupError
+        from subvoicer.app.models_setup import Progress
+
+        setup = self._character_setup()
+        self._installing = setup
+        state = {"text": ""}
+
+        def say(text: str) -> None:
+            state["text"] = text
+            on_progress(text, None)
+
+        def report(p: Progress) -> None:
+            mb = f"{p.done / 2**20:.0f} из {p.total / 2**20:.0f} МБ"
+            on_progress(f"{state['text']} {mb}", p.fraction)
+
+        def work() -> None:
+            error: str | None = None
+            try:
+                setup.install(model, say, report)
+            except SetupCancelled:
+                error = "Отменено — скачанное продолжится со следующего раза"
+            except SetupError as exc:
+                error = str(exc)
+            except Exception as exc:
+                log.exception("Голос персонажа не установился")
+                error = f"Не установилось: {exc}"
+            finally:
+                self._installing = None
+            self._refresh_characters()
+            on_done(error)
+
+        threading.Thread(target=work, name="CharacterInstall", daemon=True).start()
+
+    def cancel_character_install(self) -> None:
+        setup = self._installing
+        if setup is not None:
+            setup.cancel()
+
+    def characters_using(self, model: str) -> list[str]:
+        """Characters and profiles that have a voice of this model (to warn before removing)."""
+        ids = {v.id for v in character_voices() if v.model == model}
+        found = []
+        for stored in self.store.load_all():
+            profile = stored.profile
+            title = profile.title or stored.path.stem
+            found += [f"{c.name} ({title})" for c in profile.characters if c.voice in ids]
+            voices = [
+                profile.narrator_voice,
+                profile.default_voices.male,
+                profile.default_voices.female,
+            ]
+            found += [f"голос по умолчанию ({title})" for v in voices if v in ids]
+        return found
+
+    def remove_character(self, model: str) -> None:
+        self._character_setup().remove(model)
+        self._refresh_characters()
+
+    def remove_character_engine(self) -> None:
+        parts = self._parts
+        if parts is not None and parts.speech.characters is not None:
+            parts.speech.characters.set_installed([])  # stops the helper before its files go
+            parts.speech.characters.close()
+        self._character_setup().remove_engine()
+        self._refresh_characters()
+
+    def _character_setup(self) -> CharacterSetup:
+        return CharacterSetup(self.paths)
+
+    def _refresh_characters(self) -> None:
+        parts = self._parts
+        if parts is not None and parts.speech.characters is not None:
+            parts.speech.characters.set_installed(
+                installed_character_models(self._character_setup())
+            )
+        self.bus.publish(SettingsApplied())  # the lists of voices changed
 
     # ------------------------------------------------------------------ developer mode
 

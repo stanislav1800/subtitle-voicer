@@ -88,6 +88,7 @@ def character_voices() -> list[CharacterVoice]:
                 model=item["model"],
                 params=params,
                 gain_db=float(item.get("gain_db", 0.0)),
+                game=str(item.get("game", "")),
             )
         )
     return voices

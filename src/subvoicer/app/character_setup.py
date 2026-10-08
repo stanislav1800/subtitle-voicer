@@ -1,61 +1,85 @@
-"""Installing the character voices (stage 16, TZ 1.21): ``subvoicer voices install``.
+"""Installing character voices one by one (stage 16, TZ 1.21, 1.24).
 
 Not part of the default install. Into ``voice_convert/``:
 
-- ``env/`` — Python 3.11 with torch for the GPU and the conversion packages
-  (``resources/voice_convert/requirements.txt``), created by ``uv``; ``rvc`` goes in with
-  ``--no-deps`` (its pins do not build on Windows, see the requirements file);
-- ``models/`` — the conversion models of ``resources/voice_convert/models.toml``, downloaded with
-  a SHA-256 check by the first-run downloader; zips are extracted next to them.
+- the **engine**, shared by every voice and installed with the first one: ``env/`` — Python
+  3.11 with torch for the GPU and the conversion packages
+  (``resources/voice_convert/requirements.txt``), created by ``uv`` (``rvc`` goes in with
+  ``--no-deps``: its pins do not build on Windows), and the files of group ``engine`` of
+  ``resources/voice_convert/models.toml`` (pitch and speech-feature models);
+- a **voice** — the files of its group into ``models/<voice>/``, downloaded with a SHA-256 check
+  (a broken download goes on where it stopped); zips are unpacked and removed, so-vits models
+  lose their training state (a third of the size, the same sound). ``.installed`` in the folder
+  marks a finished voice — the files no longer match the manifest sizes after that.
 
 The environment is marked with the hash of the requirements it was built from: a changed list
-rebuilds it on the next install. Finally the helper process is started once to check the GPU.
+rebuilds it. Everything can be cancelled; removing a voice or the engine deletes its folder.
 """
 
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import shutil
 import subprocess
+import sys
+import threading
 import zipfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
 from subvoicer.app.models_setup import Downloader, ModelSetup, Progress
-from subvoicer.config.models import VOICE_CONVERT_MANIFEST, model_files
+from subvoicer.config.models import VOICE_CONVERT_MANIFEST, ModelFile, model_files
 from subvoicer.config.paths import AppPaths
 from subvoicer.config.resources import resource_path
 from subvoicer.core.errors import ModelsError
-from subvoicer.engines.tts.convert_client import HostConverter
+from subvoicer.engines.tts.convert_client import HOST_SCRIPT, NO_WINDOW, HostConverter
 
 log = logging.getLogger(__name__)
 
 PYTHON_VERSION = "3.11"
 RVC_PACKAGE = "rvc==0.3.5"
 REQUIREMENTS = "voice_convert/requirements.txt"
+ENGINE = "engine"  # the group of shared files in the manifest
+ENV_SIZE = 5_000_000_000  # the environment on disk, measured (DECISIONS.md, stage 16)
 MARKER = ".subvoicer-requirements"  # in env/: hash of the requirements it was built from
+INSTALLED = ".installed"  # in a voice folder: hash of its manifest entries
 UNPACKED = (".pth", ".index")  # what is taken out of a model zip
 # The deepest file of the environment (in transformers) is ~120 characters below env/; past the
 # Windows limit of 260 Python cannot open it (measured, DECISIONS.md, stage 16).
 MAX_ENV_PATH = 130
 
-Runner = Callable[[list[str]], None]  # runs a command, raises on a non-zero exit
+Say = Callable[[str], None]
+Report = Callable[[Progress], None]
+Runner = Callable[[list[str], Callable[[], bool]], None]  # a command; raises on failure or cancel
 
 
 class SetupError(ModelsError):
     """A message for the user, in Russian."""
 
 
+class SetupCancelled(SetupError):
+    pass
+
+
 @dataclass(frozen=True, slots=True)
 class CharacterStatus:
-    env: bool  # the environment is built from the current requirements
-    models: bool  # every model file is in place (and unpacked)
+    env: bool  # the engine is installed (environment + shared files)
+    models: bool  # at least one voice is installed
 
     @property
     def installed(self) -> bool:
         return self.env and self.models
+
+
+@dataclass(frozen=True, slots=True)
+class VoicePackage:
+    model: str  # the voice's folder (characters.toml ``model``)
+    installed: bool
+    download: int  # bytes to download for the voice alone
+    disk: int  # bytes on disk once installed (measured if installed)
 
 
 class CharacterSetup:
@@ -71,45 +95,106 @@ class CharacterSetup:
         self.env_dir = self.root / "env"
         self.models_dir = self.root / "models"
         self.log_file = self.root / "convert_host.log"
-        self._models = ModelSetup(paths, downloader, VOICE_CONVERT_MANIFEST, self.models_dir)
+        self._downloader = downloader
         self._runner = runner or _run
         self._uv = uv
+        self._cancel = threading.Event()
+        self._active: ModelSetup | None = None
 
     @property
     def python(self) -> Path:
         return self.env_dir / "Scripts" / "python.exe"
 
-    def status(self) -> CharacterStatus:
+    # ------------------------------------------------------------------ what is there
+
+    def env_ready(self) -> bool:
         marker = self.env_dir / MARKER
-        env = (
+        return (
             self.python.is_file()
             and marker.is_file()
             and marker.read_text(encoding="utf-8").strip() == requirements_hash()
         )
-        models = not self._models.missing() and all(
-            self._unpacked(m.path(self.models_dir))
-            for m in model_files(VOICE_CONVERT_MANIFEST)
-            if m.unpack
+
+    def engine_installed(self) -> bool:
+        return self.env_ready() and not self._setup(ENGINE).missing()
+
+    def engine_size(self) -> int:
+        """Bytes on disk the engine takes (or will take)."""
+        if self.engine_installed():
+            return _folder_size(self.env_dir) + sum(
+                _size(f.path(self.models_dir)) for f in self._files(ENGINE)
+            )
+        return ENV_SIZE + sum(f.size for f in self._files(ENGINE))
+
+    def voices(self) -> list[str]:
+        return sorted({f.group for f in model_files(VOICE_CONVERT_MANIFEST) if f.group != ENGINE})
+
+    def installed(self, model: str) -> bool:
+        marker = self.models_dir / model / INSTALLED
+        if marker.is_file():
+            return marker.read_text(encoding="utf-8").strip() == self._group_hash(model)
+        return self._adopt(model)
+
+    def package(self, model: str) -> VoicePackage:
+        files = self._files(model)
+        download = sum(f.size for f in files)
+        if self.installed(model):
+            return VoicePackage(model, True, download, _folder_size(self.models_dir / model))
+        return VoicePackage(model, False, download, _expected_disk(files))
+
+    def status(self) -> CharacterStatus:
+        return CharacterStatus(
+            self.engine_installed(), any(self.installed(v) for v in self.voices())
         )
-        return CharacterStatus(env, models)
+
+    # ------------------------------------------------------------------ install / remove
 
     def install(
-        self,
-        say: Callable[[str], None] = lambda _line: None,
-        progress: Callable[[Progress], None] = lambda _p: None,
+        self, model: str, say: Say = lambda _l: None, progress: Report = lambda _p: None
     ) -> None:
-        """Blocks for minutes (a ~5 GB environment, ~1.8 GB of models); raises SetupError."""
-        status = self.status()
-        if not status.env:
+        """The voice, and the engine first if needed. Blocks for minutes; raises SetupError
+        (SetupCancelled after ``cancel()``)."""
+        if model not in self.voices():
+            raise SetupError(f"Нет такого голоса персонажа: {model}")
+        self._cancel.clear()
+        if not self.env_ready():
             self._build_env(say)
-        else:
-            say("Окружение уже установлено")
-        say("Скачиваю модели голосов…")
-        self._models.download_missing(progress)
-        for model in model_files(VOICE_CONVERT_MANIFEST):
-            if model.unpack and not self._unpacked(model.path(self.models_dir)):
-                unpack(model.path(self.models_dir))
-        say("Модели на месте")
+        self._download(ENGINE, "Скачиваю движок голосов…", say, progress)
+        if self.installed(model):
+            say("Голос уже установлен")
+            return
+        self._download(model, "Скачиваю голос…", say, progress)
+        folder = self.models_dir / model
+        for file in self._files(model):
+            path = file.path(self.models_dir)
+            if file.unpack and path.is_file():
+                unpack(path)
+                path.unlink()  # the zip is not needed once unpacked
+        for weights in folder.glob("G*.pth"):  # so-vits: the training state is cut off
+            say("Убираю из модели лишнее (данные обучения)…")
+            self._check_cancel()
+            self._runner(
+                [str(self.python), str(HOST_SCRIPT), "--strip", str(weights)], self._cancel.is_set
+            )
+        (folder / INSTALLED).write_text(self._group_hash(model), encoding="utf-8")
+        say("Голос установлен")
+
+    def cancel(self) -> None:
+        self._cancel.set()
+        if self._active is not None:
+            self._active.cancel()
+
+    def remove(self, model: str) -> None:
+        shutil.rmtree(self.models_dir / model, ignore_errors=True)
+        log.info("Голос персонажа удалён: %s", model)
+
+    def remove_engine(self) -> None:
+        shutil.rmtree(self.env_dir, ignore_errors=True)
+        for file in self._files(ENGINE):
+            file.path(self.models_dir).unlink(missing_ok=True)
+        log.info("Движок голосов персонажей удалён")
+
+    # ------------------------------------------------------------------ the helper
 
     def check(self) -> str:
         """Starts the helper once: the name of the GPU, or EngineError with the reason."""
@@ -122,24 +207,76 @@ class CharacterSetup:
     def converter(self) -> HostConverter:
         return HostConverter(self.python, self.models_dir, self.log_file)
 
-    def _build_env(self, say: Callable[[str], None]) -> None:
+    # ------------------------------------------------------------------ internals
+
+    def _files(self, group: str) -> list[ModelFile]:
+        return [f for f in model_files(VOICE_CONVERT_MANIFEST) if f.group == group]
+
+    def _setup(self, group: str) -> ModelSetup:
+        return ModelSetup(
+            self.paths,
+            self._downloader,
+            VOICE_CONVERT_MANIFEST,
+            self.models_dir,
+            self._files(group),
+        )
+
+    def _group_hash(self, group: str) -> str:
+        entries = [f.model_dump() for f in self._files(group)]
+        return hashlib.sha256(json.dumps(entries, sort_keys=True).encode()).hexdigest()
+
+    def _adopt(self, model: str) -> bool:
+        """A voice installed before TZ 1.24 (all at once, zips kept): every file in place and
+        the zips unpacked — mark it installed as it is."""
+        folder = self.models_dir / model
+        files = self._files(model)
+        if not files or not folder.is_dir() or self._setup(model).missing():
+            return False
+        if any(f.unpack for f in files) and not any(folder.glob("*.pth")):
+            return False
+        (folder / INSTALLED).write_text(self._group_hash(model), encoding="utf-8")
+        return True
+
+    def _download(self, group: str, title: str, say: Say, progress: Report) -> None:
+        setup = self._setup(group)
+        if not setup.missing():
+            return
+        self._check_cancel()
+        say(title)
+        self._active = setup
+        try:
+            setup.download_missing(progress)
+        except ModelsError as exc:
+            if self._cancel.is_set():
+                raise SetupCancelled("Отменено") from exc
+            raise
+        finally:
+            self._active = None
+
+    def _check_cancel(self) -> None:
+        if self._cancel.is_set():
+            raise SetupCancelled("Отменено")
+
+    def _build_env(self, say: Say) -> None:
         if len(str(self.env_dir)) > MAX_ENV_PATH:
             raise SetupError(
                 f"Слишком длинный путь {self.env_dir}: файлы пакетов в нём вышли бы за предел "
                 f"Windows в 260 символов. Нужен путь короче {MAX_ENV_PATH} символов"
             )
-        uv = self._uv or shutil.which("uv")
+        uv = self._uv or find_uv()
         if uv is None:
-            raise SetupError("Нужен uv (https://docs.astral.sh/uv/): им ставится окружение голосов")
+            raise SetupError("Нужен uv (https://docs.astral.sh/uv/): им ставится движок голосов")
         requirements = resource_path(REQUIREMENTS)
         python = str(self.python)
-        say(f"Создаю окружение Python {PYTHON_VERSION} в {self.env_dir}…")
+        say("Ставлю движок голосов: Python, torch для видеокарты, RVC, so-vits-svc (~5 ГБ)…")
         (self.env_dir / MARKER).unlink(missing_ok=True)
-        self._runner(
-            [uv, "venv", "--python", PYTHON_VERSION, "--allow-existing", str(self.env_dir)]
+        run = self._runner
+        cancelled = self._cancel.is_set
+        run(
+            [uv, "venv", "--python", PYTHON_VERSION, "--allow-existing", str(self.env_dir)],
+            cancelled,
         )
-        say("Ставлю пакеты (torch для видеокарты, RVC, so-vits-svc) — это несколько гигабайт…")
-        self._runner(
+        run(
             [
                 uv,
                 "pip",
@@ -150,13 +287,19 @@ class CharacterSetup:
                 "unsafe-best-match",
                 "-r",
                 str(requirements),
-            ]
+            ],
+            cancelled,
         )
-        self._runner([uv, "pip", "install", "--python", python, "--no-deps", RVC_PACKAGE])
+        run([uv, "pip", "install", "--python", python, "--no-deps", RVC_PACKAGE], cancelled)
         (self.env_dir / MARKER).write_text(requirements_hash(), encoding="utf-8")
 
-    def _unpacked(self, archive: Path) -> bool:
-        return any(archive.parent.glob("*.pth"))
+
+def find_uv() -> str | None:
+    """``uv.exe`` next to the installed app (TZ 1.24), else the one on PATH (development)."""
+    bundled = Path(sys.executable).with_name("uv.exe")
+    if getattr(sys, "frozen", False) and bundled.is_file():
+        return str(bundled)
+    return shutil.which("uv")
 
 
 def requirements_hash() -> str:
@@ -179,9 +322,49 @@ def unpack(archive: Path) -> None:
     log.info("Распакован %s", archive)
 
 
-def _run(command: list[str]) -> None:
+def _expected_disk(files: list[ModelFile]) -> int:
+    """Rough size on disk before install: so-vits weights lose two thirds, zips are unpacked
+    (a third bigger, measured on the four voices)."""
+    total = 0
+    for f in files:
+        if f.unpack:
+            total += f.size * 4 // 3
+        elif Path(f.file).name.startswith("G") and f.file.endswith(".pth"):
+            total += f.size // 3
+        else:
+            total += f.size
+    return total
+
+
+def _size(path: Path) -> int:
+    return path.stat().st_size if path.is_file() else 0
+
+
+def _folder_size(folder: Path) -> int:
+    return sum(p.stat().st_size for p in folder.rglob("*") if p.is_file()) if folder.is_dir() else 0
+
+
+def _run(command: list[str], cancelled: Callable[[], bool]) -> None:
     log.info("Запуск: %s", " ".join(command))
     try:
-        subprocess.run(command, check=True)
-    except (OSError, subprocess.CalledProcessError) as exc:
-        raise SetupError(f"Команда не выполнилась: {' '.join(command[:3])}…: {exc}") from exc
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            creationflags=NO_WINDOW if sys.platform == "win32" else 0,
+        )
+    except OSError as exc:
+        raise SetupError(f"Команда не запустилась: {command[0]}: {exc}") from exc
+    while True:
+        try:
+            _, err = process.communicate(timeout=0.5)
+            break
+        except subprocess.TimeoutExpired:
+            if cancelled():
+                process.kill()
+                process.wait()
+                raise SetupCancelled("Отменено") from None
+    if process.returncode != 0:
+        tail = (err or b"").decode("utf-8", "replace").strip().splitlines()[-3:]
+        log.error("Команда завершилась с кодом %s: %s", process.returncode, "\n".join(tail))
+        raise SetupError(f"Не удалось установить: {' '.join(command[:3])}… (подробности в логе)")

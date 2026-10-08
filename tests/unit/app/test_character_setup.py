@@ -1,4 +1,5 @@
-"""Installing the character voices (stage 16): environment, models, zips, status."""
+"""Installing character voices one by one (stage 16, TZ 1.21, 1.24): the engine with the first
+voice, unpacking, stripping, removing, cancelling, an install from before TZ 1.24."""
 
 from __future__ import annotations
 
@@ -10,8 +11,10 @@ from pathlib import Path
 import pytest
 
 from subvoicer.app.character_setup import (
+    INSTALLED,
     MARKER,
     CharacterSetup,
+    SetupCancelled,
     SetupError,
     requirements_hash,
     unpack,
@@ -46,52 +49,125 @@ def fake_download(
 
 
 class Commands:
-    def __init__(self, setup_root: Path) -> None:
+    def __init__(self) -> None:
         self.calls: list[list[str]] = []
-        self.root = setup_root
 
-    def __call__(self, command: list[str]) -> None:
+    def __call__(self, command: list[str], cancelled: Callable[[], bool]) -> None:
         self.calls.append(command)
         if command[1] == "venv":
             python = Path(command[-1]) / "Scripts" / "python.exe"
             python.parent.mkdir(parents=True, exist_ok=True)
             python.write_bytes(b"")
+        if "--strip" in command:  # the helper cuts the training state off
+            Path(command[-1]).write_bytes(b"slim")
 
 
-def test_nothing_installed_by_default(tmp_path: Path) -> None:
-    status = CharacterSetup(AppPaths(tmp_path)).status()
-    assert not status.env and not status.models and not status.installed
+@pytest.fixture
+def commands() -> Commands:
+    return Commands()
 
 
-def test_install_builds_the_env_downloads_and_unpacks(tmp_path: Path) -> None:
-    paths = AppPaths(tmp_path)
-    commands = Commands(tmp_path)
-    setup = CharacterSetup(paths, fake_download, commands, uv="uv")
-    setup.install()
-    assert setup.status().installed
+@pytest.fixture
+def setup(tmp_path: Path, commands: Commands) -> CharacterSetup:
+    return CharacterSetup(AppPaths(tmp_path), fake_download, commands, uv="uv")
+
+
+def test_nothing_installed_by_default(setup: CharacterSetup) -> None:
+    assert not setup.engine_installed() and not setup.status().installed
+    assert setup.voices() == ["ciri", "geralt", "johnny", "vi"]
+    assert not any(setup.installed(v) for v in setup.voices())
+    vi = setup.package("vi")
+    assert not vi.installed and vi.download == 92_393_456 and vi.disk > vi.download
+
+
+def test_the_first_voice_brings_the_engine(setup: CharacterSetup, commands: Commands) -> None:
+    said: list[str] = []
+    setup.install("vi", said.append)
     venv, packages, rvc = commands.calls
     assert venv[:4] == ["uv", "venv", "--python", "3.11"]
     assert packages[-2] == "-r" and packages[-1].endswith("requirements.txt")
     assert rvc[-2:] == ["--no-deps", "rvc==0.3.5"]
-    vi = paths.voice_convert_dir / "models" / "vi"
-    assert sorted(p.name for p in vi.iterdir()) == ["CyberpunkV.zip", "model.index", "model.pth"]
+    assert setup.engine_installed() and setup.installed("vi")
+    assert not setup.installed("ciri") and setup.status().installed
+    vi = setup.models_dir / "vi"
+    assert sorted(p.name for p in vi.iterdir()) == [INSTALLED, "model.index", "model.pth"]
     assert (setup.env_dir / MARKER).read_text(encoding="utf-8") == requirements_hash()
+    assert "Голос установлен" in said
+
+
+def test_more_voices_reuse_the_engine_and_so_vits_is_stripped(
+    setup: CharacterSetup, commands: Commands
+) -> None:
+    setup.install("vi")
     commands.calls.clear()
-    setup.install()  # again: nothing to do
-    assert commands.calls == []
+    setup.install("ciri")
+    (strip,) = commands.calls  # no environment again, only the strip of G.pth
+    assert strip[-2:] == ["--strip", str(setup.models_dir / "ciri" / "G.pth")]
+    assert (setup.models_dir / "ciri" / "G.pth").read_bytes() == b"slim"
+    assert setup.installed("ciri")  # although G.pth no longer matches the manifest size
+    package = setup.package("ciri")
+    assert package.installed and package.disk < package.download
 
 
-def test_changed_requirements_rebuild_the_env(tmp_path: Path) -> None:
-    setup = CharacterSetup(AppPaths(tmp_path), fake_download, Commands(tmp_path), uv="uv")
-    setup.install()
-    (setup.env_dir / MARKER).write_text("old", encoding="utf-8")
-    assert not setup.status().env and setup.status().models
+def test_remove_a_voice_and_the_engine(setup: CharacterSetup) -> None:
+    setup.install("vi")
+    setup.install("johnny")
+    setup.remove("vi")
+    assert not setup.installed("vi") and setup.installed("johnny") and setup.engine_installed()
+    setup.remove_engine()
+    assert not setup.engine_installed() and not setup.env_dir.exists()
+    assert not setup.status().installed  # a voice without the engine is of no use
+
+
+def test_cancel_stops_and_keeps_what_was_downloaded(tmp_path: Path, commands: Commands) -> None:
+    holder: list[CharacterSetup] = []
+
+    def cancelling(url: str, target: Path, sha256: str, progress, cancelled) -> None:  # type: ignore[no-untyped-def]
+        fake_download(url, target, sha256, progress, cancelled)
+        holder[0].cancel()  # the user pressed «Отмена» during the first file
+
+    setup = CharacterSetup(AppPaths(tmp_path), cancelling, commands, uv="uv")
+    holder.append(setup)
+    with pytest.raises(SetupCancelled):
+        setup.install("vi")
+    assert not setup.installed("vi")
+    assert (setup.models_dir / "assets" / "rmvpe.pt").is_file()  # kept for the next time
+
+
+def test_an_install_from_before_one_by_one_is_adopted(tmp_path: Path) -> None:
+    """TZ 1.24: every file in place (zips kept, G.pth not stripped) — installed as it is."""
+    setup = CharacterSetup(AppPaths(tmp_path), fake_download, Commands(), uv="uv")
+    for model in model_files(VOICE_CONVERT_MANIFEST):
+        if model.group in ("ciri", "vi"):
+            fake_download(
+                model.url,
+                model.path(setup.models_dir),
+                model.sha256,
+                lambda _n: None,
+                lambda: False,
+            )
+    (setup.models_dir / "vi" / "model.pth").write_bytes(b"unpacked earlier")
+    assert setup.installed("ciri") and setup.installed("vi")
+    assert (setup.models_dir / "ciri" / INSTALLED).is_file()
+
+
+def test_unknown_voice(setup: CharacterSetup) -> None:
+    with pytest.raises(SetupError, match="Нет такого голоса"):
+        setup.install("kratos")
 
 
 def test_without_uv_the_install_says_so(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("shutil.which", lambda _name: None)
     with pytest.raises(SetupError, match="Нужен uv"):
-        CharacterSetup(AppPaths(tmp_path), fake_download, Commands(tmp_path)).install()
+        CharacterSetup(AppPaths(tmp_path), fake_download, Commands()).install("vi")
+
+
+def test_a_too_long_path_is_refused_before_anything_is_installed(tmp_path: Path) -> None:
+    deep = tmp_path / ("x" * 120)
+    commands = Commands()
+    with pytest.raises(SetupError, match="Слишком длинный путь"):
+        CharacterSetup(AppPaths(deep), fake_download, commands, uv="uv").install("vi")
+    assert commands.calls == []
 
 
 def test_unpack_takes_only_model_files_by_name(tmp_path: Path) -> None:
@@ -102,11 +178,8 @@ def test_unpack_takes_only_model_files_by_name(tmp_path: Path) -> None:
         zf.writestr("a/b/added_IVF.index", b"y")
         zf.writestr("run.bat", b"z")
     unpack(archive)
-    assert sorted(p.name for p in archive.parent.iterdir()) == [
-        "added_IVF.index",
-        "evil.pth",
-        "voice.zip",
-    ]
+    names = sorted(p.name for p in archive.parent.iterdir())
+    assert names == ["added_IVF.index", "evil.pth", "voice.zip"]
     assert not (tmp_path / "evil.pth").exists()
 
 
@@ -118,19 +191,11 @@ def test_a_zip_without_a_model_is_an_error(tmp_path: Path) -> None:
         unpack(archive)
 
 
-def test_manifest_covers_every_character_voice() -> None:
+def test_manifest_groups_every_character_voice() -> None:
     from subvoicer.config.resources import character_voices
 
     files = model_files(VOICE_CONVERT_MANIFEST)
-    folders = {Path(m.file).parts[0] for m in files}
-    assert {v.model for v in character_voices()} <= folders
-    assert {"assets/rmvpe.pt", "assets/contentvec/pytorch_model.bin"} <= {m.file for m in files}
+    groups = {m.group for m in files}
+    assert groups == {"engine"} | {v.model for v in character_voices()}
+    assert all(Path(m.file).parts[0] in (m.group, "assets") for m in files)
     assert 1.7 < sum(m.size for m in files) / 2**30 < 2.0
-
-
-def test_a_too_long_path_is_refused_before_anything_is_installed(tmp_path: Path) -> None:
-    deep = tmp_path / ("x" * 120)
-    commands = Commands(tmp_path)
-    with pytest.raises(SetupError, match="Слишком длинный путь"):
-        CharacterSetup(AppPaths(deep), fake_download, commands, uv="uv").install()
-    assert commands.calls == []
