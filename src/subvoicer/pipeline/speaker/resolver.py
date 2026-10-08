@@ -81,16 +81,6 @@ class SpeakerResolver:
             return text
         return text[: match.start()].rstrip()
 
-    def split_at_first_name(self, text: str) -> tuple[str, str] | None:
-        """``(head, rest)`` where ``rest`` starts with the first accepted inner name
-        ("…и не было! Ти-Баг: Нет." -> ("…и не было!", "Ти-Баг: Нет.")), or None."""
-        if self.mode is not SpeakerMode.PREFIX:
-            return None
-        for match in INNER_NAME.finditer(text):
-            if self._validator.is_name(match.group(1).strip()):
-                return text[: match.start()].strip(), text[match.start() :].strip()
-        return None
-
     def split_inner(self, text: str) -> list[tuple[str | None, str]]:
         """``(None, head)`` for the text before the first inner name (it belongs to the
         current speaker), then ``(name, text)`` per inner name; empty parts are dropped."""

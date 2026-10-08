@@ -232,12 +232,19 @@ class ZoneOcrSource:
         lines: list[tuple[UtteranceKind, str | None, str]] = []
         speaker = spec.speaker
         new_text = result.text
-        if result.kind is DedupKind.NEW and speaker.resolve(new_text).name is None:
-            split = speaker.split_at_first_name(new_text)
-            if split is not None and on_screen(split[0], previous):
-                new_text = split[1]  # the cut top of an older line, then a named line
         whole = speaker.parts(text, candidate)
-        if result.kind is DedupKind.CONTINUATION and len(whole) > 1:
+        # a stacked subtitle that does not start with a name (a line without a name above, or
+        # the cut top of an older one), some of its lines already voiced: line by line too
+        stacked = (
+            result.kind is DedupKind.NEW
+            and speaker.resolve(new_text).name is None
+            and len(whole) > 1
+            and any(on_screen(part.text, previous) for part in whole)
+        )
+        if stacked:
+            for found in whole:
+                lines.append((UtteranceKind.NEW, found.name, found.text))
+        elif result.kind is DedupKind.CONTINUATION and len(whole) > 1:
             # another speaker's line appeared below: the tail cut by length may take letters of
             # the previous line or of the new name, so the whole reading goes line by line
             # (TZ 1.22) — a line that grew from a previous one gives only its new end

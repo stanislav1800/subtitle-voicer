@@ -458,3 +458,16 @@ def test_the_end_of_the_line_is_not_voiced_when_ocr_spaces_it_out() -> None:
         ("Ёринобу", "потерялсвязь среальностью. Может, никогда и не было!"),
         ("Ви", "Неплохо."),
     ]
+
+
+def test_a_line_without_a_name_above_a_voiced_one() -> None:
+    """TZ 1.22: a line without a name appears above Judy's; only it is new."""
+    s = Screen(SpeakerMode.PREFIX)
+    judy = "Джуди: Я вижу ходячие говорящие трупы."
+    for text in (judy, f"Расслабься, все под контролем. {judy}"):
+        s.show(text)
+        s.run(2)
+    assert [(u.speaker, u.text) for u in s.out] == [
+        ("Джуди", "Я вижу ходячие говорящие трупы."),
+        (None, "Расслабься, все под контролем."),
+    ]
