@@ -64,6 +64,7 @@ UNPACKED = (".pth", ".index")  # what is taken out of a model zip
 # The deepest file of the environment (in transformers) is ~120 characters below env/; past the
 # Windows limit of 260 Python cannot open it (measured, DECISIONS.md, stage 16).
 MAX_ENV_PATH = 130
+CACHE_POLL_S = 2.0  # how often the size of uv's cache is shown while it installs
 
 Say = Callable[[str], None]
 Report = Callable[[Progress], None]
@@ -180,7 +181,7 @@ class CharacterSetup:
         ``cancel()``; the downloaded files and the package cache stay for the next try)."""
         self._cancel.clear()
         if not self.env_ready():
-            self._build_env(say)
+            self._build_env(say, progress)
         self._download(ENGINE, "Скачиваю модели движка…", say, progress)
         say("Движок установлен")
 
@@ -295,7 +296,7 @@ class CharacterSetup:
         if self._cancel.is_set():
             raise SetupCancelled("Отменено")
 
-    def _build_env(self, say: Say) -> None:
+    def _build_env(self, say: Say, progress: Report = lambda _p: None) -> None:
         if len(str(self.env_dir)) > MAX_ENV_PATH:
             raise SetupError(
                 f"Слишком длинный путь {self.env_dir}: файлы пакетов в нём вышли бы за предел "
@@ -319,22 +320,39 @@ class CharacterSetup:
             self._runner(command, cancelled, env)
 
         run([uv, "venv", "--python", PYTHON_VERSION, str(self.env_dir)])
-        run(
-            [
-                uv,
-                "pip",
-                "install",
-                "--python",
-                python,
-                "--index-strategy",
-                "unsafe-best-match",
-                "-r",
-                str(requirements),
-            ]
+        stop = threading.Event()
+        watcher = threading.Thread(
+            target=self._watch_cache, args=(progress, stop), name="EngineCache", daemon=True
         )
-        run([uv, "pip", "install", "--python", python, "--no-deps", RVC_PACKAGE])
+        watcher.start()
+        try:
+            run(
+                [
+                    uv,
+                    "pip",
+                    "install",
+                    "--python",
+                    python,
+                    "--index-strategy",
+                    "unsafe-best-match",
+                    "-r",
+                    str(requirements),
+                ]
+            )
+            run([uv, "pip", "install", "--python", python, "--no-deps", RVC_PACKAGE])
+        finally:
+            stop.set()
+            watcher.join()
         (self.env_dir / MARKER).write_text(requirements_hash(self.device), encoding="utf-8")
         shutil.rmtree(self.cache_dir, ignore_errors=True)  # gigabytes of packages, not needed now
+
+    def _watch_cache(self, progress: Report, stop: threading.Event) -> None:
+        """uv tells no percent: what it has downloaded is told by the size of its cache (a
+        cache left by a cancelled try counts too). Never shows 100 % before the end."""
+        total = ENV_SIZE[self.device]
+        while not stop.wait(CACHE_POLL_S):
+            done = min(_tree_size(self.cache_dir), total * 99 // 100)
+            progress(Progress("Пакеты движка", 1, 1, done, total))
 
     def uv_env(self) -> dict[str, str]:
         """uv's own folders of the app, and only its own Python: one installed elsewhere may
@@ -391,6 +409,26 @@ def _expected_disk(files: list[ModelFile]) -> int:
 
 def _size(path: Path) -> int:
     return path.stat().st_size if path.is_file() else 0
+
+
+def _tree_size(folder: Path) -> int:
+    """Size of a folder that is being written: files may vanish while it is walked."""
+    total = 0
+    stack = [str(folder)]
+    while stack:
+        try:
+            entries = list(os.scandir(stack.pop()))
+        except OSError:
+            continue
+        for entry in entries:
+            try:
+                if entry.is_dir(follow_symlinks=False):
+                    stack.append(entry.path)
+                else:
+                    total += entry.stat(follow_symlinks=False).st_size
+            except OSError:
+                continue
+    return total
 
 
 def _folder_size(folder: Path) -> int:

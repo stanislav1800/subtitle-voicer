@@ -468,8 +468,11 @@ class AppFacade:
             on_progress(text, None)
 
         def report(p: Progress) -> None:
-            mb = f"{p.done / 2**20:.0f} из {p.total / 2**20:.0f} МБ"
-            on_progress(f"{state['text']} {mb}", p.fraction)
+            if p.total >= 2**30:  # the engine's packages: gigabytes, the total is a guess
+                done = f"{p.done / 2**30:.1f} из ~{p.total / 2**30:.1f} ГБ".replace(".", ",")
+            else:
+                done = f"{p.done / 2**20:.0f} из {p.total / 2**20:.0f} МБ"
+            on_progress(f"{state['text']} {done}", p.fraction)
 
         def work() -> None:
             error: str | None = None

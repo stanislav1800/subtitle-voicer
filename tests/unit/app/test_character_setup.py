@@ -263,3 +263,27 @@ def test_the_two_requirement_lists_differ_only_in_torch() -> None:
         return {line.split("==")[0] for line in lines if "==" in line and "torch" not in line}
 
     assert packages("cuda") == packages("cpu")
+
+
+def test_the_packages_show_progress_by_the_size_of_the_cache(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """uv tells no percent: while it installs, the growing cache is the progress (TZ 1.25)."""
+    import time
+
+    from subvoicer.app import character_setup
+    from subvoicer.app.models_setup import Progress
+
+    monkeypatch.setattr(character_setup, "CACHE_POLL_S", 0.01)
+
+    class SlowCommands(Commands):
+        def __call__(self, command, cancelled, env):  # type: ignore[no-untyped-def]
+            super().__call__(command, cancelled, env)
+            if "-r" in command:
+                time.sleep(0.2)  # uv downloading torch
+
+    seen: list[Progress] = []
+    setup = CharacterSetup(AppPaths(tmp_path), fake_download, SlowCommands(), uv="uv")
+    setup.install_engine(progress=seen.append)
+    packages = [p for p in seen if p.title == "Пакеты движка"]
+    assert packages and all(0 < p.done < p.total for p in packages)
