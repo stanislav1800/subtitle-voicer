@@ -1,0 +1,16 @@
+# Environment of the character-voice helper on an AMD Radeon RX 7000/9000 (TZ 1.25): the same packages
+# as requirements.txt, torch for ROCm on Windows from AMD (preview; Python 3.12 only, driver 26.2.2+).
+# https://rocm.docs.amd.com/projects/radeon-ryzen/en/latest/docs/install/installrad/windows/install-pytorch.html
+# rvc 0.3.5 is installed separately with --no-deps: its pins (numba rc, numpy<2, fairseq, av 11) do not
+# build on Windows — fairseq is replaced by ContentVec from transformers, av 11 by a current wheel.
+rocm-sdk-core @ https://repo.radeon.com/rocm/windows/rocm-rel-7.2.1/rocm_sdk_core-7.2.1-py3-none-win_amd64.whl
+rocm-sdk-libraries-custom @ https://repo.radeon.com/rocm/windows/rocm-rel-7.2.1/rocm_sdk_libraries_custom-7.2.1-py3-none-win_amd64.whl
+rocm @ https://repo.radeon.com/rocm/windows/rocm-rel-7.2.1/rocm-7.2.1.tar.gz
+torch @ https://repo.radeon.com/rocm/windows/rocm-rel-7.2.1/torch-2.9.1%2Brocm7.2.1-cp312-cp312-win_amd64.whl
+torchaudio @ https://repo.radeon.com/rocm/windows/rocm-rel-7.2.1/torchaudio-2.9.1%2Brocm7.2.1-cp312-cp312-win_amd64.whl
+so-vits-svc-fork==4.2.30
+transformers==5.18.0
+numpy==2.4.6
+faiss-cpu==1.15.1
+av==18.1.0
+python-dotenv==1.2.4

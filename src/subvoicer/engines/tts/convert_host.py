@@ -1,4 +1,5 @@
-"""Character-voice helper process (stage 16, TZ 1.21): RVC v2 and so-vits-svc 4 on the GPU.
+"""Character-voice helper process (stage 16, TZ 1.21, 1.25): RVC v2 and so-vits-svc 4 on the
+NVIDIA GPU, or on the CPU in an environment with torch for the CPU.
 
 A separate program, run by ``convert_client.py`` with the interpreter of its own environment
 (``voice_convert/env``, ``resources/voice_convert/requirements.txt``)::
@@ -10,6 +11,7 @@ It imports nothing from the app. Protocol over stdin/stdout, one request at a ti
 then ``frames`` little-endian float32 samples; the answer has the same shape.
 
     {"op": "ping"}                          -> {"ok": true, "device": "...", "memory_mb": M}
+                                               (device "cpu" without CUDA, memory 0)
     {"op": "load", "model": "vi", "kind": "rvc"}
                                             -> {"ok": true}  (load ahead, with a warm-up)
     {"op": "convert", "model": "vi", "kind": "rvc", "params": {...}, "rate": 48000,
@@ -106,11 +108,14 @@ class Host:
         self._svc: dict[str, Any] = {}
         self._hubert: Any = None
         self._rmvpe: Any = None
+        self.device = "cuda"
 
     def handle(self, request: dict[str, Any], audio: np.ndarray) -> tuple[dict[str, Any], Any]:
         torch = self._setup()
         if request["op"] == "ping":
             self._import_converters()  # a broken environment shows up here, not on a line
+            if self.device == "cpu":
+                return {"ok": True, "device": "cpu", "memory_mb": 0}, None
             memory = round(torch.cuda.max_memory_allocated() / 2**20)
             return {"ok": True, "device": torch.cuda.get_device_name(0), "memory_mb": memory}, None
         kind, model = request.get("kind"), request.get("model")
@@ -142,8 +147,8 @@ class Host:
             return self._torch
         import torch
 
-        if not torch.cuda.is_available():
-            raise RuntimeError("Нет видеокарты с CUDA: голоса персонажей работают только на GPU")
+        # the environment decides: torch for CUDA, or the CPU build (rvc picks the device itself)
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
         load = torch.load
 
         def weights_only(*args: Any, **kwargs: Any) -> Any:
@@ -248,7 +253,9 @@ class Host:
         from so_vits_svc_fork.inference.core import Svc
 
         folder = self.models_dir / model
-        svc = Svc(net_g_path=folder / "G.pth", config_path=folder / "config.json", device="cuda")
+        svc = Svc(
+            net_g_path=folder / "G.pth", config_path=folder / "config.json", device=self.device
+        )
         self._svc[model] = svc
         return svc
 

@@ -3,7 +3,8 @@
 The file is written next to the target as ``*.part`` and renamed only when the hash matches,
 so an interrupted download never looks like a model. A ``*.part`` left by a cancelled or broken
 download is continued with an HTTP Range request (TZ 1.24); a server that ignores Range sends the
-whole file again. Standard library only.
+whole file again. A part that is already whole (the rename failed) is only renamed; one the server
+cannot continue (HTTP 416) is downloaded again from the start. Standard library only.
 """
 
 from __future__ import annotations
@@ -11,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+import urllib.error
 import urllib.request
 from collections.abc import Callable
 from pathlib import Path
@@ -52,6 +54,11 @@ def download(
     part = target.with_name(target.name + ".part")
     digest = hashlib.sha256()
     done = part.stat().st_size if part.is_file() else 0
+    if done and sha256_of(part) == sha256:
+        os.replace(part, target)
+        progress(done)
+        log.info("Уже скачан целиком: %s", target)
+        return
     headers = {"User-Agent": USER_AGENT}
     if done:
         headers["Range"] = f"bytes={done}-"
@@ -77,6 +84,13 @@ def download(
                     progress(done)
     except DownloadError:
         raise
+    except urllib.error.HTTPError as exc:
+        if exc.code == 416 and done:  # the kept part does not fit the file: start over
+            log.warning("Сервер не может продолжить %s — качаю заново", target.name)
+            part.unlink(missing_ok=True)
+            download(url, target, sha256, progress, cancelled)
+            return
+        raise DownloadError(f"Не удалось скачать {url}: {exc}") from exc
     except OSError as exc:  # URLError, HTTPError, timeouts and disk errors are all OSError
         raise DownloadError(f"Не удалось скачать {url}: {exc}") from exc
     if digest.hexdigest() != sha256:

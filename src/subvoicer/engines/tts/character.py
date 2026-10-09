@@ -25,6 +25,7 @@ from subvoicer.core.ports import EventPublisher, TtsEngine, VoiceConverter
 log = logging.getLogger(__name__)
 
 FAMILY = "characters"  # EngineUnavailable.family: the UI shows it once per failure
+ON_CPU = "characters_cpu"  # the engine is built for a GPU, but the helper did not find it
 
 
 class CharacterVoices:
@@ -36,16 +37,20 @@ class CharacterVoices:
         publisher: EventPublisher | None = None,
         enabled: bool = False,
         installed: Iterable[str] | None = None,
+        gpu: str | None = None,
     ) -> None:
         """``voices``: every character voice (``characters.toml``); ``installed``: the model
         folders that are downloaded (TZ 1.24; None — all). A voice that is not installed sounds
-        as its base voice. ``converter`` is None without the engine."""
+        as its base voice. ``converter`` is None without the engine. ``gpu``: what the engine is
+        built for ("cuda", "rocm"; None — the CPU): if the helper runs on the CPU instead (an old
+        AMD driver), the user is told once (TZ 1.25)."""
         self.base = base
         self.name = getattr(base, "name", "tts")
         self._voices = {v.id: v for v in voices}
         self._installed = set(installed) if installed is not None else {v.model for v in voices}
         self._converter = converter
         self._publisher = publisher
+        self._gpu = gpu
         self._lock = threading.Lock()
         self._ready: set[str] = set()  # models loaded in the helper
         self._generation = 0  # a newer enable/disable cancels an older warm-up
@@ -136,6 +141,7 @@ class CharacterVoices:
             wanted = {
                 (v.model, v.kind) for v in self._voices.values() if v.model in self._installed
             }
+        self._check_device(generation)
         for model, kind in sorted(wanted):
             with self._lock:
                 if generation != self._generation:
@@ -150,6 +156,24 @@ class CharacterVoices:
                     return
                 self._ready.add(model)
             log.info("Голос персонажа готов: %s", model)
+
+    def _check_device(self, generation: int) -> None:
+        ping = getattr(self._converter, "ping", None)
+        if self._gpu is None or ping is None:
+            return
+        try:
+            device = str(ping().get("device", ""))
+        except EngineError as exc:
+            self._report(generation, str(exc))
+            return
+        if device != "cpu":
+            return
+        reason = "видеокарта не найдена движком" + (
+            " — обновите драйвер AMD Adrenalin до 26.2.2 или новее" if self._gpu == "rocm" else ""
+        )
+        log.warning("Голоса персонажей работают на процессоре: %s", reason)
+        if self._publisher is not None:
+            self._publisher.publish(EngineUnavailable(ON_CPU, "convert_host", reason))
 
     def _report(self, generation: int, reason: str) -> None:
         with self._lock:

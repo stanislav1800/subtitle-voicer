@@ -196,17 +196,24 @@ def add_voice_commands(commands: argparse._SubParsersAction) -> None:  # type: i
     voices = commands.add_parser("voices", help="голоса персонажей (этапы 16, 12)").add_subparsers(
         dest="action", required=True
     )
-    install = voices.add_parser("install", help="скачать голос (с первым — движок ~5,6 ГБ)")
+    install = voices.add_parser("install", help="скачать голос (с первым — движок 2–5,6 ГБ)")
     install.add_argument("voice", help="vi, johnny, ciri, geralt")
+    install.add_argument(
+        "--device",
+        choices=("auto", "cuda", "rocm", "cpu"),
+        default="auto",
+        help="для чего ставить движок: auto — NVIDIA или Radeon RX 7700+, иначе процессор",
+    )
     remove = voices.add_parser("remove", help="удалить голос или движок (engine)")
     remove.add_argument("voice", help="vi, johnny, ciri, geralt или engine")
     voices.add_parser("status", help="что установлено и сколько весит")
 
 
 def run_voices_command(args: argparse.Namespace) -> int:
-    from subvoicer.app.character_setup import ENGINE, CharacterSetup
+    from subvoicer.app.character_setup import ENGINE, CharacterSetup, best_device
 
-    setup = CharacterSetup(AppPaths.default())
+    device = getattr(args, "device", "auto")
+    setup = CharacterSetup(AppPaths.default(), device=best_device() if device == "auto" else device)
     if args.action == "install":
         setup.install(args.voice, say=print, progress=ConsoleProgress())
     elif args.action == "remove":
@@ -217,7 +224,8 @@ def run_voices_command(args: argparse.Namespace) -> int:
     gb = 2**30
     engine = setup.engine_installed()
     print(
-        f"Движок: {'есть' if engine else 'нет'}, {setup.engine_size() / gb:.1f} ГБ ({setup.root})"
+        f"Движок: {setup.env_device() if engine else 'нет'}, {setup.engine_size() / gb:.1f} ГБ "
+        f"({setup.root})"
     )
     for model in setup.voices():
         package = setup.package(model)
@@ -226,7 +234,7 @@ def run_voices_command(args: argparse.Namespace) -> int:
     if args.action != "install":
         return 0
     try:
-        print(f"Видеокарта: {setup.check()}")
+        print(f"Устройство: {setup.check()}")
     except EngineError as exc:
         print(f"Вспомогательный процесс не запустился: {exc}", file=sys.stderr)
         return 1

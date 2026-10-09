@@ -104,6 +104,21 @@ class CharacterRow:
 
 
 @dataclass(frozen=True, slots=True)
+class CharacterHardware:
+    """What the character voices can run on (TZ 1.25)."""
+
+    nvidia: str | None  # the NVIDIA GPU that CUDA can use
+    radeon: str | None  # the Radeon that torch for ROCm supports (RX 7700 and newer, Windows 11)
+    others: tuple[str, ...]  # other adapters Windows knows (older Radeon, Intel, built-in)
+
+    def devices(self) -> list[str]:
+        """What the engine can be built for here, the best first."""
+        from subvoicer.app.character_setup import CPU, CUDA, ROCM
+
+        return [d for d, gpu in ((CUDA, self.nvidia), (ROCM, self.radeon)) if gpu] + [CPU]
+
+
+@dataclass(frozen=True, slots=True)
 class GameStatus:
     """What the tray and the settings sidebar show."""
 
@@ -140,7 +155,8 @@ class AppFacade:
         self._zone_keys: dict[str, str] = {}  # hotkey zones of the active layout: combo -> id
         self._reader: ManualReader | None = None
         self._library_lock = threading.Lock()
-        self._gpu: str | None = None  # "" — none
+        self._hardware: CharacterHardware | None = None
+        self._device: str | None = None  # what to build the engine for; None — the best one
         self._installing: CharacterSetup | None = None
         self.bus.subscribe(GameActivated, self._on_activated)
         self.bus.subscribe(LayoutMissing, self._on_missing)
@@ -351,13 +367,38 @@ class AppFacade:
 
     # ------------------------------------------------------------------ character voices (TZ 1.24)
 
-    def gpu_name(self) -> str | None:
-        """The NVIDIA GPU the character voices need, or None (asked once)."""
-        if self._gpu is None:
-            from subvoicer.engines.system.gpu import nvidia_gpu
+    def character_hardware(self) -> CharacterHardware:
+        """The GPUs of the computer (asked once)."""
+        if self._hardware is None:
+            from subvoicer.engines.system.gpu import nvidia_gpu, rocm_gpu, video_adapters
 
-            self._gpu = nvidia_gpu() or ""
-        return self._gpu or None
+            adapters = video_adapters()
+            nvidia = nvidia_gpu()
+            radeon = rocm_gpu(adapters)
+            others = tuple(
+                a.name
+                for a in adapters
+                if a.name != radeon and (a.vendor != "nvidia" or not nvidia)
+            )
+            self._hardware = CharacterHardware(nvidia, radeon, others)
+            log.info(
+                "Видеокарты: NVIDIA %s, Radeon для ROCm %s, прочие: %s",
+                nvidia or "нет",
+                radeon or "нет",
+                ", ".join(others) or "нет",
+            )
+        return self._hardware
+
+    @property
+    def character_device(self) -> str:
+        """What the engine is built for when it is installed next: "cuda", "rocm" or "cpu"."""
+        if self._device is not None:
+            return self._device
+        return self.character_hardware().devices()[0]
+
+    @character_device.setter
+    def character_device(self, device: str) -> None:
+        self._device = device
 
     def character_rows(self) -> list[CharacterRow]:
         setup = self._character_setup()
@@ -381,10 +422,10 @@ class AppFacade:
             )
         return rows
 
-    def character_engine(self) -> tuple[bool, int]:
-        """(installed, bytes on disk) of the shared engine."""
-        setup = self._character_setup()
-        return setup.engine_installed(), setup.engine_size()
+    def character_engine(self) -> tuple[bool, int, str | None]:
+        """(installed, bytes on disk — or to be, what it is built for) of the shared engine."""
+        setup = self._character_setup(self.character_device)
+        return setup.engine_installed(), setup.engine_size(), setup.env_device()
 
     def install_character(
         self,
@@ -398,7 +439,7 @@ class AppFacade:
         from subvoicer.app.character_setup import SetupCancelled, SetupError
         from subvoicer.app.models_setup import Progress
 
-        setup = self._character_setup()
+        setup = self._character_setup(self.character_device)
         self._installing = setup
         state = {"text": ""}
 
@@ -461,8 +502,11 @@ class AppFacade:
         self._character_setup().remove_engine()
         self._refresh_characters()
 
-    def _character_setup(self) -> CharacterSetup:
-        return CharacterSetup(self.paths)
+    def _character_setup(self, device: str | None = None) -> CharacterSetup:
+        """``device`` matters only for an engine not built yet (its size, the install)."""
+        if device is None:
+            return CharacterSetup(self.paths)
+        return CharacterSetup(self.paths, device=device)
 
     def _refresh_characters(self) -> None:
         parts = self._parts

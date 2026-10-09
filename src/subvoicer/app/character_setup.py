@@ -3,8 +3,9 @@
 Not part of the default install. Into ``voice_convert/``:
 
 - the **engine**, shared by every voice and installed with the first one: ``env/`` — Python
-  3.11 with torch for the GPU and the conversion packages
-  (``resources/voice_convert/requirements.txt``), created by ``uv`` (``rvc`` goes in with
+  3.12 with torch and the conversion packages, created by ``uv``: for the NVIDIA GPU
+  (``resources/voice_convert/requirements.txt``) or for the CPU (``requirements-cpu.txt``,
+  TZ 1.25 — any other computer) (``rvc`` goes in with
   ``--no-deps``: its pins do not build on Windows), and the files of group ``engine`` of
   ``resources/voice_convert/models.toml`` (pitch and speech-feature models);
 - a **voice** — the files of its group into ``models/<voice>/``, downloaded with a SHA-256 check
@@ -16,8 +17,9 @@ uv works with its own folders there (TZ 1.24): ``python/`` — the interpreter t
 runs on, ``uv-cache/`` — the package cache, removed once the environment is built. So all the app
 downloads lie under its data folder and goes with it; the user's own uv is not touched.
 
-The environment is marked with the hash of the requirements it was built from: a changed list
-rebuilds it. Everything can be cancelled; removing a voice or the engine deletes its folder.
+The environment is marked with the hash of the requirements it was built from — it also tells
+what the engine was built for; a changed list rebuilds it. Everything can be cancelled; removing a
+voice or the engine deletes its folder.
 """
 
 from __future__ import annotations
@@ -44,11 +46,18 @@ from subvoicer.engines.tts.convert_client import HOST_SCRIPT, NO_WINDOW, HostCon
 
 log = logging.getLogger(__name__)
 
-PYTHON_VERSION = "3.11"
 RVC_PACKAGE = "rvc==0.3.5"
-REQUIREMENTS = "voice_convert/requirements.txt"
+CUDA, ROCM, CPU = "cuda", "rocm", "cpu"  # what the engine is built for (TZ 1.25)
+REQUIREMENTS = {
+    CUDA: "voice_convert/requirements.txt",
+    ROCM: "voice_convert/requirements-rocm.txt",
+    CPU: "voice_convert/requirements-cpu.txt",
+}
+# the app's own version; AMD publishes torch for ROCm on Windows for 3.12 only (TZ 1.25)
+PYTHON_VERSION = "3.12"
 ENGINE = "engine"  # the group of shared files in the manifest
-ENV_SIZE = 5_000_000_000  # the environment on disk, measured (DECISIONS.md, stage 16)
+# the environment on disk, measured (DECISIONS.md, stage 16 and TZ 1.25)
+ENV_SIZE = {CUDA: 5_000_000_000, ROCM: 5_300_000_000, CPU: 1_400_000_000}
 MARKER = ".subvoicer-requirements"  # in env/: hash of the requirements it was built from
 INSTALLED = ".installed"  # in a voice folder: hash of its manifest entries
 UNPACKED = (".pth", ".index")  # what is taken out of a model zip
@@ -95,8 +104,11 @@ class CharacterSetup:
         downloader: Downloader | None = None,
         runner: Runner | None = None,
         uv: str | None = None,
+        device: str = CUDA,
     ) -> None:
+        """``device``: what to build the engine for when it is not there yet."""
         self.paths = paths
+        self.device = device
         self.root = paths.voice_convert_dir
         self.env_dir = self.root / "env"
         self.models_dir = self.root / "models"
@@ -116,12 +128,15 @@ class CharacterSetup:
     # ------------------------------------------------------------------ what is there
 
     def env_ready(self) -> bool:
+        return self.env_device() is not None
+
+    def env_device(self) -> str | None:
+        """What the environment is built for (CUDA, CPU), None — no usable environment."""
         marker = self.env_dir / MARKER
-        return (
-            self.python.is_file()
-            and marker.is_file()
-            and marker.read_text(encoding="utf-8").strip() == requirements_hash()
-        )
+        if not (self.python.is_file() and marker.is_file()):
+            return None
+        built = marker.read_text(encoding="utf-8").strip()
+        return next((d for d in REQUIREMENTS if requirements_hash(d) == built), None)
 
     def engine_installed(self) -> bool:
         return self.env_ready() and not self._setup(ENGINE).missing()
@@ -132,7 +147,7 @@ class CharacterSetup:
             return _folder_size(self.env_dir) + sum(
                 _size(f.path(self.models_dir)) for f in self._files(ENGINE)
             )
-        return ENV_SIZE + sum(f.size for f in self._files(ENGINE))
+        return ENV_SIZE[self.device] + sum(f.size for f in self._files(ENGINE))
 
     def voices(self) -> list[str]:
         return sorted({f.group for f in model_files(VOICE_CONVERT_MANIFEST) if f.group != ENGINE})
@@ -277,17 +292,21 @@ class CharacterSetup:
         uv = self._uv or find_uv()
         if uv is None:
             raise SetupError("Нужен uv (https://docs.astral.sh/uv/): им ставится движок голосов")
-        requirements = resource_path(REQUIREMENTS)
+        requirements = resource_path(REQUIREMENTS[self.device])
         python = str(self.python)
-        say("Ставлю движок голосов: Python, torch для видеокарты, RVC, so-vits-svc (~5 ГБ)…")
-        (self.env_dir / MARKER).unlink(missing_ok=True)
+        target = "процессора" if self.device == CPU else "видеокарты"
+        size = f"{ENV_SIZE[self.device] / 1e9:.1f}".replace(".0", "").replace(".", ",")
+        say(f"Ставлю движок голосов: Python, torch для {target}, RVC, so-vits-svc (~{size} ГБ)…")
+        # from scratch: a half-built or outdated one may have another torch or Python (the
+        # packages are still in the cache if a try failed)
+        shutil.rmtree(self.env_dir, ignore_errors=True)
         cancelled = self._cancel.is_set
         env = self.uv_env()
 
         def run(command: list[str]) -> None:
             self._runner(command, cancelled, env)
 
-        run([uv, "venv", "--python", PYTHON_VERSION, "--allow-existing", str(self.env_dir)])
+        run([uv, "venv", "--python", PYTHON_VERSION, str(self.env_dir)])
         run(
             [
                 uv,
@@ -302,7 +321,7 @@ class CharacterSetup:
             ]
         )
         run([uv, "pip", "install", "--python", python, "--no-deps", RVC_PACKAGE])
-        (self.env_dir / MARKER).write_text(requirements_hash(), encoding="utf-8")
+        (self.env_dir / MARKER).write_text(requirements_hash(self.device), encoding="utf-8")
         shutil.rmtree(self.cache_dir, ignore_errors=True)  # gigabytes of packages, not needed now
 
     def uv_env(self) -> dict[str, str]:
@@ -323,9 +342,10 @@ def find_uv() -> str | None:
     return shutil.which("uv")
 
 
-def requirements_hash() -> str:
-    data = resource_path(REQUIREMENTS).read_bytes()
-    return hashlib.sha256(data + RVC_PACKAGE.encode()).hexdigest()
+def requirements_hash(device: str = CUDA) -> str:
+    data = resource_path(REQUIREMENTS[device]).read_bytes()
+    # an environment on another Python (3.11 before TZ 1.25) is rebuilt
+    return hashlib.sha256(data + RVC_PACKAGE.encode() + PYTHON_VERSION.encode()).hexdigest()
 
 
 def unpack(archive: Path) -> None:
@@ -391,3 +411,13 @@ def _run(command: list[str], cancelled: Callable[[], bool], env: Mapping[str, st
         tail = (err or b"").decode("utf-8", "replace").strip().splitlines()[-3:]
         log.error("Команда завершилась с кодом %s: %s", process.returncode, "\n".join(tail))
         raise SetupError(f"Не удалось установить: {' '.join(command[:3])}… (подробности в логе)")
+
+
+def best_device() -> str:
+    """The NVIDIA GPU if its driver answers, else a Radeon that ROCm supports, else the CPU
+    (TZ 1.25)."""
+    from subvoicer.engines.system.gpu import nvidia_gpu, rocm_gpu, video_adapters
+
+    if nvidia_gpu():
+        return CUDA
+    return ROCM if rocm_gpu(video_adapters()) else CPU

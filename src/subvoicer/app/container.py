@@ -191,8 +191,15 @@ def build_characters(tts: Any, config: SpeechConfig, publisher: EventPublisher) 
     setup = CharacterSetup(config.paths)
     installed = installed_character_models(setup)
     log.info("Голоса персонажей установлены: %s", ", ".join(installed) or "нет")
+    built = setup.env_device()
     return CharacterVoices(
-        tts, voices, setup.converter(), publisher, config.character_voices, installed
+        tts,
+        voices,
+        setup.converter(),
+        publisher,
+        config.character_voices,
+        installed,
+        gpu=built if built != "cpu" else None,
     )
 
 

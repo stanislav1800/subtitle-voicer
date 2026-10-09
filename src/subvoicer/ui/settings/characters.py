@@ -1,11 +1,12 @@
-"""«Голоса персонажей» in «Общие» (stage 16, TZ 1.24): download and remove voices one by one,
-the shared engine with the first one; the switch that runs them on the GPU."""
+"""«Голоса персонажей» in «Общие» (stage 16, TZ 1.24, 1.25): download and remove voices one by
+one, the shared engine with the first one — for the NVIDIA GPU or the CPU, the GPUs Windows
+found are shown; the switch that turns them on."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import QObject, Qt, Signal
+from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -16,9 +17,20 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from subvoicer.app.facade import AppFacade, CharacterRow
+from subvoicer.app.character_setup import CPU, CUDA, ROCM
+from subvoicer.app.facade import AppFacade, CharacterHardware, CharacterRow
 from subvoicer.ui.settings.dialogs import CHARACTER_MARK
-from subvoicer.ui.widgets.common import Card, clear_layout, label, primary, titled, toggle_row
+from subvoicer.ui.widgets.common import (
+    Card,
+    clear_layout,
+    combo,
+    label,
+    primary,
+    titled,
+    toggle_row,
+)
+
+CPU_NOTE = "медленно: +1–6 с к реплике"  # measured, DECISIONS.md (TZ 1.25)
 
 
 def size_text(size: int) -> str:
@@ -51,34 +63,42 @@ class CharactersCard(Card):
         clear_layout(self._list)
         self._bar = self._status = None
         facade = self._facade
-        gpu = facade.gpu_name()
+        hardware = facade.character_hardware()
         rows = facade.character_rows()
-        engine_installed, engine_size = facade.character_engine()
+        engine_installed, engine_size, built = facade.character_engine()
         usable = engine_installed and any(r.installed for r in rows)
-        hint = (
-            f"Тембр персонажей из игр поверх голосов ★, на видеокарте ({gpu}). Выключено — "
-            "звучат голоса-основы, видеокарта не используется."
-            if gpu
-            else "Нужна видеокарта NVIDIA — она не найдена, голоса персонажей недоступны."
-        )
+        device = built if engine_installed and built else facade.character_device
+        if device in (CUDA, ROCM):
+            gpu = hardware.nvidia if device == CUDA else hardware.radeon
+            hint = (
+                f"Тембр персонажей из игр поверх голосов ★, на видеокарте "
+                f"({gpu or 'видеокарта'}). Выключено — звучат голоса-основы, "
+                "видеокарта не используется."
+            )
+        else:
+            hint = (
+                "Тембр персонажей из игр поверх голосов ★, на процессоре. "
+                "Выключено — звучат голоса-основы."
+            )
         box, switch = toggle_row(
             "Использовать голоса персонажей", hint, facade.settings.character_voices and usable
         )
-        switch.setEnabled(bool(gpu) and usable)
+        switch.setEnabled(usable)
         switch.toggled.connect(self._set_enabled)
         self._list.addWidget(box)
-        if not gpu:
-            return
+        if not engine_installed:
+            self._list.addWidget(self._device_row(hardware, device))
         for item in rows:
             self._list.addWidget(self._row(item, engine_installed, engine_size))
         if engine_installed:
             engine = QWidget()
             line = QHBoxLayout(engine)
             line.setContentsMargins(0, 0, 0, 0)
+            target = "процессора" if device == CPU else "видеокарты"
             line.addWidget(
                 titled(
                     "Движок",
-                    f"окружение для видеокарты, общее для всех голосов · {size_text(engine_size)}",
+                    f"окружение для {target}, общее для всех голосов · {size_text(engine_size)}",
                 ),
                 1,
             )
@@ -89,6 +109,48 @@ class CharactersCard(Card):
             self._list.addWidget(engine)
         if self._message:
             self._list.addWidget(label(self._message, "hint", wrap=True))
+
+    def _device_row(self, hardware: CharacterHardware, device: str) -> QWidget:
+        """Where the engine will work: chosen from the list if a GPU fits, else the CPU with
+        what Windows found and why it does not fit (TZ 1.25)."""
+        found = ", ".join(hardware.others)
+        unfit = (
+            f"{found} — для {'них' if len(hardware.others) > 1 else 'неё'} движка нет: нужна "
+            "NVIDIA или Radeon RX 7700 и новее на Windows 11"
+            if found
+            else ""
+        )
+        devices = hardware.devices()
+        if devices == [CPU]:
+            text = f"Найдено: {unfit}." if unfit else "Видеокарты не найдены."
+            return label(
+                f"{text} Голоса персонажей будут работать на процессоре, {CPU_NOTE}.",
+                "hint",
+                wrap=True,
+            )
+        box = QWidget()
+        line = QHBoxLayout(box)
+        line.setContentsMargins(0, 0, 0, 0)
+        gpus = [g for g in (hardware.nvidia, hardware.radeon) if g]
+        hint = (
+            f"Видеокарта {', '.join(gpus)} — быстрее. Процессор — меньше места на диске, "
+            f"но {CPU_NOTE}"
+        )
+        if hardware.radeon and not hardware.nvidia:
+            hint += ". Radeon — предварительная поддержка AMD, нужен свежий драйвер Adrenalin"
+        if unfit:
+            hint += f". Ещё найдено: {unfit}"
+        line.addWidget(titled("Где работать", hint), 1)
+        names = {CUDA: "Видеокарта NVIDIA", ROCM: "Видеокарта Radeon", CPU: "Процессор"}
+        choice = combo([(names[d], d) for d in devices], device, "Где работать")
+        choice.setEnabled(self._installing is None)
+        choice.currentIndexChanged.connect(lambda _i: self._choose(str(choice.currentData())))
+        line.addWidget(choice, 0, Qt.AlignmentFlag.AlignVCenter)
+        return box
+
+    def _choose(self, device: str) -> None:
+        self._facade.character_device = device
+        QTimer.singleShot(0, self.refresh)  # not from inside the signal of the combo itself
 
     def _row(self, item: CharacterRow, engine_installed: bool, engine_size: int) -> QWidget:
         box = QWidget()

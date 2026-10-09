@@ -59,6 +59,10 @@ class RangeHandler(http.server.BaseHTTPRequestHandler):
         wanted = self.headers.get("Range")
         RangeHandler.requests.append(wanted)
         start = int(wanted.removeprefix("bytes=").rstrip("-")) if wanted else 0
+        if start >= len(DATA):  # like the model hosts: nothing left to send
+            self.send_response(416)
+            self.end_headers()
+            return
         body = DATA[start:]
         self.send_response(206 if wanted else 200)
         self.send_header("Content-Length", str(len(body)))
@@ -88,3 +92,25 @@ def test_a_cancelled_download_is_continued(tmp_path: Path) -> None:
     assert target.read_bytes() == DATA
     assert RangeHandler.requests[-1] == f"bytes={kept}-"
     assert seen[0] == kept and seen[-1] == len(DATA)
+
+
+def test_a_whole_part_is_only_renamed_and_a_too_long_one_starts_over(tmp_path: Path) -> None:
+    """The rename of a finished part failed (file busy), or the part is longer than the file."""
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), RangeHandler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{server.server_address[1]}/model.onnx"
+    target = tmp_path / "model.onnx"
+    part = tmp_path / "model.onnx.part"
+    sha = hashlib.sha256(DATA).hexdigest()
+    RangeHandler.requests.clear()
+    try:
+        part.write_bytes(DATA)
+        download(url, target, sha)
+        assert target.read_bytes() == DATA and RangeHandler.requests == []
+        target.unlink()
+        part.write_bytes(DATA + b"junk")
+        download(url, target, sha)
+        assert target.read_bytes() == DATA and not part.exists()
+        assert RangeHandler.requests == [f"bytes={len(DATA) + 4}-", None]
+    finally:
+        server.shutdown()

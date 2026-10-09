@@ -203,3 +203,35 @@ def test_only_installed_voices_are_listed_and_converted() -> None:
     voices.set_installed([])
     assert not voices.installed and not [v for v in voices.voices() if v.character]
     assert not voices.synthesize("Привет.", "char_vi", 1.0).cacheable
+
+
+class PingingConverter(FakeConverter):
+    def __init__(self, device: str) -> None:
+        super().__init__()
+        self.device = device
+
+    def ping(self) -> dict[str, str]:
+        return {"device": self.device}
+
+
+@pytest.mark.parametrize(
+    ("built", "device", "told"),
+    [("rocm", "cpu", True), ("cuda", "cpu", True), ("rocm", "AMD Radeon RX 7800 XT", False)],
+)
+def test_an_engine_for_the_gpu_on_the_cpu_is_told_once(built: str, device: str, told: bool) -> None:
+    """TZ 1.25: e.g. an old AMD driver — the voices work, but slowly; the user should know."""
+    bus = RecordingBus()
+    voices = CharacterVoices(LoudTts(), [VI], PingingConverter(device), bus, True, gpu=built)
+    wait_ready(voices, 1)
+    events = bus.of(EngineUnavailable)
+    assert len(events) == int(told)
+    if told:
+        assert events[0].family == "characters_cpu"  # type: ignore[attr-defined]
+        assert ("Adrenalin" in events[0].reason) == (built == "rocm")  # type: ignore[attr-defined]
+
+
+def test_an_engine_for_the_cpu_says_nothing() -> None:
+    bus = RecordingBus()
+    voices = CharacterVoices(LoudTts(), [VI], PingingConverter("cpu"), bus, True, gpu=None)
+    wait_ready(voices, 1)
+    assert bus.of(EngineUnavailable) == []

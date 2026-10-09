@@ -294,6 +294,14 @@ class Application:
             case ProfileBound(title=title):
                 self.notifier.show(Notification("Игра привязана", f"{title} — профиль готов."))
                 self.profiles.refresh()
+            case EngineUnavailable(family="characters_cpu", reason=reason):
+                self.notifier.show(
+                    Notification(
+                        "Голоса персонажей — на процессоре",
+                        f"{reason.capitalize()}. Голоса звучат, но с задержкой в несколько секунд.",
+                        timeout_ms=20_000,
+                    )
+                )
             case EngineUnavailable(family="characters", reason=reason):
                 self.notifier.show(
                     Notification(

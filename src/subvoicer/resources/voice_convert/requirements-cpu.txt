@@ -1,0 +1,13 @@
+# Environment of the character-voice helper on a computer without an NVIDIA GPU (TZ 1.25): the same
+# packages as requirements.txt, torch for the CPU. Keep the two lists in step.
+# rvc 0.3.5 is installed separately with --no-deps: its pins (numba rc, numpy<2, fairseq, av 11) do not
+# build on Windows — fairseq is replaced by ContentVec from transformers, av 11 by a current wheel.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.11.0+cpu
+torchaudio==2.11.0+cpu
+so-vits-svc-fork==4.2.30
+transformers==5.18.0
+numpy==2.4.6
+faiss-cpu==1.15.1
+av==18.1.0
+python-dotenv==1.2.4

@@ -92,7 +92,7 @@ def test_the_first_voice_brings_the_engine(setup: CharacterSetup, commands: Comm
     said: list[str] = []
     setup.install("vi", said.append)
     venv, packages, rvc = commands.calls
-    assert venv[:4] == ["uv", "venv", "--python", "3.11"]
+    assert venv[:4] == ["uv", "venv", "--python", "3.12"] and "--allow-existing" not in venv
     assert packages[-2] == "-r" and packages[-1].endswith("requirements.txt")
     assert rvc[-2:] == ["--no-deps", "rvc==0.3.5"]
     assert setup.engine_installed() and setup.installed("vi")
@@ -222,3 +222,29 @@ def test_manifest_groups_every_character_voice() -> None:
     assert groups == {"engine"} | {v.model for v in character_voices()}
     assert all(Path(m.file).parts[0] in (m.group, "assets") for m in files)
     assert 1.7 < sum(m.size for m in files) / 2**30 < 2.0
+
+
+def test_the_engine_for_the_cpu(tmp_path: Path, commands: Commands) -> None:
+    """TZ 1.25: without an NVIDIA GPU the engine is built with torch for the CPU, and the marker
+    tells what it was built for."""
+    from subvoicer.app.character_setup import CPU, CUDA, ENV_SIZE
+
+    setup = CharacterSetup(AppPaths(tmp_path), fake_download, commands, uv="uv", device=CPU)
+    assert setup.env_device() is None
+    assert setup.engine_size() < ENV_SIZE[CUDA]
+    setup.install("vi")
+    assert commands.calls[1][-1].endswith("requirements-cpu.txt")
+    assert setup.env_device() == CPU and setup.engine_installed()
+    # built for the CPU, it still works when the app would pick the GPU now
+    assert CharacterSetup(AppPaths(tmp_path), device=CUDA).env_device() == CPU
+
+
+def test_the_two_requirement_lists_differ_only_in_torch() -> None:
+    from subvoicer.app.character_setup import REQUIREMENTS
+    from subvoicer.config.resources import resource_path
+
+    def packages(device: str) -> set[str]:
+        lines = resource_path(REQUIREMENTS[device]).read_text(encoding="utf-8").splitlines()
+        return {line.split("==")[0] for line in lines if "==" in line and "torch" not in line}
+
+    assert packages("cuda") == packages("cpu")
