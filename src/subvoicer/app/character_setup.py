@@ -12,6 +12,10 @@ Not part of the default install. Into ``voice_convert/``:
   lose their training state (a third of the size, the same sound). ``.installed`` in the folder
   marks a finished voice — the files no longer match the manifest sizes after that.
 
+uv works with its own folders there (TZ 1.24): ``python/`` — the interpreter the environment
+runs on, ``uv-cache/`` — the package cache, removed once the environment is built. So all the app
+downloads lie under its data folder and goes with it; the user's own uv is not touched.
+
 The environment is marked with the hash of the requirements it was built from: a changed list
 rebuilds it. Everything can be cancelled; removing a voice or the engine deletes its folder.
 """
@@ -21,12 +25,13 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import shutil
 import subprocess
 import sys
 import threading
 import zipfile
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -53,7 +58,8 @@ MAX_ENV_PATH = 130
 
 Say = Callable[[str], None]
 Report = Callable[[Progress], None]
-Runner = Callable[[list[str], Callable[[], bool]], None]  # a command; raises on failure or cancel
+# a command, extra environment variables; raises on failure or cancel
+Runner = Callable[[list[str], Callable[[], bool], Mapping[str, str]], None]
 
 
 class SetupError(ModelsError):
@@ -94,6 +100,8 @@ class CharacterSetup:
         self.root = paths.voice_convert_dir
         self.env_dir = self.root / "env"
         self.models_dir = self.root / "models"
+        self.python_dir = self.root / "python"  # uv's interpreters: the environment runs on one
+        self.cache_dir = self.root / "uv-cache"
         self.log_file = self.root / "convert_host.log"
         self._downloader = downloader
         self._runner = runner or _run
@@ -174,7 +182,9 @@ class CharacterSetup:
             say("Убираю из модели лишнее (данные обучения)…")
             self._check_cancel()
             self._runner(
-                [str(self.python), str(HOST_SCRIPT), "--strip", str(weights)], self._cancel.is_set
+                [str(self.python), str(HOST_SCRIPT), "--strip", str(weights)],
+                self._cancel.is_set,
+                {},
             )
         (folder / INSTALLED).write_text(self._group_hash(model), encoding="utf-8")
         say("Голос установлен")
@@ -189,7 +199,8 @@ class CharacterSetup:
         log.info("Голос персонажа удалён: %s", model)
 
     def remove_engine(self) -> None:
-        shutil.rmtree(self.env_dir, ignore_errors=True)
+        for folder in (self.env_dir, self.python_dir, self.cache_dir):
+            shutil.rmtree(folder, ignore_errors=True)
         for file in self._files(ENGINE):
             file.path(self.models_dir).unlink(missing_ok=True)
         log.info("Движок голосов персонажей удалён")
@@ -270,12 +281,13 @@ class CharacterSetup:
         python = str(self.python)
         say("Ставлю движок голосов: Python, torch для видеокарты, RVC, so-vits-svc (~5 ГБ)…")
         (self.env_dir / MARKER).unlink(missing_ok=True)
-        run = self._runner
         cancelled = self._cancel.is_set
-        run(
-            [uv, "venv", "--python", PYTHON_VERSION, "--allow-existing", str(self.env_dir)],
-            cancelled,
-        )
+        env = self.uv_env()
+
+        def run(command: list[str]) -> None:
+            self._runner(command, cancelled, env)
+
+        run([uv, "venv", "--python", PYTHON_VERSION, "--allow-existing", str(self.env_dir)])
         run(
             [
                 uv,
@@ -287,11 +299,20 @@ class CharacterSetup:
                 "unsafe-best-match",
                 "-r",
                 str(requirements),
-            ],
-            cancelled,
+            ]
         )
-        run([uv, "pip", "install", "--python", python, "--no-deps", RVC_PACKAGE], cancelled)
+        run([uv, "pip", "install", "--python", python, "--no-deps", RVC_PACKAGE])
         (self.env_dir / MARKER).write_text(requirements_hash(), encoding="utf-8")
+        shutil.rmtree(self.cache_dir, ignore_errors=True)  # gigabytes of packages, not needed now
+
+    def uv_env(self) -> dict[str, str]:
+        """uv's own folders of the app, and only its own Python: one installed elsewhere may
+        be removed later and take the environment with it."""
+        return {
+            "UV_CACHE_DIR": str(self.cache_dir),
+            "UV_PYTHON_INSTALL_DIR": str(self.python_dir),
+            "UV_PYTHON_PREFERENCE": "only-managed",
+        }
 
 
 def find_uv() -> str | None:
@@ -344,7 +365,7 @@ def _folder_size(folder: Path) -> int:
     return sum(p.stat().st_size for p in folder.rglob("*") if p.is_file()) if folder.is_dir() else 0
 
 
-def _run(command: list[str], cancelled: Callable[[], bool]) -> None:
+def _run(command: list[str], cancelled: Callable[[], bool], env: Mapping[str, str]) -> None:
     log.info("Запуск: %s", " ".join(command))
     try:
         process = subprocess.Popen(
@@ -353,6 +374,7 @@ def _run(command: list[str], cancelled: Callable[[], bool]) -> None:
             stderr=subprocess.PIPE,
             creationflags=NO_WINDOW if sys.platform == "win32" else 0,
             cwd=Path.home(),  # a folder that exists, whoever started the app (see convert_client)
+            env={**os.environ, **env},
         )
     except OSError as exc:
         raise SetupError(f"Команда не запустилась: {command[0]}: {exc}") from exc

@@ -1,5 +1,6 @@
 ; Installer of Subtitle Voicer (TZ 1.24): tools/build.py passes /DAppVersion and /DSourceDir.
-; Per user, no admin rights; the user's data in %APPDATA%\SubtitleVoicer is never touched.
+; Per user, no admin rights; the user's data in %APPDATA%\SubtitleVoicer is removed on uninstall
+; only if the user says so (default: kept).
 
 #define AppName "Subtitle Voicer"
 #define AppExe "SubtitleVoicer.exe"
@@ -50,8 +51,30 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopico
 ; autostart is set by the app itself; removed together with the program
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "SubtitleVoicer"; Flags: dontcreatekey uninsdeletevalue
 
+[UninstallDelete]
+; whatever appeared in the program folder after the install (e.g. __pycache__)
+Type: filesandordirs; Name: "{app}"
+
 [Run]
 ; through Explorer, not as a child of the installer: Setup turns on Windows' RedirectionGuard and
 ; its children inherit it, so uv's python.exe of the character voices could not cross the
 ; junction to the real Python ("entity not found", os error 448)
 Filename: "{win}\explorer.exe"; Parameters: """{app}\{#AppExe}"""; Description: "Запустить {#AppName}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+// The data — settings, profiles, downloaded models and character voices — is kept by default:
+// a reinstall finds it. Asked only in an interactive uninstall.
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  Data: String;
+begin
+  if (CurUninstallStep = usPostUninstall) and not UninstallSilent then
+  begin
+    Data := ExpandConstant('{userappdata}\SubtitleVoicer');
+    if DirExists(Data) and (MsgBox('Удалить также настройки, профили и скачанные модели '
+      + '(голоса персонажей, распознавание)?' + #13#10#13#10 + Data + #13#10#13#10
+      + 'Если оставить, после повторной установки всё будет на месте.',
+      mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES) then
+      DelTree(Data, True, True, True);
+  end;
+end;

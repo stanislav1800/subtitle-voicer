@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import io
 import zipfile
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 
 import pytest
@@ -51,9 +51,17 @@ def fake_download(
 class Commands:
     def __init__(self) -> None:
         self.calls: list[list[str]] = []
+        self.envs: list[Mapping[str, str]] = []
 
-    def __call__(self, command: list[str], cancelled: Callable[[], bool]) -> None:
+    def __call__(
+        self, command: list[str], cancelled: Callable[[], bool], env: Mapping[str, str]
+    ) -> None:
         self.calls.append(command)
+        self.envs.append(env)
+        if "UV_CACHE_DIR" in env:  # uv fills its cache while it installs
+            cache = Path(env["UV_CACHE_DIR"])
+            cache.mkdir(parents=True, exist_ok=True)
+            (cache / "wheel").write_bytes(b"x")
         if command[1] == "venv":
             python = Path(command[-1]) / "Scripts" / "python.exe"
             python.parent.mkdir(parents=True, exist_ok=True)
@@ -93,6 +101,21 @@ def test_the_first_voice_brings_the_engine(setup: CharacterSetup, commands: Comm
     assert sorted(p.name for p in vi.iterdir()) == [INSTALLED, "model.index", "model.pth"]
     assert (setup.env_dir / MARKER).read_text(encoding="utf-8") == requirements_hash()
     assert "Голос установлен" in said
+
+
+def test_uv_uses_the_app_own_folders_and_the_cache_is_cleaned(
+    setup: CharacterSetup, commands: Commands
+) -> None:
+    """TZ 1.24: what the engine downloads stays in the app data, the user's uv is untouched."""
+    setup.install("vi")
+    for env in commands.envs:
+        assert env["UV_CACHE_DIR"] == str(setup.root / "uv-cache")
+        assert env["UV_PYTHON_INSTALL_DIR"] == str(setup.root / "python")
+        assert env["UV_PYTHON_PREFERENCE"] == "only-managed"
+    assert not setup.cache_dir.exists()
+    setup.python_dir.mkdir()
+    setup.remove_engine()
+    assert not setup.python_dir.exists()
 
 
 def test_more_voices_reuse_the_engine_and_so_vits_is_stripped(
