@@ -72,13 +72,15 @@ class Overlay(QWidget):
         screen = screen_for(state.monitor_rect)
         if screen is None:
             return
-        if self.geometry() != screen.geometry():
-            self.setGeometry(screen.geometry())
+        # exactly over the game's image: the panel sits in its corner, nothing is drawn past its
+        # edges, and it follows the window when it is moved or resized
         if state.client_rect is not None and state.monitor_rect is not None:
-            game = to_logical(screen, state.client_rect, state.monitor_rect)
-            self._game = game.translated(-screen.geometry().x(), -screen.geometry().y())
+            area = to_logical(screen, state.client_rect, state.monitor_rect).toAlignedRect()
         else:
-            self._game = QRectF(self.rect())
+            area = screen.geometry()
+        if self.geometry() != area:
+            self.setGeometry(area)
+        self._game = QRectF(0, 0, area.width(), area.height())
         if not self.isVisible():
             self.show()
         window = state.status.window
@@ -107,7 +109,8 @@ class Overlay(QWidget):
             painter.setPen(QPen(color, 1))
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawRect(area)
-            painter.drawText(QPointF(area.x(), area.y() - 5), f"{zone.id} · {zone.state}")
+            top = area.y() - 5 if area.y() >= 16 else area.y() + 14  # inside at the window top
+            painter.drawText(QPointF(area.x() + 2, top), f"{zone.id} · {zone.state}")
         self._panel(painter, state)
         painter.end()
 
