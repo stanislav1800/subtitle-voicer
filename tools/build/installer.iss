@@ -51,4 +51,7 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopico
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "SubtitleVoicer"; Flags: dontcreatekey uninsdeletevalue
 
 [Run]
-Filename: "{app}\{#AppExe}"; Description: "Запустить {#AppName}"; Flags: nowait postinstall skipifsilent
+; through Explorer, not as a child of the installer: Setup turns on Windows' RedirectionGuard and
+; its children inherit it, so uv's python.exe of the character voices could not cross the
+; junction to the real Python ("entity not found", os error 448)
+Filename: "{win}\explorer.exe"; Parameters: """{app}\{#AppExe}"""; Description: "Запустить {#AppName}"; Flags: nowait postinstall skipifsilent
