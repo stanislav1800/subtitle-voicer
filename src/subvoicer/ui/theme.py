@@ -174,6 +174,8 @@ QPushButton:checked {{ background: {BG_ACTIVE}; border: 1px solid {ACCENT}; font
 QPushButton:focus {{ border: 2px solid {ACCENT}; }}
 QPushButton#primary {{ background: {ACCENT}; color: {ON_ACCENT}; border: none; font-weight: 600; }}
 QPushButton#primary:hover {{ background: {ACCENT_HOVER}; }}
+QPushButton#primary:disabled {{ background: {BG_CONTROL}; color: {TEXT_MUTED}; }}
+QLabel:disabled {{ color: {TEXT_MUTED}; }}
 QProgressBar {{ background: {BG_CONTROL}; border: none; border-radius: 4px;
     max-height: 8px; }}
 QProgressBar::chunk {{ background: {ACCENT}; border-radius: 4px; }}

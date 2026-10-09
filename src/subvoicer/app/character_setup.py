@@ -2,10 +2,10 @@
 
 Not part of the default install. Into ``voice_convert/``:
 
-- the **engine**, shared by every voice and installed with the first one: ``env/`` — Python
-  3.12 with torch and the conversion packages, created by ``uv``: for the NVIDIA GPU
-  (``resources/voice_convert/requirements.txt``) or for the CPU (``requirements-cpu.txt``,
-  TZ 1.25 — any other computer) (``rvc`` goes in with
+- the **engine**, shared by every voice and installed on its own, before any voice (TZ 1.25):
+  ``env/`` — Python 3.12 with torch and the conversion packages, created by ``uv``: for the
+  NVIDIA GPU (``resources/voice_convert/requirements.txt``), a Radeon with ROCm
+  (``requirements-rocm.txt``) or the CPU (``requirements-cpu.txt``), TZ 1.25 (``rvc`` goes in with
   ``--no-deps``: its pins do not build on Windows), and the files of group ``engine`` of
   ``resources/voice_convert/models.toml`` (pitch and speech-feature models);
 - a **voice** — the files of its group into ``models/<voice>/``, downloaded with a SHA-256 check
@@ -172,17 +172,28 @@ class CharacterSetup:
 
     # ------------------------------------------------------------------ install / remove
 
-    def install(
-        self, model: str, say: Say = lambda _l: None, progress: Report = lambda _p: None
+    def install_engine(
+        self, say: Say = lambda _l: None, progress: Report = lambda _p: None
     ) -> None:
-        """The voice, and the engine first if needed. Blocks for minutes; raises SetupError
-        (SetupCancelled after ``cancel()``)."""
-        if model not in self.voices():
-            raise SetupError(f"Нет такого голоса персонажа: {model}")
+        """The engine for ``device``: the environment, then its shared models. A step that is
+        done is skipped. Blocks for minutes; raises SetupError (SetupCancelled after
+        ``cancel()``; the downloaded files and the package cache stay for the next try)."""
         self._cancel.clear()
         if not self.env_ready():
             self._build_env(say)
-        self._download(ENGINE, "Скачиваю движок голосов…", say, progress)
+        self._download(ENGINE, "Скачиваю модели движка…", say, progress)
+        say("Движок установлен")
+
+    def install(
+        self, model: str, say: Say = lambda _l: None, progress: Report = lambda _p: None
+    ) -> None:
+        """A voice; the engine must be installed first (TZ 1.25). Raises SetupError
+        (SetupCancelled after ``cancel()``)."""
+        if model not in self.voices():
+            raise SetupError(f"Нет такого голоса персонажа: {model}")
+        if not self.engine_installed():
+            raise SetupError("Сначала установите движок голосов персонажей")
+        self._cancel.clear()
         if self.installed(model):
             say("Голос уже установлен")
             return
@@ -278,6 +289,7 @@ class CharacterSetup:
             raise
         finally:
             self._active = None
+        self._check_cancel()  # «Отмена» as the last file finished
 
     def _check_cancel(self) -> None:
         if self._cancel.is_set():

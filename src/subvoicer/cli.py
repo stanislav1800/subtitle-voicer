@@ -196,8 +196,8 @@ def add_voice_commands(commands: argparse._SubParsersAction) -> None:  # type: i
     voices = commands.add_parser("voices", help="голоса персонажей (этапы 16, 12)").add_subparsers(
         dest="action", required=True
     )
-    install = voices.add_parser("install", help="скачать голос (с первым — движок 2–5,6 ГБ)")
-    install.add_argument("voice", help="vi, johnny, ciri, geralt")
+    install = voices.add_parser("install", help="установить движок (engine), затем голоса")
+    install.add_argument("voice", help="engine (сначала), vi, johnny, ciri, geralt")
     install.add_argument(
         "--device",
         choices=("auto", "cuda", "rocm", "cpu"),
@@ -214,7 +214,9 @@ def run_voices_command(args: argparse.Namespace) -> int:
 
     device = getattr(args, "device", "auto")
     setup = CharacterSetup(AppPaths.default(), device=best_device() if device == "auto" else device)
-    if args.action == "install":
+    if args.action == "install" and args.voice == ENGINE:
+        setup.install_engine(say=print, progress=ConsoleProgress())
+    elif args.action == "install":
         setup.install(args.voice, say=print, progress=ConsoleProgress())
     elif args.action == "remove":
         if args.voice == ENGINE:

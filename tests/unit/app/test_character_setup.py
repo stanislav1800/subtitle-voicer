@@ -21,6 +21,7 @@ from subvoicer.app.character_setup import (
 )
 from subvoicer.config.models import VOICE_CONVERT_MANIFEST, model_files
 from subvoicer.config.paths import AppPaths
+from subvoicer.engines.system.download import Cancelled
 
 
 def fake_download(
@@ -88,8 +89,18 @@ def test_nothing_installed_by_default(setup: CharacterSetup) -> None:
     assert not vi.installed and vi.download == 92_393_456 and vi.disk > vi.download
 
 
-def test_the_first_voice_brings_the_engine(setup: CharacterSetup, commands: Commands) -> None:
+def test_a_voice_needs_the_engine_first(setup: CharacterSetup, commands: Commands) -> None:
+    """TZ 1.25: the engine is installed on its own, voices only after it."""
+    with pytest.raises(SetupError, match="Сначала установите движок"):
+        setup.install("vi")
+    assert commands.calls == [] and not setup.installed("vi")
+
+
+def test_the_engine_then_a_voice(setup: CharacterSetup, commands: Commands) -> None:
     said: list[str] = []
+    setup.install_engine(said.append)
+    assert setup.engine_installed() and not setup.status().installed
+    assert "Движок установлен" in said
     setup.install("vi", said.append)
     venv, packages, rvc = commands.calls
     assert venv[:4] == ["uv", "venv", "--python", "3.12"] and "--allow-existing" not in venv
@@ -107,7 +118,7 @@ def test_uv_uses_the_app_own_folders_and_the_cache_is_cleaned(
     setup: CharacterSetup, commands: Commands
 ) -> None:
     """TZ 1.24: what the engine downloads stays in the app data, the user's uv is untouched."""
-    setup.install("vi")
+    setup.install_engine()
     for env in commands.envs:
         assert env["UV_CACHE_DIR"] == str(setup.root / "uv-cache")
         assert env["UV_PYTHON_INSTALL_DIR"] == str(setup.root / "python")
@@ -121,6 +132,7 @@ def test_uv_uses_the_app_own_folders_and_the_cache_is_cleaned(
 def test_more_voices_reuse_the_engine_and_so_vits_is_stripped(
     setup: CharacterSetup, commands: Commands
 ) -> None:
+    setup.install_engine()
     setup.install("vi")
     commands.calls.clear()
     setup.install("ciri")
@@ -133,6 +145,7 @@ def test_more_voices_reuse_the_engine_and_so_vits_is_stripped(
 
 
 def test_remove_a_voice_and_the_engine(setup: CharacterSetup) -> None:
+    setup.install_engine()
     setup.install("vi")
     setup.install("johnny")
     setup.remove("vi")
@@ -146,14 +159,16 @@ def test_cancel_stops_and_keeps_what_was_downloaded(tmp_path: Path, commands: Co
     holder: list[CharacterSetup] = []
 
     def cancelling(url: str, target: Path, sha256: str, progress, cancelled) -> None:  # type: ignore[no-untyped-def]
+        if cancelled():  # like the real one: stops at the next chunk
+            raise Cancelled("Скачивание отменено")
         fake_download(url, target, sha256, progress, cancelled)
         holder[0].cancel()  # the user pressed «Отмена» during the first file
 
     setup = CharacterSetup(AppPaths(tmp_path), cancelling, commands, uv="uv")
     holder.append(setup)
     with pytest.raises(SetupCancelled):
-        setup.install("vi")
-    assert not setup.installed("vi")
+        setup.install_engine()
+    assert not setup.engine_installed()
     assert (setup.models_dir / "assets" / "rmvpe.pt").is_file()  # kept for the next time
 
 
@@ -182,14 +197,14 @@ def test_unknown_voice(setup: CharacterSetup) -> None:
 def test_without_uv_the_install_says_so(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("shutil.which", lambda _name: None)
     with pytest.raises(SetupError, match="Нужен uv"):
-        CharacterSetup(AppPaths(tmp_path), fake_download, Commands()).install("vi")
+        CharacterSetup(AppPaths(tmp_path), fake_download, Commands()).install_engine()
 
 
 def test_a_too_long_path_is_refused_before_anything_is_installed(tmp_path: Path) -> None:
     deep = tmp_path / ("x" * 120)
     commands = Commands()
     with pytest.raises(SetupError, match="Слишком длинный путь"):
-        CharacterSetup(AppPaths(deep), fake_download, commands, uv="uv").install("vi")
+        CharacterSetup(AppPaths(deep), fake_download, commands, uv="uv").install_engine()
     assert commands.calls == []
 
 
@@ -232,7 +247,7 @@ def test_the_engine_for_the_cpu(tmp_path: Path, commands: Commands) -> None:
     setup = CharacterSetup(AppPaths(tmp_path), fake_download, commands, uv="uv", device=CPU)
     assert setup.env_device() is None
     assert setup.engine_size() < ENV_SIZE[CUDA]
-    setup.install("vi")
+    setup.install_engine()
     assert commands.calls[1][-1].endswith("requirements-cpu.txt")
     assert setup.env_device() == CPU and setup.engine_installed()
     # built for the CPU, it still works when the app would pick the GPU now

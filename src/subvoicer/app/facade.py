@@ -23,6 +23,7 @@ from subvoicer.app.bus import Bus
 from subvoicer.app.character_setup import CharacterSetup
 from subvoicer.app.container import installed_character_models
 from subvoicer.app.game_runner import RunParts, build_run, pronunciation
+from subvoicer.app.models_setup import Progress
 from subvoicer.config.paths import AppPaths
 from subvoicer.config.profile import Layout, Profile, Zone
 from subvoicer.config.profile_store import ProfileStore, StoredProfile
@@ -433,13 +434,32 @@ class AppFacade:
         on_progress: Callable[[str, float | None], None],
         on_done: Callable[[str | None], None],
     ) -> None:
-        """Download a voice (and the engine with the first one) in the background.
+        """Download a voice in the background (the engine must be there, TZ 1.25).
         ``on_progress(text, fraction or None while it cannot be measured)``, ``on_done(error or
         None)`` — from the worker thread."""
-        from subvoicer.app.character_setup import SetupCancelled, SetupError
-        from subvoicer.app.models_setup import Progress
+        setup = self._character_setup()
+        self._run_install(
+            setup, lambda say, report: setup.install(model, say, report), on_progress, on_done
+        )
 
+    def install_character_engine(
+        self,
+        on_progress: Callable[[str, float | None], None],
+        on_done: Callable[[str | None], None],
+    ) -> None:
+        """Install the engine for ``character_device`` in the background (TZ 1.25)."""
         setup = self._character_setup(self.character_device)
+        self._run_install(setup, setup.install_engine, on_progress, on_done)
+
+    def _run_install(
+        self,
+        setup: CharacterSetup,
+        job: Callable[[Callable[[str], None], Callable[[Progress], None]], None],
+        on_progress: Callable[[str, float | None], None],
+        on_done: Callable[[str | None], None],
+    ) -> None:
+        from subvoicer.app.character_setup import SetupCancelled, SetupError
+
         self._installing = setup
         state = {"text": ""}
 
@@ -454,13 +474,13 @@ class AppFacade:
         def work() -> None:
             error: str | None = None
             try:
-                setup.install(model, say, report)
+                job(say, report)
             except SetupCancelled:
                 error = "Отменено — скачанное продолжится со следующего раза"
             except SetupError as exc:
                 error = str(exc)
             except Exception as exc:
-                log.exception("Голос персонажа не установился")
+                log.exception("Голос персонажа или движок не установился")
                 error = f"Не установилось: {exc}"
             finally:
                 self._installing = None

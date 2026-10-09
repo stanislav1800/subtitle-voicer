@@ -1,7 +1,7 @@
 # Character voice models (stage 16, TZ 1.21), downloaded by `subvoicer voices install` into
 # %APPDATA%/SubtitleVoicer/voice_convert/models/. SHA-256 — of the files the user listened to
 # (DECISIONS.md, stage 16). unpack = true: a zip, extracted into the folder of the file.
-# group: "engine" — shared by every voice, installed with the first one; else the voice's model
+# group: "engine" — shared by every voice, installed on its own before them; else the voice's model
 # folder (resources/voices/characters.toml) — installed and removed one by one (TZ 1.24).
 
 [[model]]
