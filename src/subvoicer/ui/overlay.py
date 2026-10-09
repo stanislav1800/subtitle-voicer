@@ -1,5 +1,6 @@
 """Developer overlay over the game (TZ 4.13.2, docs/design/Overlay.html): a panel with metrics
-and thin zone frames; transparent for clicks."""
+and thin zone frames; transparent for clicks. An owned window of the game's window: right above
+the game, but under any window put over it (no injection into the game, see CLAUDE.md)."""
 
 from __future__ import annotations
 
@@ -38,7 +39,6 @@ class Overlay(QWidget):
             None,
             Qt.WindowType.Tool
             | Qt.WindowType.FramelessWindowHint
-            | Qt.WindowType.WindowStaysOnTopHint
             | Qt.WindowType.WindowTransparentForInput,
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
@@ -81,7 +81,9 @@ class Overlay(QWidget):
             self._game = QRectF(self.rect())
         if not self.isVisible():
             self.show()
-        runtime.keep_topmost(int(self.winId()))  # a borderless game in focus would cover it
+        window = state.status.window
+        if window is not None:  # above the game only, not above everything
+            runtime.own_by(int(self.winId()), window.hwnd)
         self.update()
 
     def paintEvent(self, _event: QPaintEvent) -> None:

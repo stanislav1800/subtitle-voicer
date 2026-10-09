@@ -171,6 +171,27 @@ def keep_topmost(hwnd: int) -> None:
     )
 
 
+HWND_NOTOPMOST = -2
+GWLP_HWNDPARENT = -8  # for a top-level window: its owner
+
+
+def own_by(hwnd: int, owner: int) -> None:
+    """Make ``hwnd`` an owned window of ``owner`` (another process's window is allowed): it
+    stays right above the owner, any window over the owner covers it too, it hides with it."""
+    user32 = ctypes.windll.user32
+    user32.GetWindowLongPtrW.restype = ctypes.c_ssize_t
+    user32.GetWindowLongPtrW.argtypes = [ctypes.c_void_p, ctypes.c_int]
+    user32.SetWindowLongPtrW.restype = ctypes.c_ssize_t
+    user32.SetWindowLongPtrW.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_ssize_t]
+    if user32.GetWindowLongPtrW(hwnd, GWLP_HWNDPARENT) == owner:
+        return
+    user32.SetWindowLongPtrW(hwnd, GWLP_HWNDPARENT, owner)
+    user32.SetWindowPos(
+        hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE | SWP_SHOWWINDOW
+    )
+    log.info("Оверлей привязан к окну игры %s", owner)
+
+
 def force_foreground(hwnd: int) -> None:
     """Take the focus from the game (the zone editor): Windows lets a process that just got
     a key event do it, so a released Alt is sent first."""

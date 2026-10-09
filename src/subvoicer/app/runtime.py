@@ -196,6 +196,13 @@ def keep_topmost(hwnd: int) -> None:
         windows.keep_topmost(hwnd)
 
 
+def own_by(hwnd: int, owner: int) -> None:
+    if sys.platform == "win32":
+        from subvoicer.engines.system import windows
+
+        windows.own_by(hwnd, owner)
+
+
 def force_foreground(hwnd: int) -> None:
     if sys.platform == "win32":
         from subvoicer.engines.system import windows
