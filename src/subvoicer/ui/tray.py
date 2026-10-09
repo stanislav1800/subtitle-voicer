@@ -31,7 +31,7 @@ def status_text(status: GameStatus, ready: bool) -> str:
     if status.title is None:
         return "Нет активной игры"
     if not status.has_zones:
-        return f"{status.title} · нет зон для {status.aspect}"
+        return f"{status.title} · нет зон"
     return status.title
 
 

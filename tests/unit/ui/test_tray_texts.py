@@ -14,7 +14,7 @@ def test_status_text() -> None:
     assert status_text(GameStatus(True), ready=False).startswith("Загрузка")
     assert status_text(GameStatus(True), ready=True) == "Нет активной игры"
     game = GameStatus(True, title="Cyberpunk 2077", aspect="21:9", has_zones=False)
-    assert status_text(game, ready=True) == "Cyberpunk 2077 · нет зон для 21:9"
+    assert status_text(game, ready=True) == "Cyberpunk 2077 · нет зон"
 
 
 def test_entry_caption() -> None:

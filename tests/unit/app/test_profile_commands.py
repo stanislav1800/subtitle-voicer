@@ -17,7 +17,7 @@ def test_new_profile_has_tz_defaults(store: ProfileStore) -> None:
     p = stored.profile
     assert stored.path.name == "cyberpunk2077.exe.json"
     assert p.narrator_voice and p.default_voices.male and p.default_voices.female
-    assert "совет" in p.speaker_stoplist and p.layouts == {}
+    assert "совет" in p.speaker_stoplist and p.layout.zones == []
     with pytest.raises(FileExistsError):
         pc.new_profile(store, "CYBERPUNK2077.EXE")
 
@@ -27,7 +27,6 @@ def test_add_zones_from_templates(store: ProfileStore) -> None:
     _, dialog = pc.add_zone(
         store,
         "game.exe",
-        aspect="16:9",
         template="dialog",
         rect=(0.2, 0.9, 0.8, 0.99),
         overrides={"mask": {"preset": "color", "colors_hsv": [((0, 0, 190), (179, 60, 255))]}},
@@ -35,21 +34,20 @@ def test_add_zones_from_templates(store: ProfileStore) -> None:
     stored, objective = pc.add_zone(
         store,
         "game",
-        aspect="16:9",
         template="objective",
         rect=(0.78, 0.18, 0.98, 0.26),
         overrides={"policy": {"repeat_cooldown_min": 5}},
     )
-    assert [z.id for z in stored.profile.layouts["16:9"].zones] == ["dialog", "objective"]
+    assert [z.id for z in stored.profile.layout.zones] == ["dialog", "objective"]
     assert dialog.policy is not None and dialog.policy.priority == "high"
     assert dialog.mask.preset == "color"
     assert objective.policy is not None
     assert (objective.policy.priority, objective.policy.repeat_cooldown_min) == ("low", 5)
     assert objective.policy.duck is False
-    _, second = pc.add_zone(store, "game.exe", aspect="16:9", template="dialog", rect=(0, 0, 1, 1))
+    _, second = pc.add_zone(store, "game.exe", template="dialog", rect=(0, 0, 1, 1))
     assert second.id == "dialog2"
     with pytest.raises(KeyError):
-        pc.add_zone(store, "game.exe", aspect="16:9", template="nope", rect=(0, 0, 1, 1))
+        pc.add_zone(store, "game.exe", template="nope", rect=(0, 0, 1, 1))
 
 
 def test_find_profile(store: ProfileStore) -> None:

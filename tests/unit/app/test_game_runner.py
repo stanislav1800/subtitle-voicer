@@ -56,7 +56,7 @@ def objective_zone() -> dict[str, Any]:
 
 def make_profile(**fields: Any) -> Profile:
     zones = [dialog_zone(voice={"mode": "speaker"}), objective_zone()]
-    return Profile.model_validate(profile_data(layouts={"16:9": {"zones": zones}}, **fields))
+    return Profile.model_validate(profile_data(layout={"zones": zones}, **fields))
 
 
 def line(
@@ -150,9 +150,7 @@ def test_zone_specs_skip_hotkey_and_off(tmp_path: Path) -> None:
         "mask": {"preset": "bright_on_dark"},
     }
     named = dialog_zone(speaker={"mode": "zone", "zone_id": "name"})
-    profile = Profile.model_validate(
-        profile_data(layouts={"16:9": {"zones": [named, hotkey, off, speaker]}})
-    )
+    profile = Profile.model_validate(profile_data(layout={"zones": [named, hotkey, off, speaker]}))
 
     class Engines:
         def get(self, _engine: str) -> object:
@@ -165,7 +163,8 @@ def test_zone_specs_skip_hotkey_and_off(tmp_path: Path) -> None:
     assert [s.id for s in specs] == ["dialog"]
     assert specs[0].speaker.mode is SpeakerMode.ZONE and specs[0].name is not None
     assert specs[0].words is not None and specs[0].words.fix("токое") == "такое"  # TZ 1.23
-    assert zone_specs(profile, "4:3", Engines()) == []  # type: ignore[arg-type]
+    # one layout for any aspect ratio (TZ 1.26)
+    assert [s.id for s in zone_specs(profile, "4:3", Engines())] == ["dialog"]  # type: ignore[arg-type]
 
 
 # ---------------------------------------------------------------- switching games
@@ -205,12 +204,15 @@ def test_runner_rebuilds_only_when_zones_change(rig: Rig) -> None:
     runner.on_activated(event)  # e.g. a character was saved: same zones
     assert len(built) == 1 and built[0].started
     profile = rig.saved()
-    zones = [*profile.layouts["16:9"].zones[:1]]
-    rig.store.save(profile.model_copy(update={"layouts": {"16:9": Layout(zones=zones)}}), rig.path)
+    zones = [*profile.layout.zones[:1]]
+    rig.store.save(profile.model_copy(update={"layout": Layout(zones=zones)}), rig.path)
     runner.on_activated(event)
     assert len(built) == 2 and built[0].stopped
-    runner.on_activated(GameActivated(str(rig.path), WINDOW, "4:3"))  # no layout
-    assert len(built) == 2 and built[1].stopped
+    runner.on_activated(GameActivated(str(rig.path), WINDOW, "4:3"))  # the same zones
+    assert len(built) == 3 and built[1].stopped and built[2].started  # a new frame shape
+    rig.store.save(rig.saved().model_copy(update={"layout": Layout()}), rig.path)
+    runner.on_activated(GameActivated(str(rig.path), WINDOW, "4:3"))  # no zones at all
+    assert len(built) == 3 and built[2].stopped
     runner.on_closed(GameClosed(WINDOW.pid))
     assert speech.games[-1] is None and rig.router.request(line("Привет.")) is None
 

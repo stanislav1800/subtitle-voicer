@@ -91,7 +91,7 @@ class GameClosed(Event):
 
 @dataclass(frozen=True, slots=True)
 class LayoutMissing(Event):
-    """The active profile has no zones for this aspect ratio: voicing does not run."""
+    """The active profile has no zones: voicing does not run (TZ 1.26: one layout for all)."""
 
     profile_path: str
     title: str

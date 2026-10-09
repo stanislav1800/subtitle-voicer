@@ -156,12 +156,12 @@ class SettingsWindow(QWidget):
         elif not status.enabled:
             title, lines = "Автоозвучка выключена", f"Профиль: {status.title}"
         elif not status.has_zones:
-            title, lines = "Нет зон", f"Профиль: {status.title}\nНет раскладки для {status.aspect}"
+            title, lines = "Нет зон", f"Профиль: {status.title}\nЗоны ещё не заданы"
         else:
             window = status.window
             size = f" · {window.width}×{window.height}" if window else ""
             title = "Озвучка работает"
-            lines = f"Профиль: {status.title}\nРаскладка {status.aspect}{size}"
+            lines = f"Профиль: {status.title}\nОкно игры{size}"
         self._status_title.setText(f"<span style='color:{dot}'>●</span>&nbsp; <b>{title}</b>")
         self._status_lines.setText(lines)
 

@@ -82,7 +82,6 @@ def add_zone(
     store: ProfileStore,
     ref: str,
     *,
-    aspect: str,
     template: str,
     rect: tuple[float, float, float, float],
     zone_id: str | None = None,
@@ -100,7 +99,7 @@ def add_zone(
         else:
             data[key] = value
     stored = find_profile(store, ref)
-    layout = stored.profile.layouts.get(aspect, Layout())
+    layout = stored.profile.layout
     taken = {z.id for z in layout.zones}
     base = zone_id or template
     new_id = base
@@ -108,8 +107,7 @@ def add_zone(
     while new_id in taken:
         new_id, counter = f"{base}{counter}", counter + 1
     zone = Zone.model_validate({"id": new_id, **data, "rect": rect})
-    layouts = {**stored.profile.layouts, aspect: Layout(zones=[*layout.zones, zone])}
-    profile = stored.profile.model_copy(update={"layouts": layouts})
+    profile = stored.profile.model_copy(update={"layout": Layout(zones=[*layout.zones, zone])})
     return store.save(profile, stored.path), zone
 
 
@@ -152,16 +150,3 @@ def merge_characters_in(store: ProfileStore, ref: str, source: str, target: str)
         return profile.model_copy(update={"characters": merged})
 
     return store.update(stored.path, change)
-
-
-def running_aspect(exe: str | None) -> str | None:
-    """The layout key of the game's window if it is running now (one window)."""
-    if not exe:
-        return None
-    from subvoicer.app.runtime import find_windows
-    from subvoicer.pipeline.games.aspect import aspect_key
-
-    windows = find_windows(exe)
-    if len(windows) != 1:
-        return None
-    return aspect_key(windows[0].width, windows[0].height)

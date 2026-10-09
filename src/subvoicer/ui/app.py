@@ -182,13 +182,7 @@ class Application:
         if image is None:
             QMessageBox.warning(self.window, "Скриншот", "Не удалось открыть картинку")
             return
-        height, width = image.shape[:2]
         warnings = []
-        if not zone_tools.is_known_aspect(width, height):
-            warnings.append(
-                f"Картинка {width}×{height} — не 16:9, 16:10, 21:9, 32:9 или 4:3. Нужен полный "
-                "кадр игры, иначе зоны могут съехать."
-            )
         if name.suffix.lower() in (".jpg", ".jpeg"):
             warnings.append(
                 "JPEG: цвета могут быть неточными (сжатие, кадр из видео) — проверьте маску в игре."
@@ -276,7 +270,7 @@ class Application:
                         timeout_ms=20_000,
                     )
                 )
-            case LayoutMissing(profile_path=path, title=title, aspect=aspect):
+            case LayoutMissing(profile_path=path, title=title):
                 if path in self._missing_shown:
                     return  # once per game and run: resizing a window passes many sizes
                 self._missing_shown.add(path)
@@ -284,7 +278,7 @@ class Application:
                 self.notifier.show(
                     Notification(
                         "Настройте зоны для этой игры",
-                        f"{title or 'Игра'}: нет зон для {aspect}. В игре нажмите {key} — "
+                        f"{title or 'Игра'}: зоны ещё не заданы. В игре нажмите {key} — "
                         "редактор откроется поверх неё.",
                         ("Настроить зоны", self.open_zone_editor),
                         None,

@@ -28,9 +28,9 @@ def test_texts() -> None:
     assert initials("Cyberpunk 2077") == "C2"
     assert initials("firefox.exe") == "FI"
     profile = Profile.model_validate(profile_data())
-    assert profile_status(profile) == "Настроено · 16:9"
-    assert profile_status(profile, "21:9") == "Нет зон для 21:9"
-    assert profile_status(Profile.model_validate(profile_data(layouts={}))) == "Не настроено"
+    assert profile_status(profile) == "Настроено · зон: 1"
+    empty = Profile.model_validate(profile_data(layout={"zones": []}))
+    assert profile_status(empty) == "Не настроено"
     objective = Zone.model_validate(
         {**dialog_zone(priority="low", repeat_cooldown_min=10, duck=False), "id": "o"}
     )

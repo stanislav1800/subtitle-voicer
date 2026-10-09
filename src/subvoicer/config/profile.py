@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from subvoicer.core.models import Gender
 
-SCHEMA_VERSION = 2  # 2: ocr.fix_words, ocr.confusions (TZ 1.23)
+SCHEMA_VERSION = 3  # 2: ocr.fix_words, ocr.confusions (TZ 1.23); 3: one layout (TZ 1.26)
 MAX_ZONES = 12  # per layout (TZ 4.2)
 
 Hsv = tuple[int, int, int]
@@ -217,7 +217,8 @@ class Profile(StrictModel):
     install_dir: str | None = None
     title: str = ""
     icon: str | None = None
-    layouts: dict[str, Layout] = Field(default_factory=dict)  # aspect key -> zones (4.11)
+    # zones in fractions of the frame, for a window of any size and aspect ratio (TZ 1.26)
+    layout: Layout = Field(default_factory=Layout)
     narrator_voice: str
     default_voices: DefaultVoices
     speaker_stoplist: list[str] = Field(default_factory=list)

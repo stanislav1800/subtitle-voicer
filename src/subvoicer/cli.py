@@ -154,7 +154,6 @@ def add_profile_commands(commands: argparse._SubParsersAction) -> None:  # type:
     zone.add_argument("profile", help="exe или имя файла профиля")
     zone.add_argument("--template", required=True, choices=tuple(pc.zone_templates()))
     zone.add_argument("--rect", required=True, type=parse_rect, help="x1,y1,x2,y2 в долях кадра")
-    zone.add_argument("--aspect", help="соотношение сторон (по умолчанию — по окну игры)")
     zone.add_argument("--id", help="id зоны (по умолчанию — имя шаблона)")
     zone.add_argument("--name", help="отображаемое имя")
     zone.add_argument("--preset", choices=MASK_PRESETS, help="пресет маски")
@@ -384,8 +383,8 @@ def report_event(event: Event) -> None:
             print_utterance(event)
         case GameActivated(profile_path=path, window=window, aspect=aspect):
             print(f"Игра: {window.exe} — профиль {Path(path).name} ({aspect})", file=sys.stderr)
-        case LayoutMissing(title=title, aspect=aspect):
-            print(f"Настройте зоны для этой игры: {title}, {aspect}", file=sys.stderr)
+        case LayoutMissing(title=title):
+            print(f"Настройте зоны для этой игры: {title}", file=sys.stderr)
         case ProfileOffered(window=window):
             print(
                 f"Игра {window.exe} без профиля. Создать: "
@@ -406,30 +405,23 @@ def run_profiles_command(args: argparse.Namespace) -> int:
         case "list":
             for stored in store.load_all():
                 p = stored.profile
-                layouts = ", ".join(
-                    f"{key}: {len(layout.zones)} зон" for key, layout in p.layouts.items()
-                )
-                print(f"{stored.path.name:<32} {p.title} [{layouts or 'нет зон'}]")
+                zones = f"{len(p.layout.zones)} зон" if p.layout.zones else "нет зон"
+                print(f"{stored.path.name:<32} {p.title} [{zones}]")
         case "new":
             stored = pc.new_profile(store, args.exe, args.title, args.install_dir)
             print(f"Создан {stored.path}")
         case "add-zone":
             stored = pc.find_profile(store, args.profile)
-            aspect = args.aspect or pc.running_aspect(stored.profile.exe)
-            if aspect is None:
-                print("Игра не запущена: укажите --aspect, например 16:9", file=sys.stderr)
-                return 1
             rect = args.rect
             stored, zone = pc.add_zone(
                 store,
                 str(stored.path),
-                aspect=aspect,
                 template=args.template,
                 rect=(rect.x1, rect.y1, rect.x2, rect.y2),
                 zone_id=args.id,
                 overrides=zone_overrides(args),
             )
-            print(f"Зона {zone.id} ({zone.name}) добавлена в {stored.path.name}, {aspect}")
+            print(f"Зона {zone.id} ({zone.name}) добавлена в {stored.path.name}")
         case "export":
             stored = pc.find_profile(store, args.profile)
             store.export(stored.path, args.file)

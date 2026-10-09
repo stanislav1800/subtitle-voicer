@@ -20,8 +20,22 @@ def _v1_to_v2(data: Data) -> Data:
     return data
 
 
+def _v2_to_v3(data: Data) -> Data:
+    """TZ 1.26: one layout for every aspect ratio instead of one per ratio. The layout with
+    the most zones is kept (on a tie — 16:9, then the first by key); the file before the
+    migration stays in profiles/backup with the next save."""
+    layouts: dict[str, Any] = dict(data.pop("layouts", None) or {})
+
+    def rank(key: str) -> tuple[int, int, str]:
+        zones = (layouts[key] or {}).get("zones") or []
+        return (-len(zones), 0 if key == "16:9" else 1, key)
+
+    data["layout"] = layouts[min(layouts, key=rank)] if layouts else {"zones": []}
+    return data
+
+
 # from version N to N+1; every entry has a unit test on an example of the old file
-MIGRATIONS: dict[int, Migration] = {1: _v1_to_v2}
+MIGRATIONS: dict[int, Migration] = {1: _v1_to_v2, 2: _v2_to_v3}
 
 
 class ProfileFormatError(ValueError):

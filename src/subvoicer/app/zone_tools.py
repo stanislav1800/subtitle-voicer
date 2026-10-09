@@ -16,7 +16,6 @@ from subvoicer.app.game_runner import OcrEngines, zone_spec
 from subvoicer.config.profile import Profile, Zone
 from subvoicer.core.models import Gender, Voice
 from subvoicer.engines import registry
-from subvoicer.pipeline.games.aspect import aspect_key
 from subvoicer.pipeline.speaker.characters import find_character
 from subvoicer.pipeline.speaker.gender import GenderGuesser
 from subvoicer.pipeline.vision.masks import bgr_to_hsv, hsv_ranges_around
@@ -58,15 +57,6 @@ def save_image(path: Path, image: Image) -> None:
     ok, encoded = cv2.imencode(path.suffix or ".png", image)
     if ok:
         encoded.tofile(str(path))
-
-
-def aspect_of(width: int, height: int) -> str:
-    return aspect_key(width, height)
-
-
-def is_known_aspect(width: int, height: int) -> bool:
-    """One of 16:9, 16:10, 21:9, 32:9, 4:3 within 3% (TZ 4.11) — else zones may slide."""
-    return "x" not in aspect_key(width, height)
 
 
 def colors_around(image: Image, x: int, y: int) -> list[HsvRange]:

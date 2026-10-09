@@ -70,12 +70,9 @@ def initials(title: str) -> str:
     return title[:2].upper() if title else "??"
 
 
-def profile_status(profile: Profile, missing_aspect: str | None = None) -> str:
-    if missing_aspect:
-        return f"Нет зон для {missing_aspect}"
-    if not any(layout.zones for layout in profile.layouts.values()):
-        return "Не настроено"
-    return "Настроено · " + ", ".join(k for k, v in profile.layouts.items() if v.zones)
+def profile_status(profile: Profile) -> str:
+    count = len(profile.layout.zones)
+    return f"Настроено · зон: {count}" if count else "Не настроено"
 
 
 def zone_behaviour(zone: Zone) -> str:
@@ -107,8 +104,8 @@ def assigned_chip(character: Character) -> QLabel:
 GAME_TILE = 38  # docs/design/Profiles.html
 
 
-def is_configured(profile: Profile, missing_aspect: str | None = None) -> bool:
-    return not missing_aspect and any(layout.zones for layout in profile.layouts.values())
+def is_configured(profile: Profile) -> bool:
+    return bool(profile.layout.zones)
 
 
 def rounded(pixmap: QPixmap, size: int, radius: int = 8) -> QPixmap:
@@ -181,7 +178,6 @@ class ProfilesPage(Page):
         self._facade = facade
         self._open_editor = open_editor
         self._selected: Path | None = None
-        self._aspect: str | None = None
         columns = QHBoxLayout()
         columns.setSpacing(16)
         self.content.addLayout(columns)
@@ -232,21 +228,17 @@ class ProfilesPage(Page):
         selected = self._selected
         self._games.blockSignals(True)
         self._games.clear()
-        status = self._facade.status()
         stored_list = self._facade.profiles()
         for stored in stored_list:
-            missing = None
-            if status.profile_path == str(stored.path) and not status.has_zones:
-                missing = status.aspect
             title = stored.profile.title or stored.path.stem
-            status_text = profile_status(stored.profile, missing)
+            status_text = profile_status(stored.profile)
             tip = f"{title}\n{status_text}"
             if stored.profile.exe is None:
                 tip += "\nexe игры привяжется при первом запуске (полный экран)"
             row = GameRow(
                 title,
                 status_text,
-                is_configured(stored.profile, missing),
+                is_configured(stored.profile),
                 self._facade.icon_path(stored.profile),
             )
             item = QListWidgetItem()
@@ -277,8 +269,6 @@ class ProfilesPage(Page):
             clear_layout(self._dictionary.body)
             return
         path = Path(item.data(Qt.ItemDataRole.UserRole))
-        if path != self._selected:
-            self._aspect = None
         self._selected = path
         self._show_profile(path)
 
@@ -371,25 +361,12 @@ class ProfilesPage(Page):
         return card
 
     def _zones(self, path: Path, profile: Profile) -> QWidget:
-        aspects = sorted(profile.layouts) or []
-        status = self._facade.status()
-        if self._aspect not in aspects:
-            running_aspect = status.aspect if status.profile_path == str(path) else None
-            self._aspect = (
-                running_aspect if running_aspect in aspects else (aspects[0] if aspects else None)
-            )
         card = Card()
         head = QHBoxLayout()
-        head.addWidget(label(f"ЗОНЫ · {self._aspect or '—'}", "sectionTitle"), 1)
-        if len(aspects) > 1:
-            choose = combo([(a, a) for a in aspects], self._aspect, "Раскладка")
-            choose.currentIndexChanged.connect(
-                lambda _i: self._set_aspect(path, str(choose.currentData()))
-            )
-            head.addWidget(choose)
-        head.addWidget(label("Изменяются в редакторе зон", "hint"))
+        head.addWidget(label("ЗОНЫ", "sectionTitle"), 1)
+        head.addWidget(label("В долях окна — для любого размера · изменяются в редакторе", "hint"))
         card.body.addLayout(head)
-        zones = profile.layouts[self._aspect].zones if self._aspect else []
+        zones = profile.layout.zones
         if not zones:
             card.body.addWidget(
                 label(
@@ -415,10 +392,6 @@ class ProfilesPage(Page):
                 line.addWidget(label(text, "caption"))
             card.body.addLayout(line)
         return card
-
-    def _set_aspect(self, path: Path, aspect: str) -> None:
-        self._aspect = aspect
-        self._show_profile(path)
 
     def _voices(self, path: Path, profile: Profile) -> QWidget:
         card = Card("Голоса профиля")

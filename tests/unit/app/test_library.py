@@ -51,7 +51,7 @@ def test_scan_adds_profiles_with_icons_once(tmp_path: Path) -> None:
     assert result.failed == ["epic"] and result.found == 2
     profile = result.added[0].profile
     assert profile.exe is None and profile.install_dir == str(steam_dir)
-    assert profile.layouts == {}  # «не настроено»
+    assert profile.layout.zones == []  # «не настроено»
     assert profile.icon is not None and facade.icon_path(profile) is not None
     again = library.scan_library(facade.store, facade.paths, facade.settings, sources, saver)
     assert again.added == []

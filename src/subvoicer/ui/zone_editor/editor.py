@@ -57,10 +57,9 @@ class ZoneEditor(QWidget):
         self._frame = frame
         self._mode = mode
         height, width = frame.shape[:2]
-        self._aspect = zone_tools.aspect_of(width, height)
         self._profile: Profile = facade.profile(path)
-        layout = self._profile.layouts.get(self._aspect)
-        self._zones: list[dict[str, Any]] = [z.model_dump() for z in layout.zones] if layout else []
+        # one layout in fractions of the frame, for a window of any size (TZ 1.26)
+        self._zones: list[dict[str, Any]] = [z.model_dump() for z in self._profile.layout.zones]
         self._selected: str | None = self._zones[0]["id"] if self._zones else None
         self._template = "dialog"
         self._pipette_target = ""
@@ -79,7 +78,7 @@ class ZoneEditor(QWidget):
         titles.setSpacing(0)
         titles.addWidget(label("Редактор зон", "windowTitle"))
         exe = self._profile.exe or path.stem
-        titles.addWidget(label(f"{exe} · {self._aspect} · {width}×{height}", "mono"))
+        titles.addWidget(label(f"{exe} · {width}×{height}", "mono"))
         bar_layout.addLayout(titles)
         bar_layout.addWidget(chip("Поверх игры" if mode == "game" else "По скриншоту", "info"))
         self._message = label(
@@ -168,7 +167,7 @@ class ZoneEditor(QWidget):
         ]
         self._canvas.set_boxes(boxes, self._selected)
         if full:
-            self._panel.set_zones(self._aspect, self._zones, self._selected)
+            self._panel.set_zones(self._zones, self._selected)
         self._schedule_preview()
 
     def _zone(self, zone_id: str | None) -> dict[str, Any] | None:
@@ -304,16 +303,14 @@ class ZoneEditor(QWidget):
         zones = self._validated()
         if zones is None:
             return
-        aspect = self._aspect
 
         def change(profile: Profile) -> Profile:
-            layouts = {**profile.layouts, aspect: Layout(zones=zones)}
-            return profile.model_copy(update={"layouts": layouts})
+            return profile.model_copy(update={"layout": Layout(zones=zones)})
 
         try:
             self._facade.update_profile(self._path, change)
         except (OSError, ValueError) as exc:
             self._message.setText(f"Не сохранено: {format_error(exc)}")
             return
-        log.info("Зоны %s сохранены: %s, %d зон", self._path.name, aspect, len(zones))
+        log.info("Зоны %s сохранены: %d зон", self._path.name, len(zones))
         self.close()

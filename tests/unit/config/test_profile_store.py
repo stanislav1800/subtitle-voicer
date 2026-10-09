@@ -9,7 +9,7 @@ import pytest
 from subvoicer.config.migrations import ProfileFormatError, ProfileTooNewError, migrate
 from subvoicer.config.profile import Profile
 from subvoicer.config.profile_store import ProfileStore, is_inside
-from tests.unit.config.profiles import profile_data
+from tests.unit.config.profiles import dialog_zone, profile_data
 
 
 class Ticker:
@@ -163,7 +163,7 @@ def test_is_inside() -> None:
 def test_v1_profile_gets_word_fixing_on(tmp_path: Path) -> None:
     """TZ 1.23: version 1 -> 2 turns on fixing words with the а/о pair; the rest stays."""
     old = profile_data(schema_version=1, ocr={"engine": "rapidocr", "min_confidence": 0.5})
-    new = migrate(old)
+    new = migrate(old, current=2)
     assert new["schema_version"] == 2
     assert new["ocr"] == {
         "engine": "rapidocr",
@@ -174,3 +174,25 @@ def test_v1_profile_gets_word_fixing_on(tmp_path: Path) -> None:
     without_ocr = migrate(profile_data(schema_version=1))
     loaded = Profile.model_validate(without_ocr)
     assert loaded.ocr.fix_words and loaded.ocr.confusions == [("а", "о")]
+
+
+def test_v2_profile_keeps_the_layout_with_the_most_zones() -> None:
+    """TZ 1.26: one layout for every aspect ratio — the one with the most zones is kept, on a
+    tie 16:9; a profile without layouts gets an empty one."""
+    zone = dialog_zone()
+    other = {**dialog_zone(), "id": "other"}
+    old = profile_data(schema_version=2)
+    del old["layout"]
+    old["layouts"] = {
+        "16:10": {"zones": []},
+        "21:9": {"zones": [zone]},
+        "16:9": {"zones": [zone, other]},
+    }
+    new = migrate(old)
+    assert new["schema_version"] == 3 and "layouts" not in new
+    assert [z["id"] for z in new["layout"]["zones"]] == ["dialog", "other"]
+    old["layouts"] = {"21:9": {"zones": [zone]}, "16:9": {"zones": [other]}}
+    assert [z["id"] for z in migrate(old)["layout"]["zones"]] == ["other"]  # tie: 16:9
+    old["layouts"] = {}
+    assert migrate(old)["layout"] == {"zones": []}
+    assert Profile.model_validate(migrate(old)).layout.zones == []

@@ -10,64 +10,62 @@ from subvoicer.config.settings import Settings, load_settings
 from tests.unit.config.profiles import dialog_zone, profile_data
 
 TZ_EXAMPLE: dict[str, Any] = {  # TZ 5.4, voices replaced
-    "schema_version": 1,
+    "schema_version": 3,
     "exe": "Cyberpunk2077.exe",
     "install_dir": "D:\\Games\\Steam\\steamapps\\common\\Cyberpunk 2077",
     "title": "Cyberpunk 2077",
     "icon": "icons/cyberpunk2077.png",
-    "layouts": {
-        "16:9": {
-            "zones": [
-                {
-                    "id": "dialog",
-                    "name": "Диалоги",
-                    "kind": "text",
-                    "rect": [0.20, 0.82, 0.80, 0.95],
-                    "trigger": "auto",
-                    "policy": {
-                        "priority": "high",
-                        "voice": {"mode": "speaker"},
-                        "speaker": {
-                            "mode": "color",
-                            "colors_hsv": [[[0, 100, 150], [15, 255, 255]]],
-                        },
-                        "repeat_cooldown_min": 0,
-                        "duck": True,
+    "layout": {
+        "zones": [
+            {
+                "id": "dialog",
+                "name": "Диалоги",
+                "kind": "text",
+                "rect": [0.20, 0.82, 0.80, 0.95],
+                "trigger": "auto",
+                "policy": {
+                    "priority": "high",
+                    "voice": {"mode": "speaker"},
+                    "speaker": {
+                        "mode": "color",
+                        "colors_hsv": [[[0, 100, 150], [15, 255, 255]]],
                     },
-                    "mask": {"preset": "color", "colors_hsv": [[[80, 80, 150], [100, 255, 255]]]},
+                    "repeat_cooldown_min": 0,
+                    "duck": True,
                 },
-                {
-                    "id": "note",
-                    "name": "Записка",
-                    "kind": "text",
-                    "rect": [0.30, 0.15, 0.70, 0.80],
-                    "trigger": "hotkey",
-                    "hotkey": "<ctrl>+<alt>+1",
-                    "policy": {
-                        "voice": {"mode": "narrator"},
-                        "speaker": {"mode": "none"},
-                        "duck": True,
-                    },
-                    "mask": {"preset": "adaptive"},
+                "mask": {"preset": "color", "colors_hsv": [[[80, 80, 150], [100, 255, 255]]]},
+            },
+            {
+                "id": "note",
+                "name": "Записка",
+                "kind": "text",
+                "rect": [0.30, 0.15, 0.70, 0.80],
+                "trigger": "hotkey",
+                "hotkey": "<ctrl>+<alt>+1",
+                "policy": {
+                    "voice": {"mode": "narrator"},
+                    "speaker": {"mode": "none"},
+                    "duck": True,
                 },
-                {
-                    "id": "objective",
-                    "name": "Цель задания",
-                    "kind": "text",
-                    "rect": [0.78, 0.18, 0.98, 0.26],
-                    "trigger": "auto",
-                    "policy": {
-                        "priority": "low",
-                        "voice": {"mode": "fixed", "id": "v1"},
-                        "speaker": {"mode": "none"},
-                        "repeat_cooldown_min": 10,
-                        "duck": False,
-                    },
-                    "mask": {"preset": "bright_on_dark", "threshold": 200},
-                    "stabilization": {"stable_ms": 400},
+                "mask": {"preset": "adaptive"},
+            },
+            {
+                "id": "objective",
+                "name": "Цель задания",
+                "kind": "text",
+                "rect": [0.78, 0.18, 0.98, 0.26],
+                "trigger": "auto",
+                "policy": {
+                    "priority": "low",
+                    "voice": {"mode": "fixed", "id": "v1"},
+                    "speaker": {"mode": "none"},
+                    "repeat_cooldown_min": 10,
+                    "duck": False,
                 },
-            ]
-        }
+                "mask": {"preset": "bright_on_dark", "threshold": 200},
+                "stabilization": {"stable_ms": 400},
+            },
+        ]
     },
     "narrator_voice": "v1",
     "default_voices": {"male": "v1", "female": "v2"},
@@ -104,23 +102,23 @@ def test_tz_example_round_trips() -> None:
     again = json.loads(profile.to_json())
     assert again["pronunciation"][0] == {"from": "Ви", "to": "В+и", "regex": False}
     assert Profile.model_validate(again) == profile
-    zone = profile.layouts["16:9"].zones[2]
+    zone = profile.layout.zones[2]
     assert profile.stabilization.merged(zone.stabilization).stable_ms == 400
     assert profile.stabilization.merged(zone.stabilization).max_wait_ms == 1500
 
 
 def _zones(*zones: dict[str, Any]) -> dict[str, Any]:
-    return {"16:9": {"zones": list(zones)}}
+    return {"zones": list(zones)}
 
 
 @pytest.mark.parametrize(
     ("change", "message"),
     [
         ({"surprise": 1}, "surprise"),
-        ({"layouts": _zones(dialog_zone(priority="urgent"))}, "priority"),
-        ({"layouts": _zones(dialog_zone(), dialog_zone())}, "Повторяющиеся"),
+        ({"layout": _zones(dialog_zone(priority="urgent"))}, "priority"),
+        ({"layout": _zones(dialog_zone(), dialog_zone())}, "Повторяющиеся"),
         (
-            {"layouts": _zones(dialog_zone(speaker={"mode": "zone", "zone_id": "x"}))},
+            {"layout": _zones(dialog_zone(speaker={"mode": "zone", "zone_id": "x"}))},
             "zone_id",
         ),
         ({"exe": None, "install_dir": None}, "exe или install_dir"),
@@ -135,7 +133,7 @@ def test_zone_rules() -> None:
     zone = dialog_zone()
     zone["rect"] = [0.5, 0.5, 0.4, 0.9]
     with pytest.raises(ValidationError, match="пустой"):
-        Profile.model_validate(profile_data(layouts=_zones(zone)))
+        Profile.model_validate(profile_data(layout=_zones(zone)))
     speaker = {
         "id": "name",
         "kind": "speaker",
@@ -144,15 +142,15 @@ def test_zone_rules() -> None:
         "trigger": "auto",
     }
     with pytest.raises(ValidationError, match="speaker"):
-        Profile.model_validate(profile_data(layouts=_zones(speaker)))
+        Profile.model_validate(profile_data(layout=_zones(speaker)))
     hotkey = dialog_zone()
     hotkey["trigger"] = "hotkey"
     with pytest.raises(ValidationError, match="hotkey"):
-        Profile.model_validate(profile_data(layouts=_zones(hotkey)))
+        Profile.model_validate(profile_data(layout=_zones(hotkey)))
     color = dialog_zone()
     color["mask"] = {"preset": "color", "colors_hsv": [[[0, 0, 0], [200, 0, 0]]]}
     with pytest.raises(ValidationError, match="HSV"):
-        Profile.model_validate(profile_data(layouts=_zones(color)))
+        Profile.model_validate(profile_data(layout=_zones(color)))
 
 
 def test_settings_defaults_and_unknown_keys(tmp_path: Path) -> None:

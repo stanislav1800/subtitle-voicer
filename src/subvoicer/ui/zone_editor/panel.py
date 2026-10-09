@@ -144,8 +144,8 @@ class ZonePanel(QScrollArea):
 
     # ------------------------------------------------------------------ list
 
-    def set_zones(self, aspect: str, zones: list[dict[str, Any]], selected: str | None) -> None:
-        self._title.setText(f"ЗОНЫ · {aspect}")
+    def set_zones(self, zones: list[dict[str, Any]], selected: str | None) -> None:
+        self._title.setText("ЗОНЫ")
         self._zones = zones
         self._list.blockSignals(True)
         self._list.clear()

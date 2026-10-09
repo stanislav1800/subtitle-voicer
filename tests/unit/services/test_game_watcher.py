@@ -113,7 +113,7 @@ def test_aspect_change_and_profile_edit_rebuild(rig: Rig) -> None:
     rig.watcher.check()
     events = rig.bus.of(GameActivated)
     assert [e.aspect for e in events] == ["16:9", "1280x1024"]  # type: ignore[attr-defined]
-    assert rig.bus.of(LayoutMissing)  # no zones for 1280x1024
+    assert not rig.bus.of(LayoutMissing)  # one layout for any window (TZ 1.26)
     data = json.loads(path.read_text(encoding="utf-8"))
     data["title"] = "Правка"
     path.write_text(json.dumps(data), encoding="utf-8")

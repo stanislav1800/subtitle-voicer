@@ -344,11 +344,10 @@ class AppFacade:
         """Hotkeys of hotkey zones in all profiles: combo -> «game · zone» (TZ 4.12)."""
         found: dict[str, str] = {}
         for stored in self.store.load_all():
-            for layout in stored.profile.layouts.values():
-                for zone in layout.zones:
-                    if zone.trigger == "hotkey" and zone.hotkey:
-                        title = stored.profile.title or stored.path.stem
-                        found[zone.hotkey] = f"{title} · {zone.name or zone.id}"
+            for zone in stored.profile.layout.zones:
+                if zone.trigger == "hotkey" and zone.hotkey:
+                    title = stored.profile.title or stored.path.stem
+                    found[zone.hotkey] = f"{title} · {zone.name or zone.id}"
         return found
 
     def output_devices(self) -> list[str]:
@@ -570,10 +569,10 @@ class AppFacade:
         )
 
     def _active_layout(self, status: GameStatus) -> Layout | None:
-        if not status.profile_path or not status.aspect:
+        if not status.profile_path:
             return None
         try:
-            return self.store.load(Path(status.profile_path)).layouts.get(status.aspect)
+            return self.store.load(Path(status.profile_path)).layout
         except (OSError, ValueError):
             return None
 
@@ -593,7 +592,7 @@ class AppFacade:
         frame = np.ascontiguousarray(frame[:, :, :3])
         zone_tools.save_image(folder / "frame.png", frame)
         profile = self.store.load(Path(status.profile_path))
-        layout = profile.layouts.get(status.aspect or "")
+        layout = profile.layout
         zones: dict[str, object] = {}
         for zone in layout.zones if layout else []:
             if zone.kind != "text" or zone.policy is None or parts is None or layout is None:
@@ -778,10 +777,8 @@ class AppFacade:
     def _hotkey_zones(self, path: Path, aspect: str) -> dict[str, str]:
         """Hotkeys of the active layout: registered only while the profile is active (4.12)."""
         try:
-            layout = self.store.load(path).layouts.get(aspect)
+            layout = self.store.load(path).layout
         except (OSError, ValueError):
-            return {}
-        if layout is None:
             return {}
         return {
             zone.hotkey: zone.id

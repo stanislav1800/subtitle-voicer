@@ -140,7 +140,7 @@ class GameWatcher(Service):
         self.active = ActiveGame(stored.path, window, aspect, _mtime(stored.path))
         log.info("Активный профиль: %s (%s, %s)", stored.path.name, window.exe, aspect)
         self._publisher.publish(GameActivated(str(stored.path), window, aspect))
-        if aspect not in stored.profile.layouts:
+        if not stored.profile.layout.zones:
             self._publisher.publish(LayoutMissing(str(stored.path), stored.profile.title, aspect))
 
     def _fullscreen(self, window: WindowRef) -> bool:

@@ -109,10 +109,7 @@ class OcrEngines:
 def zone_specs(profile: Profile, aspect: str, engines: OcrEngines) -> list[ZoneSpec]:
     """``auto`` text zones of the layout; ``hotkey`` zones are read by their key (ManualReader),
     ``off`` are skipped."""
-    layout = profile.layouts.get(aspect)
-    if layout is None:
-        return []
-    zones = layout.zones
+    zones = profile.layout.zones  # one layout for any aspect ratio (TZ 1.26)
     return [
         zone_spec(profile, zone, zones, engines)
         for zone in zones
@@ -239,8 +236,7 @@ class ProfileRouter:
             if path is None or profile is None:
                 self._active = None
                 return
-            layout = profile.layouts.get(aspect)
-            zones = {z.id: z for z in layout.zones} if layout else {}
+            zones = {z.id: z for z in profile.layout.zones}
             self._active = _Active(path, profile, zones)
 
     def request(self, utterance: Utterance) -> SpeechRequest | None:
@@ -396,7 +392,7 @@ class GameRunner:
         self._last: GameActivated | None = None
         self._lock = threading.Lock()
         self._session: Session | None = None
-        self._key: tuple[int, str, str] | None = None  # (pid, aspect, layouts json)
+        self._key: tuple[int, str, str] | None = None  # (pid, aspect, layout json)
 
     def on_activated(self, event: GameActivated) -> None:
         path = Path(event.profile_path)
@@ -405,7 +401,7 @@ class GameRunner:
         except (OSError, ValueError) as exc:
             log.error("Профиль %s не загружен: %s", path.name, format_error(exc))
             return
-        layout = profile.layouts.get(event.aspect)
+        layout = profile.layout if profile.layout.zones else None
         key = (event.window.pid, event.aspect, layout.model_dump_json() if layout else "")
         with self._lock:
             self._last = event
@@ -417,9 +413,7 @@ class GameRunner:
             self._stop_session()
             self._key = key
             if layout is None:
-                log.warning(
-                    "Профиль %s: нет зон для %s — озвучка не работает", path.name, event.aspect
-                )
+                log.warning("Профиль %s: нет зон — озвучка не работает", path.name)
                 return
             try:
                 session = self._build(profile, event.window, event.aspect, self.poll_hz)

@@ -25,7 +25,7 @@ def profile_data(**fields: Any) -> dict[str, Any]:
         "exe": "Game.exe",
         "install_dir": None,
         "title": "Игра",
-        "layouts": {"16:9": {"zones": [dialog_zone()]}},
+        "layout": {"zones": [dialog_zone()]},
         "narrator_voice": "n",
         "default_voices": {"male": "m", "female": "f"},
     }

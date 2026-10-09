@@ -124,7 +124,7 @@ class Overlay(QWidget):
         last = state.last
         working = status.enabled and status.has_zones
         lines = [
-            ("профиль", f"{status.title or '—'} · {status.aspect or '—'}"),
+            ("профиль", status.title or "—"),
             ("зоны", ", ".join(f"{z.id}·{z.state}" for z in state.zones) or "—"),
             ("OCR", f"{last.confidence:.2f} · {last.ocr_input}" if last else "—"),
             ("задержка", f"{last.latency_ms:.0f} мс" if last and last.latency_ms else "—"),
