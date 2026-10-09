@@ -2,7 +2,7 @@
 
 import pytest
 
-from subvoicer.pipeline.dedup import DedupKind, Deduplicator
+from subvoicer.pipeline.dedup import DedupKind, Deduplicator, on_screen
 
 LINE = "Встретимся у старого склада в полночь."
 
@@ -148,3 +148,55 @@ def test_on_screen_lines() -> None:
     assert on_screen("Так послушай ещё. Может, никогда и не было!", shown)  # top revealed
     assert not on_screen("Надо послушать их разговор.", shown)
     assert not on_screen("и не было", shown)  # too short to tell
+
+
+@pytest.mark.parametrize(
+    ("worse", "line"),
+    [
+        (
+            "Администратор Уоико о Здрав вуи е и добропожалова ьв Комп кипло о",
+            "Администратор: Уоикоо. Здравствуйте и добро пожаловать в «Компэки плаза».",
+        ),
+        ("Ви Мы о е бы оре и ирова ься", "Ви: Мы хотели бы зарегистрироваться."),
+        (
+            "н о норма мо иров о о а а в яж",
+            "Ну что, нормальная маскировка? Ха-ха-ха-хо-х.. Как я выгляжу?",
+        ),
+        ("пер Джеки Бо о ов", "Супер. Джеки, «Болт» готов?"),
+        (
+            "Мненрови я Хорошии вьбор Бо Дожежолко ч оном еича у",
+            "Мне нравится. Хороший выбор, Бог. Джжлко, что нам сейчас не",
+        ),
+    ],
+)
+def test_a_worse_reading_of_a_line_on_screen_is_not_new(worse: str, line: str) -> None:
+    """TZ 1.27: the background behind a still subtitle flickers, the zone is read again and
+    OCR loses letters (from a let's play log and recording)."""
+    assert on_screen(worse, [line])
+
+
+@pytest.mark.parametrize(
+    ("new", "line"),
+    [
+        ("Ви: Именно так.", "Администратор: Комната с двумя кроватями, на одну ночь. Верно?"),
+        ("Джеки: Да, да, я помню.", "Ти-Баг: Я не для тебя выбирала. Отсюда ближе к Арасаке."),
+        (
+            "Ти-Баг: Простота требует большого мастерства.",
+            "Ти-Баг: Запускайте «Болта» и ищите вход в вентиляцию.",
+        ),
+        (
+            "Администратор: Замечательно. Позвольте я уведомлю, что вы приехали",
+            "Администратор: Комната с двумя кроватями на одну ночь. Верно?",
+        ),
+    ],
+)
+def test_another_line_is_not_a_worse_reading(new: str, line: str) -> None:
+    assert not on_screen(new, [line])
+
+
+def test_a_better_reading_after_a_worse_one_is_not_dropped() -> None:
+    """The first reading was the worse one: the clean line that follows is no «worse copy»."""
+    assert not on_screen(
+        "Ви: Мы немного придём в себя и сами его уведомим.",
+        ["Ви Мы немно ридем в ебя и оми е о уведомим"],
+    )

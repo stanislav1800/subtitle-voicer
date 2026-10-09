@@ -50,13 +50,15 @@ class Screen:
         self.out: list[Utterance] = []
 
     def show(self, text: str, *, typed: int | None = None, background: int = 20) -> None:
-        """Draw ``text`` (``typed`` characters of it) as a white block per character."""
+        """Draw ``text`` (``typed`` characters of it) as a white glyph per character: its
+        height and offset depend on the character, so other text puts pixels elsewhere (as real
+        letters do) and does not look like the old text fading (TZ 1.27)."""
         image = np.full((H, W, 4), background, dtype=np.uint8)
         visible = text if typed is None else text[:typed]
-        for i, _ in enumerate(visible):
+        for i, char in enumerate(visible):
             x = 5 + (i % 60) * 6
-            y = 10 + (i // 60) * 30
-            image[y : y + 20, x : x + 4, :3] = 255
+            y = 10 + (i // 60) * 30 + ord(char) % 5
+            image[y : y + 12 + ord(char) % 7, x : x + 4, :3] = 255
         self.ocr.text = visible
         self.frame = Frame(image, self.clock.now())
 
@@ -471,3 +473,18 @@ def test_a_line_without_a_name_above_a_voiced_one() -> None:
         ("Джуди", "Я вижу ходячие говорящие трупы."),
         (None, "Расслабься, все под контролем."),
     ]
+
+
+@pytest.mark.parametrize(
+    "second",
+    ["Джеки: Не сейчас, чумба.", "Джеки: Да ну, чумба!!", "Джеки: Ну."],
+    ids=["longer", "same length", "shorter"],
+)
+def test_a_line_replaced_at_once_is_read_whatever_its_length(second: str) -> None:
+    """TZ 1.27: the fade rule must not swallow another line put in place of the old one
+    without an empty frame between them — it adds its own letters."""
+    s = Screen(SpeakerMode.PREFIX)
+    for text in ("Ви: Пошли уже, чумба!", second):
+        s.show(text)
+        s.run(2)
+    assert [u.speaker for u in s.out] == ["Ви", "Джеки"]

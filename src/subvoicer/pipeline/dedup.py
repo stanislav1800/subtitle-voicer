@@ -12,6 +12,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 
+from rapidfuzz.distance import LCSseq
 from rapidfuzz.fuzz import partial_ratio, ratio
 
 from subvoicer.pipeline.normalize import normalize, raw_tail
@@ -20,6 +21,10 @@ CROSS_SOURCE_WINDOW_S = 3.0
 CONTINUATION_MIN_GROWTH = 3
 FRAGMENT_MIN_CHARS = 12  # a shorter piece may match by chance (TZ 1.22)
 REVEALED_MIN_SHARE = 0.4  # the earlier piece covers at least this much of the whole line
+# TZ 1.27: a worse reading of a line still on screen (letters lost to a noisy background):
+# this share of its letters is found in the line, in order, and it covers this much of it
+DEGRADED_MATCH = 0.78
+DEGRADED_MIN_SHARE = 0.4
 
 
 class DedupKind(StrEnum):
@@ -52,7 +57,10 @@ def on_screen(text: str, previous: Sequence[str], match_ratio: float = 90) -> bo
     """TZ 1.22: ``text`` is a line of the previous reading still on screen — the same line
     (any speaker: OCR mixes up names) or a visible part of it (the top cut by the zone edge,
     the line moving up as the next one appears below) — or that line with its cut top
-    revealed again (the earlier piece is the end of ``text``)."""
+    revealed again (the earlier piece is the end of ``text``) — or a worse reading of that line
+    (TZ 1.27): the background behind a still subtitle flickers, the zone is read again and
+    OCR loses letters («Администратор Уоико о Здрав вуи е…»); its letters, in order, are
+    almost all in the line."""
     norm = normalize(text)
     if not norm:
         return False
@@ -71,7 +79,22 @@ def on_screen(text: str, previous: Sequence[str], match_ratio: float = 90) -> bo
             and ratio(norm[-len(before) :], before) >= match_ratio
         ):
             return True
+        if degraded(norm, before):
+            return True
     return False
+
+
+def degraded(norm: str, before: str) -> bool:
+    """``norm`` is ``before`` with letters lost or misread (both normalised): spaces aside,
+    most of its letters appear in ``before`` in the same order, and it is not a short piece
+    that matches by chance. Not longer than ``before``: a better reading after a bad one is
+    not "worse" — it is voiced."""
+    letters, line = norm.replace(" ", ""), before.replace(" ", "")
+    return (
+        len(letters) >= FRAGMENT_MIN_CHARS
+        and DEGRADED_MIN_SHARE * len(line) <= len(letters) <= len(line)
+        and LCSseq.similarity(letters, line) >= DEGRADED_MATCH * len(letters)
+    )
 
 
 def grown_from(text: str, previous: Sequence[str], match_ratio: float = 90) -> str | None:
