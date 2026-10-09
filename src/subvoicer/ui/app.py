@@ -119,7 +119,7 @@ class Application:
         self.server.newConnection.connect(self._on_second_copy)
         self.server.listen(SERVER_NAME)
         self.notifier = Notifier()
-        self._missing_shown: set[tuple[str, str]] = set()
+        self._missing_shown: set[str] = set()  # games told «set up zones» in this run
         self.overlay = Overlay(facade)
         self.line_window: LineWindow | None = None
         self.editor: ZoneEditor | None = None
@@ -277,9 +277,9 @@ class Application:
                     )
                 )
             case LayoutMissing(profile_path=path, title=title, aspect=aspect):
-                if (path, aspect) in self._missing_shown:
-                    return  # once per game and layout, not on every profile re-read
-                self._missing_shown.add((path, aspect))
+                if path in self._missing_shown:
+                    return  # once per game and run: resizing a window passes many sizes
+                self._missing_shown.add(path)
                 key = pretty(self.facade.settings.hotkeys["zone_editor"])
                 self.notifier.show(
                     Notification(
