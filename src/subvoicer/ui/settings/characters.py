@@ -98,14 +98,18 @@ class CharactersCard(Card):
         line = QHBoxLayout()
         base = self._base_name(item.base)
         if item.installed:
-            details = f"{item.game} · основа {base} · {size_text(item.disk)}"
+            details = f"{item.game} · основа {base} · на диске {size_text(item.disk)}"
         elif engine_installed:
-            details = f"{item.game} · основа {base} · скачать {size_text(item.download)}"
-        else:
+            details = (
+                f"{item.game} · основа {base} · скачать {size_text(item.download)}, "
+                f"на диске ~{size_text(item.disk)}"
+            )
+        else:  # the download is a zip or full weights: on disk it differs (TZ 1.24)
             total = size_text(item.download + engine_size)
             details = (
                 f"{item.game} · основа {base} · скачать {size_text(item.download)} "
-                f"+ движок {size_text(engine_size)} (всего {total})"
+                f"(на диске ~{size_text(item.disk)}) + движок {size_text(engine_size)} "
+                f"(всего {total})"
             )
         line.addWidget(titled(item.name, details), 1)
         if self._installing == item.model:
