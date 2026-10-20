@@ -60,3 +60,22 @@ def test_uncaught_thread_exception_is_logged(tmp_path: Path) -> None:
     text = log_file.read_text(encoding="utf-8")
     assert "Необработанное исключение в потоке Worker" in text
     assert "поток упал" in text
+
+
+def test_zone_details_only_in_developer_mode(tmp_path: Path) -> None:
+    """Why a reading was not voiced goes to the log in developer mode (TZ 1.28)."""
+    log_file = app_log.setup_logging(tmp_path)
+    zones = logging.getLogger(app_log.ZONE_LOGGER)
+    try:
+        zones.debug("без режима разработчика")
+        app_log.set_zone_details(True)
+        zones.debug("не озвучиваю — повтор")
+        app_log.set_zone_details(False)
+        zones.debug("снова без него")
+    finally:
+        app_log.set_zone_details(False)
+    for handler in _own_handlers():
+        handler.flush()
+    text = log_file.read_text(encoding="utf-8")
+    assert "не озвучиваю — повтор" in text
+    assert "без режима разработчика" not in text and "снова без него" not in text

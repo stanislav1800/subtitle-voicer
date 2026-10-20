@@ -201,7 +201,13 @@ class ZoneOcrSource:
         text = spec.speaker.without_trailing_name(text)
         verdict = (spec.junk or self._junk).check(text, outcome.mean_confidence)
         if not verdict.ok:
-            log.debug("Зона %s: отброшено фильтром (%s)", spec.id, verdict.reason)
+            log.debug(
+                "Зона %s: не озвучиваю — фильтр мусора (%s, уверенность %.2f): %r",
+                spec.id,
+                verdict.reason,
+                outcome.mean_confidence,
+                text,
+            )
             return []
 
         now = self._clock.now()
@@ -221,9 +227,10 @@ class ZoneOcrSource:
         )
         if result.used_was_empty:
             stabilizer.consume_was_empty()
-        log.debug("Зона %s: dedup -> %s", spec.id, result.kind)
         if not result.voiced:
+            log.debug("Зона %s: не озвучиваю — повтор (%s): %r", spec.id, result.kind, text)
             return []
+        log.debug("Зона %s: dedup -> %s", spec.id, result.kind)
 
         # TZ 1.22: lines of the previous reading that are still on screen are not voiced again
         previous = [] if was_empty else zone.shown
@@ -264,8 +271,9 @@ class ZoneOcrSource:
                 else:
                     lines.append((UtteranceKind.NEW, name, part))
         kept = [line for line in lines if not on_screen(line[2], previous)]
-        if len(kept) < len(lines):
-            log.debug("Зона %s: ещё на экране, не озвучиваю: %d", spec.id, len(lines) - len(kept))
+        for line in lines:
+            if line not in kept:
+                log.debug("Зона %s: не озвучиваю — ещё на экране: %r", spec.id, line[2])
         lines = kept
         utterances = []
         for kind, speaker_name, text in lines:

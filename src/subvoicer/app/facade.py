@@ -23,6 +23,7 @@ from subvoicer.app.bus import Bus
 from subvoicer.app.character_setup import CharacterSetup
 from subvoicer.app.container import installed_character_models
 from subvoicer.app.game_runner import RunParts, build_run, pronunciation
+from subvoicer.app.log import set_zone_details
 from subvoicer.app.models_setup import Progress
 from subvoicer.config.paths import AppPaths
 from subvoicer.config.profile import Layout, Profile, Zone
@@ -159,6 +160,7 @@ class AppFacade:
         self._hardware: CharacterHardware | None = None
         self._device: str | None = None  # what to build the engine for; None — the best one
         self._installing: CharacterSetup | None = None
+        set_zone_details(self.settings.dev_mode)
         self.bus.subscribe(GameActivated, self._on_activated)
         self.bus.subscribe(LayoutMissing, self._on_missing)
         self.bus.subscribe(GameClosed, self._on_closed)
@@ -211,6 +213,7 @@ class AppFacade:
                 parts.speech.characters.set_enabled(new.character_voices)
         if new.hotkeys != old.hotkeys or new.dev_mode != old.dev_mode:
             self._register_hotkeys()
+        set_zone_details(new.dev_mode)
         self.bus.publish(SettingsApplied())
 
     def _capture_in_background(self) -> None:

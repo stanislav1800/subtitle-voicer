@@ -20,6 +20,10 @@ log = logging.getLogger("subvoicer")
 # log level — a few lines per line, so the GUI's own log can be measured.
 LATENCY_LOGGER = "subvoicer.latency"
 
+# What each zone read and why a reading was not voiced (filter, repeat, still on screen):
+# DEBUG lines of the zone source, written in developer mode only (TZ 4.13.2, 1.28).
+ZONE_LOGGER = "subvoicer.sources.zone_ocr"
+
 _HANDLER_MARK = "_subvoicer_handler"
 
 
@@ -52,6 +56,11 @@ def setup_logging(log_dir: Path, *, level: int = logging.INFO, console: bool = F
     logging.getLogger(LATENCY_LOGGER).setLevel(logging.DEBUG)
     install_exception_hooks()
     return log_file
+
+
+def set_zone_details(on: bool) -> None:
+    """Developer mode: every OCR reading of the zones and the reason it was dropped."""
+    logging.getLogger(ZONE_LOGGER).setLevel(logging.DEBUG if on else logging.NOTSET)
 
 
 def install_exception_hooks() -> None:
