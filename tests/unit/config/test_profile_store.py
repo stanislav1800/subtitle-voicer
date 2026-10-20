@@ -208,14 +208,22 @@ def test_v3_profile_gets_the_auto_capture() -> None:
 
 def test_v4_zones_keep_their_fixed_rect() -> None:
     """TZ 1.29: version 4 -> 5 — old zones keep their rect, they do not look for plates."""
-    new = migrate(profile_data(schema_version=4))
+    new = migrate(profile_data(schema_version=4), current=5)
     assert new["schema_version"] == 5
     assert [z["locate"] for z in new["layout"]["zones"]] == ["fixed"]
     assert Profile.model_validate(new).layout.zones[0].locate == "fixed"
-    empty = migrate({**profile_data(schema_version=4), "layout": {"zones": []}})
+    empty = migrate({**profile_data(schema_version=4), "layout": {"zones": []}}, current=5)
     assert empty["layout"] == {"zones": []}
 
 
 def test_unknown_capture_mode_is_refused() -> None:
     with pytest.raises(ValueError):
         Profile.model_validate({**profile_data(), "capture": "screen"})
+
+
+def test_v5_profile_pauses_the_game_in_the_editor() -> None:
+    """TZ 1.30: version 5 -> 6 — the game is paused while the zone editor is over it."""
+    new = migrate(profile_data(schema_version=5))
+    assert new["schema_version"] == 6 and new["pause_in_editor"] is True
+    off = migrate(profile_data(schema_version=5, pause_in_editor=False))
+    assert Profile.model_validate(off).pause_in_editor is False

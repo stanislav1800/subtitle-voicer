@@ -220,6 +220,7 @@ subtitle-voicer/
 │   │   │                          # может работать с правами администратора; импортирует только core
 │   │   ├── system/
 │   │   │   ├── windows.py         # окно переднего плана, процессы, мониторы, DPI (WindowInfo)
+│   │   │   ├── freeze.py          # пауза игры на время редактора зон (порт GameFreezer, ТЗ 1.30)
 │   │   │   ├── anticheat.py       # проверка запущенных античитов (4.17 ТЗ)
 │   │   │   ├── hotkeys.py         # pynput (HotkeyService)
 │   │   │   ├── autostart.py       # ключ реестра Run

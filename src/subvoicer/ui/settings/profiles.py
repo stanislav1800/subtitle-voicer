@@ -54,6 +54,7 @@ from subvoicer.ui.widgets.common import (
     label,
     primary,
     titled,
+    toggle_row,
 )
 
 log = logging.getLogger(__name__)
@@ -412,6 +413,16 @@ class ProfilesPage(Page):
         )
         capture.addWidget(choose, 0, Qt.AlignmentFlag.AlignVCenter)
         card.body.addLayout(capture)
+        box, pause = toggle_row(
+            "Пауза игры в редакторе зон",
+            "Пока редактор открыт поверх игры (Ctrl+Alt+Z), игра стоит. Выключите, если "
+            "игра с античитом не даёт себя остановить",
+            profile.pause_in_editor,
+        )
+        pause.toggled.connect(
+            lambda on: self._change(path, lambda p: p.model_copy(update={"pause_in_editor": on}))
+        )
+        card.body.addWidget(box)
         return card
 
     def _voices(self, path: Path, profile: Profile) -> QWidget:

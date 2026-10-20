@@ -11,8 +11,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from subvoicer.core.models import Gender
 
-SCHEMA_VERSION = 5  # 2: ocr.fix_words, ocr.confusions (TZ 1.23); 3: one layout (TZ 1.26);
-# 4: capture (TZ 1.28); 5: zone locate (TZ 1.29)
+SCHEMA_VERSION = 6  # 2: ocr.fix_words, ocr.confusions (TZ 1.23); 3: one layout (TZ 1.26);
+# 4: capture (TZ 1.28); 5: zone locate (TZ 1.29); 6: pause_in_editor (TZ 1.30)
 MAX_ZONES = 12  # per layout (TZ 4.2)
 
 Hsv = tuple[int, int, int]
@@ -228,6 +228,7 @@ class Profile(StrictModel):
     # zones in fractions of the frame, for a window of any size and aspect ratio (TZ 1.26)
     layout: Layout = Field(default_factory=Layout)
     capture: CaptureName = "auto"  # TZ 4.1, 1.28
+    pause_in_editor: bool = True  # the game is paused while the zone editor is over it (1.30)
     narrator_voice: str
     default_voices: DefaultVoices
     speaker_stoplist: list[str] = Field(default_factory=list)

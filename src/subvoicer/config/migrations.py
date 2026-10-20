@@ -49,8 +49,20 @@ def _v4_to_v5(data: Data) -> Data:
     return data
 
 
+def _v5_to_v6(data: Data) -> Data:
+    """TZ 1.30: the game is paused while the zone editor is open over it."""
+    data.setdefault("pause_in_editor", True)
+    return data
+
+
 # from version N to N+1; every entry has a unit test on an example of the old file
-MIGRATIONS: dict[int, Migration] = {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4, 4: _v4_to_v5}
+MIGRATIONS: dict[int, Migration] = {
+    1: _v1_to_v2,
+    2: _v2_to_v3,
+    3: _v3_to_v4,
+    4: _v4_to_v5,
+    5: _v5_to_v6,
+}
 
 
 class ProfileFormatError(ValueError):

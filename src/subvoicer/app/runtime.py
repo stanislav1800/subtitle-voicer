@@ -7,7 +7,7 @@ import sys
 import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 from subvoicer.core.models import WindowRef
 
@@ -201,6 +201,28 @@ def own_by(hwnd: int, owner: int) -> None:
         from subvoicer.engines.system import windows
 
         windows.own_by(hwnd, owner)
+
+
+class _NoFreezer:
+    """Not Windows: the game is not paused."""
+
+    def freeze(self, pid: int) -> bool:
+        return False
+
+    def thaw(self, pid: int) -> None:
+        pass
+
+    def thaw_all(self) -> None:
+        pass
+
+
+def make_freezer(state_file: Path) -> Any:
+    """The GameFreezer port: suspends the game's process while the zone editor is open."""
+    if sys.platform != "win32":
+        return _NoFreezer()
+    from subvoicer.engines.system.freeze import ProcessFreezer
+
+    return ProcessFreezer(state_file)
 
 
 def exclude_from_capture(hwnd: int) -> None:

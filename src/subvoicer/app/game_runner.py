@@ -438,6 +438,15 @@ class GameRunner:
         if last is not None:
             self.on_activated(last)
 
+    def hold(self, on: bool) -> None:
+        """The game is paused (the zone editor, TZ 1.30): its capture stops — a suspended
+        window sends no frames and would be reported as lost; it starts again after."""
+        with self._lock:
+            last, self._key = self._last, None
+            self._stop_session()
+        if not on and last is not None:
+            self.on_activated(last)
+
     def on_closed(self, _event: GameClosed | CaptureStopped) -> None:
         with self._lock:
             self._last = None

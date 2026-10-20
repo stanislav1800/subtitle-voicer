@@ -51,3 +51,8 @@ class AppPaths:
     @property
     def ducking_state_file(self) -> Path:
         return self.root / "ducking_state.json"
+
+    @property
+    def frozen_games_file(self) -> Path:
+        """Games paused by the zone editor (TZ 1.30): resumed on the next start."""
+        return self.root / "frozen_games.json"

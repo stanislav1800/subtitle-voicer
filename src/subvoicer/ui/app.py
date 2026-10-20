@@ -201,6 +201,17 @@ class Application:
         if frame is None:
             self.tray.showMessage("Subtitle Voicer", "Не удалось получить кадр игры")
             return
+        if self.editor is not None:
+            self.editor.close()  # its game goes on before this one is paused
+        # the frame is taken: the game waits while its zones are set up (TZ 1.30)
+        if self.facade.freeze_game() is False:
+            self.notifier.show(
+                Notification(
+                    "Игра не встала на паузу",
+                    "Windows не дала остановить игру (так бывает у игр с античитом). "
+                    "Поставьте паузу в самой игре или выключите паузу в профиле игры.",
+                )
+            )
         self._show_editor(ZoneEditor(self.facade, Path(status.profile_path), frame, "game"))
 
     def select_and_read(self) -> None:
@@ -231,9 +242,14 @@ class Application:
         if self.editor is not None:
             self.editor.close()
         self.editor = editor
-        editor.destroyed.connect(lambda: setattr(self, "editor", None))
+        editor.destroyed.connect(lambda _=None, e=editor: self._editor_closed(e))
         editor.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         editor.open()
+
+    def _editor_closed(self, editor: ZoneEditor) -> None:
+        if self.editor is editor:
+            self.editor = None
+            self.facade.thaw_game()  # the game paused for this editor goes on
 
     def quit(self) -> None:
         log.info("Выход")

@@ -156,6 +156,10 @@ class AppFacade:
             "debug_capture": self._capture_in_background,
         }
         self._zone_keys: dict[str, str] = {}  # hotkey zones of the active layout: combo -> id
+        # a game a crashed run left paused by the zone editor goes on first (TZ 1.30)
+        self._freezer = runtime.make_freezer(self.paths.frozen_games_file)
+        self._freezer.thaw_all()
+        self._frozen: int | None = None
         self._reader: ManualReader | None = None
         self._library_lock = threading.Lock()
         self._hardware: CharacterHardware | None = None
@@ -184,6 +188,7 @@ class AppFacade:
             self._register_hotkeys()
 
     def stop(self) -> None:
+        self.thaw_game()
         hotkeys, self._hotkeys = self._hotkeys, None
         stop_hotkeys = getattr(hotkeys, "stop", None)
         if stop_hotkeys is not None:
@@ -191,6 +196,40 @@ class AppFacade:
         parts, self._parts = self._parts, None
         if parts is not None:
             parts.session.stop()
+
+    # ------------------------------------------------------------------ game pause
+
+    def freeze_game(self) -> bool | None:
+        """The zone editor opens over the game (TZ 4.13, 1.30): the game is paused, its
+        capture stops. True — paused; False — Windows refused (an anti-cheat); None — the
+        profile asks not to pause or there is no game."""
+        status = self.status()
+        if status.window is None or status.profile_path is None:
+            return None
+        try:
+            profile = self.store.load(Path(status.profile_path))
+        except (OSError, ValueError):
+            return None
+        if not profile.pause_in_editor:
+            return None
+        pid = status.window.pid
+        if not self._freezer.freeze(pid):
+            return False
+        self._frozen = pid
+        parts = self._parts
+        if parts is not None:
+            parts.runner.hold(True)
+        return True
+
+    def thaw_game(self) -> None:
+        """The zone editor closed: the game goes on, its capture starts again."""
+        pid, self._frozen = self._frozen, None
+        if pid is None:
+            return
+        self._freezer.thaw(pid)
+        parts = self._parts
+        if parts is not None:
+            parts.runner.hold(False)
 
     # ------------------------------------------------------------------ settings
 

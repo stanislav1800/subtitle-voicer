@@ -213,9 +213,13 @@ def test_runner_rebuilds_only_when_zones_change(rig: Rig) -> None:
     rig.store.save(rig.saved().model_copy(update={"capture": "dxgi"}), rig.path)
     runner.on_activated(GameActivated(str(rig.path), WINDOW, "4:3"))  # capture mode changed
     assert len(built) == 4 and built[2].stopped and built[3].started
+    runner.hold(True)  # the game paused for the zone editor (TZ 1.30): no capture
+    assert len(built) == 4 and built[3].stopped
+    runner.hold(False)
+    assert len(built) == 5 and built[4].started
     rig.store.save(rig.saved().model_copy(update={"layout": Layout()}), rig.path)
     runner.on_activated(GameActivated(str(rig.path), WINDOW, "4:3"))  # no zones at all
-    assert len(built) == 4 and built[3].stopped
+    assert len(built) == 5 and built[4].stopped
     runner.on_closed(GameClosed(WINDOW.pid))
     assert speech.games[-1] is None and rig.router.request(line("Привет.")) is None
 

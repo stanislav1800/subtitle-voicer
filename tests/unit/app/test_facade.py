@@ -99,3 +99,56 @@ def test_zone_hotkeys_are_registered_only_while_the_game_is_active(tmp_path: Pat
     assert "<ctrl>+<alt>+1" in keys.bindings  # one layout for any window (TZ 1.26)
     facade.bus.publish(GameClosed(window.pid))
     assert "<ctrl>+<alt>+1" not in keys.bindings
+
+
+def test_the_game_is_paused_while_the_zone_editor_is_over_it(tmp_path: Path) -> None:
+    """TZ 1.30: paused if the profile asks for it, its capture held; Windows may refuse."""
+    from subvoicer.config.profile import Profile
+    from subvoicer.core.events import GameActivated
+    from subvoicer.core.models import WindowRef
+    from tests.unit.config.profiles import profile_data
+
+    class Freezer:
+        def __init__(self) -> None:
+            self.frozen: set[int] = set()
+            self.refuse = False
+
+        def freeze(self, pid: int) -> bool:
+            if self.refuse:
+                return False
+            self.frozen.add(pid)
+            return True
+
+        def thaw(self, pid: int) -> None:
+            self.frozen.discard(pid)
+
+        def thaw_all(self) -> None:
+            self.frozen.clear()
+
+    class Runner:
+        def __init__(self) -> None:
+            self.held: list[bool] = []
+
+        def hold(self, on: bool) -> None:
+            self.held.append(on)
+
+    class Parts:
+        runner = Runner()
+
+    facade = AppFacade(AppPaths(tmp_path))
+    freezer = Freezer()
+    facade._freezer = freezer
+    facade._parts = Parts()  # type: ignore[assignment]
+    assert facade.freeze_game() is None  # no game
+    stored = facade.store.save(Profile.model_validate(profile_data()))
+    window = WindowRef(1, 4242, "Game.exe", "Game", 1920, 1080)
+    facade.bus.publish(GameActivated(str(stored.path), window, "16:9"))
+    assert facade.freeze_game() is True and freezer.frozen == {4242}
+    facade.thaw_game()
+    assert freezer.frozen == set() and Parts.runner.held == [True, False]
+    freezer.refuse = True
+    assert facade.freeze_game() is False and Parts.runner.held == [True, False]
+    facade.store.save(stored.profile.model_copy(update={"pause_in_editor": False}), stored.path)
+    freezer.refuse = False
+    assert facade.freeze_game() is None and freezer.frozen == set()
+    facade._parts = None

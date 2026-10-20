@@ -45,6 +45,15 @@ class OcrEngine(Protocol):
     def recognize(self, image: npt.NDArray[np.uint8]) -> OcrResult: ...
 
 
+class GameFreezer(Protocol):
+    """Pauses the game while the zone editor is over it (TZ 4.13, 1.30); what it paused
+    is kept on disk, so a crashed run's game is resumed on the next start."""
+
+    def freeze(self, pid: int) -> bool: ...
+    def thaw(self, pid: int) -> None: ...
+    def thaw_all(self) -> None: ...
+
+
 class TextDetector(Protocol):
     """Text lines of an image without reading them: ``x1, y1, x2, y2`` in its pixels."""
 
