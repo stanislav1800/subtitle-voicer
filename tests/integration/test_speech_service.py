@@ -229,3 +229,26 @@ def test_a_stand_in_clip_is_not_cached() -> None:
     rig.service.submit(request(2, "Привет.", channel="b"))  # the same text cuts the first line
     rig.step()
     assert len(rig.tts.calls) == 2  # synthesized again: the real voice may be ready by now
+
+
+def test_continuation_is_synthesized_while_its_line_plays(rig: Rig) -> None:
+    """TZ 1.28: the second half of a split line follows the first without the synthesis
+    pause — it is ready before the first half ends."""
+    rig.service.submit(request(1, "А теперь это происходило на самом деле, и я не"))
+    rig.step()
+    rig.service.submit(request(2, "мог выдавить ни строчки.", continuation=True))
+    rig.step()
+    assert len(rig.tts.calls) == 2  # synthesized ahead, nothing plays it yet
+    assert rig.out.log == [("start", 1)]
+    rig.out.line_ends(1)
+    rig.step()
+    assert rig.out.log[-1] == ("start", 2)
+    assert len(rig.tts.calls) == 2  # played from the cache
+
+
+def test_a_line_of_another_zone_is_not_synthesized_ahead(rig: Rig) -> None:
+    rig.service.submit(request(1, "Первая.", channel="a"))
+    rig.step()
+    rig.service.submit(request(2, "хвост", continuation=True, channel="b"))
+    rig.step()
+    assert len(rig.tts.calls) == 1

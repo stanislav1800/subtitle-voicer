@@ -132,6 +132,7 @@ class SpeechService(Service):
         self._ducking = ducking
         self._inbox: queue.Queue[_Message] = queue.Queue()
         self._lines: dict[int, _Line] = {}
+        self._prefetched: set[int] = set()  # continuations synthesized ahead (TZ 1.28)
         output.set_listeners(self._on_started, self._on_finished)
 
     # ------------------------------------------------------------------ any thread
@@ -187,6 +188,7 @@ class SpeechService(Service):
         self._execute(self._scheduler.tick(now))
         self._duck(now)
         self._synthesize_next_piece()
+        self._prefetch_continuation()
 
     def _handle(self, message: _Message, now: float) -> None:
         s = self._scheduler
@@ -244,19 +246,24 @@ class SpeechService(Service):
                         line.pending.clear()
                     self._output.stop(request.id)
                 case Dropped(request=request, reason=reason):
+                    self._prefetched.discard(request.id)
                     log.debug("Речь: реплика %d отброшена (%s)", request.id, reason)
                     self._publisher.publish(SpeechDropped(request, str(reason)))
 
-    def _play(self, request: SpeechRequest, rate: float) -> None:
+    def _prepare(self, request: SpeechRequest) -> list[str]:
         dictionary = None
         if request.pronunciation:
             dictionary = self._preparer.dictionary.with_extra(
                 PronunciationEntry(source, target, regex)
                 for source, target, regex in request.pronunciation
             )
+        return self._preparer.prepare(request.text, dictionary)
+
+    def _play(self, request: SpeechRequest, rate: float) -> None:
+        self._prefetched.discard(request.id)
         t_start = self._clock.now()
         started = time.perf_counter()
-        pieces = self._preparer.prepare(request.text, dictionary)
+        pieces = self._prepare(request)
         if not pieces:
             self._execute(self._scheduler.finished(request.id, True, self._clock.now()))
             return
@@ -286,6 +293,28 @@ class SpeechService(Service):
         clip = self._synthesize(piece, line.request.voice_id, line.rate)
         line.fed.append(piece)
         self._output.feed(line.request.id, clip, last=not line.pending)
+
+    def _prefetch_continuation(self) -> None:
+        """The second half of a line waits behind it: its first piece is synthesized while the
+        first half still sounds, so it follows without the synthesis pause (TZ 1.28). Through
+        the clip cache: if the rate changes by then, it is synthesized again as usual."""
+        current = self._scheduler.current
+        line = self._lines.get(current.id) if current is not None else None
+        queued = self._scheduler.queued
+        if current is None or line is None or line.pending or not queued:
+            return
+        following = queued[0]
+        if (
+            not following.continuation
+            or following.channel != current.channel
+            or following.id in self._prefetched
+        ):
+            return
+        self._prefetched.add(following.id)
+        pieces = self._prepare(following)
+        if pieces:
+            self._synthesize(pieces[0], following.voice_id, self._scheduler.current_rate)
+            log.debug("Речь: продолжение %d синтезировано заранее", following.id)
 
     def _hurry(self, request: SpeechRequest, rate: float) -> None:
         line = self._lines.get(request.id)

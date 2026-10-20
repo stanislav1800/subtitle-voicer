@@ -2,7 +2,7 @@
 
 import pytest
 
-from subvoicer.pipeline.dedup import DedupKind, Deduplicator, on_screen
+from subvoicer.pipeline.dedup import DedupKind, Deduplicator, continues, on_screen
 
 LINE = "Встретимся у старого склада в полночь."
 
@@ -200,3 +200,20 @@ def test_a_better_reading_after_a_worse_one_is_not_dropped() -> None:
         "Ви: Мы немного придём в себя и сами его уведомим.",
         ["Ви Мы немно ридем в ебя и оми е о уведомим"],
     )
+
+
+@pytest.mark.parametrize(
+    ("previous", "text", "expected"),
+    [
+        ("А теперь это происходило на самом деле, и я не", "мог выдавить ни строчки.", True),
+        ("Все... прямо как на той странице...", "которую я нашел.", True),
+        ("…и снижаете уровень", "холестерина в крови.", True),
+        ("Мост перекрыт.", "едем в объезд", False),
+        ("Что ты делаешь?", "ничего", False),
+        ("Мост перекрыт, и", "Мы едем в объезд.", False),
+        ("Мост перекрыт, и", "", False),
+        ("«Я не знаю»", "сказал он.", True),
+    ],
+)
+def test_continues(previous: str, text: str, expected: bool) -> None:
+    assert continues(previous, text) is expected

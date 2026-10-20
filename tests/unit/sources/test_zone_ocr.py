@@ -488,3 +488,31 @@ def test_a_line_replaced_at_once_is_read_whatever_its_length(second: str) -> Non
         s.show(text)
         s.run(2)
     assert [u.speaker for u in s.out] == ["Ви", "Джеки"]
+
+
+def test_second_half_of_a_split_line_continues_it() -> None:
+    """TZ 1.28: the game split one line in two subtitles (Alan Wake): the second half is a
+    continuation — the same voice, right after the first, never cutting it."""
+    s = Screen(SpeakerMode.PREFIX)
+    s.show("Алан: А теперь это происходило на самом деле, и я не")
+    s.run(1)
+    s.show("мог выдавить из себя ни строчки.")
+    s.run(1)
+    assert [(u.kind, u.speaker, u.text) for u in s.out] == [
+        (UtteranceKind.NEW, "Алан", "А теперь это происходило на самом деле, и я не"),
+        (UtteranceKind.CONTINUATION, "Алан", "мог выдавить из себя ни строчки."),
+    ]
+
+
+def test_a_new_sentence_or_a_late_line_is_not_a_continuation() -> None:
+    s = Screen()
+    s.show("Мост перекрыт.")
+    s.run(1)
+    s.show("едем в объезд через доки")  # the first one ended with a full stop
+    s.run(1)
+    s.show("Встретимся у моста, если")
+    s.run(1)
+    s.run(20)
+    s.show("потом поговорим об этом подробнее.")  # too late after the first half
+    s.run(1)
+    assert [u.kind for u in s.out] == [UtteranceKind.NEW] * 4

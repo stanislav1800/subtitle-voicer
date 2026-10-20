@@ -15,7 +15,14 @@ from dataclasses import dataclass, field
 
 from subvoicer.core.models import Frame, Rect, Utterance, UtteranceKind
 from subvoicer.core.ports import Clock
-from subvoicer.pipeline.dedup import DedupKind, Deduplicator, grown_from, on_screen
+from subvoicer.pipeline.dedup import (
+    SPLIT_WINDOW_S,
+    DedupKind,
+    Deduplicator,
+    continues,
+    grown_from,
+    on_screen,
+)
 from subvoicer.pipeline.ocr.inputs import OcrInput
 from subvoicer.pipeline.ocr.junk_filter import JunkFilter
 from subvoicer.pipeline.ocr.runner import OcrOutcome, OcrRunner
@@ -77,6 +84,8 @@ class _ZoneState:
     name_mask: Image | None = None  # name colour pixels (speaker mode color)
     speaker: str | None = None  # speaker of the last new line (a continuation keeps it)
     shown: list[str] = field(default_factory=list)  # lines of the last reading (TZ 1.22)
+    voiced: str = ""  # the last voiced text and when (a split line's second half, TZ 1.28)
+    voiced_at: float = float("-inf")
 
 
 @dataclass(frozen=True)
@@ -275,11 +284,22 @@ class ZoneOcrSource:
             if line not in kept:
                 log.debug("Зона %s: не озвучиваю — ещё на экране: %r", spec.id, line[2])
         lines = kept
+        if (
+            lines
+            and lines[0][0] is UtteranceKind.NEW
+            and lines[0][1] is None
+            and now - zone.voiced_at <= SPLIT_WINDOW_S
+            and continues(zone.voiced, lines[0][2])
+        ):
+            # the game split one line in two subtitles: the same voice, right after the first
+            log.debug("Зона %s: вторая половина реплики: %r", spec.id, lines[0][2])
+            lines[0] = (UtteranceKind.CONTINUATION, zone.speaker, lines[0][2])
         utterances = []
         for kind, speaker_name, text in lines:
             if not text:
                 continue
             zone.speaker = speaker_name
+            zone.voiced, zone.voiced_at = text, now
             utterance_id = next(self._ids)
             latency.debug(
                 "LATENCY change id=%d t=%.3f detected=%.3f ocr=%.0f zone=%s kind=%s text=%r",
