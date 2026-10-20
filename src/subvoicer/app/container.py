@@ -101,9 +101,31 @@ class WatchConfig:
     poll_hz: float = 10
     ocr_engine: str = "rapidocr"
     ocr_options: dict[str, Any] = field(default_factory=lambda: {"model": "eslav"})
-    capture_modes: tuple[str, ...] = ("wgc", "dxgi")
+    capture: str = "auto"  # one of CAPTURE_MODES
     pid: int | None = None  # the game process to duck
     speech: SpeechConfig | None = None  # None: print only (stage 2)
+
+
+# the profile's capture setting -> capture engines, the first one starts (TZ 4.1, 1.28)
+CAPTURE_MODES: dict[str, tuple[str, ...]] = {
+    "auto": ("wgc", "dxgi"),
+    "wgc": ("wgc",),
+    "dxgi": ("dxgi",),
+}
+
+
+def capture_factories(capture: str = "auto") -> dict[str, Any]:
+    """Capture engines for the profile's setting; the one it starts with must be there."""
+    modes = CAPTURE_MODES[capture]
+    factories: dict[str, Any] = {}
+    for mode in modes:
+        cls = registry.resolve("capture", mode)
+        if cls.is_available():
+            factories[mode] = cls
+    if modes[0] not in factories:
+        name = "окна (Windows Graphics Capture)" if modes[0] == "wgc" else "экрана (DXGI)"
+        raise RuntimeError(f"Захват {name} недоступен")
+    return factories
 
 
 def load_ocr(engine_id: str, options: dict[str, Any]) -> Any:
@@ -310,14 +332,7 @@ def build_watch(config: WatchConfig, bus: EventBus) -> Session:
     from subvoicer.engines.system import windows
 
     clock = MonotonicClock()
-    factories: dict[str, Any] = {}
-    for mode in config.capture_modes:
-        cls = registry.resolve("capture", mode)
-        if cls.is_available():
-            factories[mode] = cls
-    if "wgc" not in factories:
-        raise RuntimeError("Захват окна (Windows Graphics Capture) недоступен")
-
+    factories = capture_factories(config.capture)
     capture = CaptureService(config.hwnd, factories, clock, windows.is_window, bus)
     zone = ZoneSpec(
         id="zone",

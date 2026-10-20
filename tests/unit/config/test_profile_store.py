@@ -188,7 +188,7 @@ def test_v2_profile_keeps_the_layout_with_the_most_zones() -> None:
         "21:9": {"zones": [zone]},
         "16:9": {"zones": [zone, other]},
     }
-    new = migrate(old)
+    new = migrate(old, current=3)
     assert new["schema_version"] == 3 and "layouts" not in new
     assert [z["id"] for z in new["layout"]["zones"]] == ["dialog", "other"]
     old["layouts"] = {"21:9": {"zones": [zone]}, "16:9": {"zones": [other]}}
@@ -196,3 +196,16 @@ def test_v2_profile_keeps_the_layout_with_the_most_zones() -> None:
     old["layouts"] = {}
     assert migrate(old)["layout"] == {"zones": []}
     assert Profile.model_validate(migrate(old)).layout.zones == []
+
+
+def test_v3_profile_gets_the_auto_capture() -> None:
+    """TZ 1.28: version 3 -> 4 adds the capture mode, window with the screen fallback."""
+    new = migrate(profile_data(schema_version=3))
+    assert new["schema_version"] == 4 and new["capture"] == "auto"
+    assert Profile.model_validate(new).capture == "auto"
+    assert migrate(profile_data(schema_version=3, capture="dxgi"))["capture"] == "dxgi"
+
+
+def test_unknown_capture_mode_is_refused() -> None:
+    with pytest.raises(ValueError):
+        Profile.model_validate({**profile_data(), "capture": "screen"})

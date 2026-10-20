@@ -203,6 +203,13 @@ def own_by(hwnd: int, owner: int) -> None:
         windows.own_by(hwnd, owner)
 
 
+def exclude_from_capture(hwnd: int) -> None:
+    if sys.platform == "win32":
+        from subvoicer.engines.system import windows
+
+        windows.exclude_from_capture(hwnd)
+
+
 def force_foreground(hwnd: int) -> None:
     if sys.platform == "win32":
         from subvoicer.engines.system import windows

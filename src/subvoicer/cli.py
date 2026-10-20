@@ -40,6 +40,7 @@ from subvoicer.config.settings import load_settings
 from subvoicer.core.errors import EngineError, ModelsError
 from subvoicer.core.events import (
     CaptureFailed,
+    CaptureLooksBlack,
     CaptureStopped,
     Event,
     GameActivated,
@@ -103,6 +104,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     watch.add_argument("--threshold", type=int, help="порог яркости для bright/dark_on_*")
     watch.add_argument("--speaker", choices=SPEAKER_MODES, default="none")
+    watch.add_argument(
+        "--capture",
+        choices=("auto", "wgc", "dxgi"),
+        default="auto",
+        help="захват: окно с переходом на экран (auto), только окно (wgc), только экран (dxgi)",
+    )
     speech = watch.add_argument_group("озвучка (этап 3)")
     speech.add_argument("--speak", action="store_true", help="озвучивать реплики")
     speech.add_argument("--dict", type=Path, help="словарь произношений: JSON-список записей")
@@ -317,6 +324,7 @@ def run_watch(args: argparse.Namespace) -> int:
         colors_hsv=tuple(args.color_hsv),
         threshold=args.threshold,
         speaker=args.speaker,
+        capture=args.capture,
         ocr_options=ocr_options,
         speech=speech,
     )
@@ -341,6 +349,8 @@ def run_watch(args: argparse.Namespace) -> int:
                 print_utterance(event)
             elif isinstance(event, CaptureFailed):
                 print("Не удаётся захватить окно игры — продолжаю пытаться", file=sys.stderr)
+            elif isinstance(event, CaptureLooksBlack):
+                print(BLACK_HINT, file=sys.stderr)
             elif isinstance(event, CaptureStopped):
                 print("Окно закрыто.", file=sys.stderr)
                 return 0
@@ -377,6 +387,12 @@ def run_profiles(args: argparse.Namespace) -> int:
         session.stop()
 
 
+BLACK_HINT = (
+    "Захват окна отдаёт чёрный кадр — похоже, игра в эксклюзивном полноэкранном режиме: "
+    "включите в игре оконный режим без рамки или захват «auto»/«dxgi» в профиле"
+)
+
+
 def report_event(event: Event) -> None:
     match event:
         case UtteranceDetected():
@@ -397,6 +413,8 @@ def report_event(event: Event) -> None:
             print("Игра закрыта.", file=sys.stderr)
         case CaptureFailed():
             print("Не удаётся захватить окно игры — продолжаю пытаться", file=sys.stderr)
+        case CaptureLooksBlack():
+            print(BLACK_HINT, file=sys.stderr)
 
 
 def run_profiles_command(args: argparse.Namespace) -> int:

@@ -34,8 +34,15 @@ def _v2_to_v3(data: Data) -> Data:
     return data
 
 
+def _v3_to_v4(data: Data) -> Data:
+    """TZ 1.28: the capture mode is set in the profile; old profiles keep the window capture
+    with the screen fallback, as before."""
+    data.setdefault("capture", "auto")
+    return data
+
+
 # from version N to N+1; every entry has a unit test on an example of the old file
-MIGRATIONS: dict[int, Migration] = {1: _v1_to_v2, 2: _v2_to_v3}
+MIGRATIONS: dict[int, Migration] = {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4}
 
 
 class ProfileFormatError(ValueError):

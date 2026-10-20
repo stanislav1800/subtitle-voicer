@@ -53,12 +53,23 @@ from subvoicer.ui.widgets.common import (
     icon_button,
     label,
     primary,
+    titled,
 )
 
 log = logging.getLogger(__name__)
 
 GameEditor = Callable[[Path, str], None]  # (profile path, "game" | "screenshot")
 PRIORITY_TEXT = {"high": "высокий", "normal": "обычный", "low": "низкий"}
+CAPTURE_ITEMS = (  # TZ 4.1, 1.28
+    ("Авто", "auto"),
+    ("Окно", "wgc"),
+    ("Экран", "dxgi"),
+)
+CAPTURE_HINT = (
+    "Авто — окно игры, а если оно отдаёт чёрный кадр (эксклюзивный полноэкранный режим) — "
+    "экран. Окно — только окно: то, что поверх игры, не читается. Экран — для старых игр "
+    "в полноэкранном режиме: читается всё, что лежит поверх игры"
+)
 TRIGGER_TEXT = {"auto": "Авто", "hotkey": "По клавише", "off": "Выключена"}
 VOICE_MODE_TEXT = {"speaker": "По говорящему", "narrator": "Рассказчик", "fixed": "Свой голос"}
 
@@ -391,6 +402,14 @@ class ProfilesPage(Page):
                     text = voice_text(voice.id, self._facade.voices())
                 line.addWidget(label(text, "caption"))
             card.body.addLayout(line)
+        capture = QHBoxLayout()
+        capture.addWidget(titled("Захват", CAPTURE_HINT), 1)
+        choose = combo(CAPTURE_ITEMS, profile.capture, "Захват")
+        choose.currentIndexChanged.connect(
+            lambda _i: self._set_capture(path, str(choose.currentData()))
+        )
+        capture.addWidget(choose, 0, Qt.AlignmentFlag.AlignVCenter)
+        card.body.addLayout(capture)
         return card
 
     def _voices(self, path: Path, profile: Profile) -> QWidget:
@@ -556,6 +575,10 @@ class ProfilesPage(Page):
                 format_error(exc) if not isinstance(exc, KeyError) else str(exc),
             )
         self._show_profile(path)
+
+    def _set_capture(self, path: Path, capture: str) -> None:
+        """Saved right away; the running game's capture is recreated by the profile change."""
+        self._change(path, lambda p: p.model_copy(update={"capture": capture}))
 
     def _set_voice(self, path: Path, key: str, voice: str) -> None:
         def change(p: Profile) -> Profile:

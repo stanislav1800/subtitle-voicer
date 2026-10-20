@@ -192,6 +192,16 @@ def own_by(hwnd: int, owner: int) -> None:
     log.info("Оверлей привязан к окну игры %s", owner)
 
 
+WDA_EXCLUDEFROMCAPTURE = 0x11  # Windows 10 2004+; older ones refuse it
+
+
+def exclude_from_capture(hwnd: int) -> None:
+    """Our window is not in any capture (DXGI, WGC, screenshots, recording): the screen
+    capture does not read our own notifications and overlay over the game (TZ 4.1)."""
+    if not ctypes.windll.user32.SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE):
+        log.debug("Окно %s не скрыто от захвата: %s", hwnd, ctypes.WinError())
+
+
 def force_foreground(hwnd: int) -> None:
     """Take the focus from the game (the zone editor): Windows lets a process that just got
     a key event do it, so a released Alt is sent first."""

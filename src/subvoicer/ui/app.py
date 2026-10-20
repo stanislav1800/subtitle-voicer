@@ -18,6 +18,8 @@ from subvoicer.app.log import setup_logging
 from subvoicer.app.models_setup import ModelSetup
 from subvoicer.config.paths import AppPaths
 from subvoicer.core.events import (
+    CaptureFailed,
+    CaptureLooksBlack,
     DebugCaptured,
     EngineUnavailable,
     Event,
@@ -317,6 +319,23 @@ class Application:
                             "зоны настраиваются при запуске игры.",
                         )
                     )
+            case CaptureFailed():
+                self.notifier.show(
+                    Notification(
+                        "Не удаётся захватить окно игры",
+                        "Продолжаю пытаться, пока игра запущена.",
+                    )
+                )
+            case CaptureLooksBlack():
+                self.notifier.show(
+                    Notification(
+                        "Захват окна отдаёт чёрный кадр",
+                        "Похоже, игра в эксклюзивном полноэкранном режиме. Включите в игре "
+                        "оконный режим без рамки или выберите захват «Авто» или «Экран» "
+                        "в профиле игры.",
+                        timeout_ms=20_000,
+                    )
+                )
             case DebugCaptured(folder=folder):
                 profile = self.facade.status().profile_path
                 frame = Path(folder) / "frame.png"

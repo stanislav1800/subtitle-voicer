@@ -83,6 +83,7 @@ class Overlay(QWidget):
         self._game = QRectF(0, 0, area.width(), area.height())
         if not self.isVisible():
             self.show()
+            runtime.exclude_from_capture(int(self.winId()))  # not read by the screen capture
         window = state.status.window
         if window is not None:  # above the game only, not above everything
             runtime.own_by(int(self.winId()), window.hwnd)

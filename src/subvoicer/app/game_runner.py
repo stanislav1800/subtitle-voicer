@@ -15,6 +15,7 @@ from subvoicer.app.container import (
     SpeechConfig,
     SpeechParts,
     build_speech,
+    capture_factories,
     load_ocr,
 )
 from subvoicer.app.models_setup import engine_options
@@ -29,7 +30,6 @@ from subvoicer.config.words import load_word_counts
 from subvoicer.core.events import CaptureStopped, GameActivated, GameClosed, UtteranceDetected
 from subvoicer.core.models import Priority, Rect, SpeechRequest, Utterance, UtteranceKind, WindowRef
 from subvoicer.core.ports import EventBus
-from subvoicer.engines import registry
 from subvoicer.pipeline.dedup import Deduplicator
 from subvoicer.pipeline.games.matching import OfferPolicy
 from subvoicer.pipeline.ocr.junk_filter import JunkFilter
@@ -51,8 +51,6 @@ from subvoicer.sources.manual import SELECT_CHANNEL
 from subvoicer.sources.zone_ocr import NameSource, ZoneOcrSource, ZoneSpec
 
 log = logging.getLogger(__name__)
-
-CAPTURE_MODES = ("wgc", "dxgi")
 
 
 # ---------------------------------------------------------------- profile -> pipeline objects
@@ -163,17 +161,6 @@ def word_fixer(profile: Profile, ocr: OcrConfig, engines: OcrEngines) -> WordFix
     return WordFixer(counts, [(a, b) for a, b in ocr.confusions], names)
 
 
-def capture_factories() -> dict[str, Any]:
-    factories: dict[str, Any] = {}
-    for mode in CAPTURE_MODES:
-        cls = registry.resolve("capture", mode)
-        if cls.is_available():
-            factories[mode] = cls
-    if "wgc" not in factories:
-        raise RuntimeError("Захват окна (Windows Graphics Capture) недоступен")
-    return factories
-
-
 class GameSession(Session):
     """Capture + zones of the active game; the overlay and Ctrl+Alt+D look inside."""
 
@@ -197,7 +184,9 @@ def build_game_session(
     if not specs:
         return None
     clock = MonotonicClock()
-    capture = CaptureService(window.hwnd, capture_factories(), clock, windows.is_window, bus)
+    capture = CaptureService(
+        window.hwnd, capture_factories(profile.capture), clock, windows.is_window, bus
+    )
     source = ZoneOcrSource(
         specs,
         OcrRunner(engines.get(profile.ocr.engine)),
@@ -392,7 +381,7 @@ class GameRunner:
         self._last: GameActivated | None = None
         self._lock = threading.Lock()
         self._session: Session | None = None
-        self._key: tuple[int, str, str] | None = None  # (pid, aspect, layout json)
+        self._key: tuple[int, str, str, str] | None = None  # (pid, aspect, layout, capture)
 
     def on_activated(self, event: GameActivated) -> None:
         path = Path(event.profile_path)
@@ -402,7 +391,12 @@ class GameRunner:
             log.error("Профиль %s не загружен: %s", path.name, format_error(exc))
             return
         layout = profile.layout if profile.layout.zones else None
-        key = (event.window.pid, event.aspect, layout.model_dump_json() if layout else "")
+        key = (
+            event.window.pid,
+            event.aspect,
+            layout.model_dump_json() if layout else "",
+            profile.capture,  # changed in the settings -> the capture is recreated
+        )
         with self._lock:
             self._last = event
             self._router.set_profile(path, profile, event.aspect)

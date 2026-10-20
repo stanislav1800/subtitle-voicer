@@ -210,9 +210,12 @@ def test_runner_rebuilds_only_when_zones_change(rig: Rig) -> None:
     assert len(built) == 2 and built[0].stopped
     runner.on_activated(GameActivated(str(rig.path), WINDOW, "4:3"))  # the same zones
     assert len(built) == 3 and built[1].stopped and built[2].started  # a new frame shape
+    rig.store.save(rig.saved().model_copy(update={"capture": "dxgi"}), rig.path)
+    runner.on_activated(GameActivated(str(rig.path), WINDOW, "4:3"))  # capture mode changed
+    assert len(built) == 4 and built[2].stopped and built[3].started
     rig.store.save(rig.saved().model_copy(update={"layout": Layout()}), rig.path)
     runner.on_activated(GameActivated(str(rig.path), WINDOW, "4:3"))  # no zones at all
-    assert len(built) == 3 and built[2].stopped
+    assert len(built) == 4 and built[3].stopped
     runner.on_closed(GameClosed(WINDOW.pid))
     assert speech.games[-1] is None and rig.router.request(line("Привет.")) is None
 

@@ -94,6 +94,7 @@ class Notification(QWidget):
             self.move(x, y)
         self.show()
         runtime.keep_topmost(int(self.winId()))
+        runtime.exclude_from_capture(int(self.winId()))  # not read by the screen capture
 
 
 class Notifier:

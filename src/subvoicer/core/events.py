@@ -53,6 +53,14 @@ class CaptureModeChanged(Event):
 
 
 @dataclass(frozen=True, slots=True)
+class CaptureLooksBlack(Event):
+    """Window capture only (``capture = "wgc"``) and its frames stay black: likely exclusive
+    fullscreen, a hint to switch to borderless or the screen capture (TZ 4.1)."""
+
+    hwnd: int
+
+
+@dataclass(frozen=True, slots=True)
 class SpeechStarted(Event):
     request: SpeechRequest
     rate: float
