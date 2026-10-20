@@ -137,6 +137,24 @@ class RapidOcrEngine:
                 lines.append(OcrLine(str(rec.txts[0]), float(rec.scores[0]), box))
         return OcrResult(tuple(lines))
 
+    def detect_lines(self, image: npt.NDArray[np.uint8], max_side: int = 800) -> list[Box]:
+        """Text lines of ``image`` by the detector alone, no recognition (TZ 4.2.2): the
+        subtitle plates are looked for around them. The detector works on a copy shrunk to
+        ``max_side`` — as accurate on the plates of real frames as 1280 px and 2x faster
+        (DECISIONS.md, stage 13); the boxes are in pixels of ``image``."""
+        if self._engine is None:
+            raise EngineError("RapidOCR не загружен: вызовите load()")
+        image = np.ascontiguousarray(image[:, :, :3])
+        height, width = image.shape[:2]
+        scale = min(1.0, max_side / max(height, width))
+        small = image
+        if scale < 1.0:
+            small = cv2.resize(image, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+        detected = self._engine(small, use_det=True, use_cls=False, use_rec=False)
+        if detected.boxes is None or len(detected.boxes) == 0:
+            return []
+        return merge_rows([_scale(_bbox(box), 1 / scale) for box in detected.boxes])
+
 
 def merge_rows(boxes: list[Box]) -> list[Box]:
     """Merge boxes into rows by vertical overlap; split a row where the gap is too wide."""

@@ -132,7 +132,8 @@ subtitle-voicer/
 │   │   │                          # GameDetected, ZoneStateChanged, EngineUnavailable …
 │   │   ├── ports.py               # FrameSource, OcrEngine, TtsEngine, StressMarker, AudioOutput, Ducker,
 │   │   │                          # HotkeyService, WindowInfo, GameLibrarySource, TextSource, Clock,
-│   │   │                          # EventPublisher, HookEngine
+│   │   │                          # EventPublisher, HookEngine, TextDetector (строки текста
+│   │   │                          # без распознавания — для поиска подложек, 4.2.2)
 │   │   └── errors.py
 │   │
 │   ├── config/
@@ -152,6 +153,7 @@ subtitle-voicer/
 │   │   │   ├── regions.py         # имя по цвету: вырезать из текста, прочитать отдельно (4.5)
 │   │   │   ├── masks.py           # пресеты color / bright_on_dark / dark_on_bright / adaptive
 │   │   │   ├── change.py          # изменение и пустота маски
+│   │   │   ├── plates.py          # подложки субтитров вокруг найденных строк текста (4.2.2)
 │   │   │   └── stability.py       # автомат 4.4 по маске: когда звать OCR (только для зон)
 │   │   ├── ocr/
 │   │   │   ├── inputs.py          # три варианта входа OCR (4.3)
@@ -416,4 +418,5 @@ TTS: dict[str, str] = {
 | 9 | `engines/library/` (steam, epic, gog), `engines/system/icons.py`, `pipeline/games/library.py`, `app/library.py`, `resources/library_ignore.txt` |
 | 12 | `tools/build.py`, `tools/build/` (`entry.py`, `subvoicer.spec`, `installer.iss`), `engines/system/gpu.py`, `ui/settings/characters.py`; голоса персонажей по одному в `app/character_setup.py` (ТЗ 1.24) |
 | 16 | `engines/tts/character.py`, `convert_client.py`, `convert_host.py`, `app/character_setup.py`, `resources/voices/characters.toml`, `resources/voice_convert/`, настройка `character_voices` (версия формата 3), `cli.py voices` |
+| 13 | `pipeline/vision/plates.py`, порт `TextDetector` (`RapidOcrEngine.detect_lines`), зоны `locate = "plates"` в `sources/zone_ocr.py`, шаблон `subtitles_auto`, `tests/fixtures/real/*/plates.json`, `tests/integration/test_plates_real.py` |
 | 11 | `engines/hook/` (client + host), `engines/system/anticheat.py`, `sources/hook.py`, `config/profile.py: HookSettings`, вкладка «Текст из игры» в `ui/settings/` |

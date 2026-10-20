@@ -200,10 +200,20 @@ def test_v2_profile_keeps_the_layout_with_the_most_zones() -> None:
 
 def test_v3_profile_gets_the_auto_capture() -> None:
     """TZ 1.28: version 3 -> 4 adds the capture mode, window with the screen fallback."""
-    new = migrate(profile_data(schema_version=3))
+    new = migrate(profile_data(schema_version=3), current=4)
     assert new["schema_version"] == 4 and new["capture"] == "auto"
     assert Profile.model_validate(new).capture == "auto"
     assert migrate(profile_data(schema_version=3, capture="dxgi"))["capture"] == "dxgi"
+
+
+def test_v4_zones_keep_their_fixed_rect() -> None:
+    """TZ 1.29: version 4 -> 5 — old zones keep their rect, they do not look for plates."""
+    new = migrate(profile_data(schema_version=4))
+    assert new["schema_version"] == 5
+    assert [z["locate"] for z in new["layout"]["zones"]] == ["fixed"]
+    assert Profile.model_validate(new).layout.zones[0].locate == "fixed"
+    empty = migrate({**profile_data(schema_version=4), "layout": {"zones": []}})
+    assert empty["layout"] == {"zones": []}
 
 
 def test_unknown_capture_mode_is_refused() -> None:

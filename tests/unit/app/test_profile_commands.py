@@ -17,7 +17,7 @@ def test_new_profile_has_tz_defaults(store: ProfileStore) -> None:
     p = stored.profile
     assert stored.path.name == "cyberpunk2077.exe.json"
     assert p.narrator_voice and p.default_voices.male and p.default_voices.female
-    assert "совет" in p.speaker_stoplist and p.layout.zones == []
+    assert "совет" in p.speaker_stoplist and [z.id for z in p.layout.zones] == ["subtitles_auto"]
     with pytest.raises(FileExistsError):
         pc.new_profile(store, "CYBERPUNK2077.EXE")
 
@@ -38,7 +38,7 @@ def test_add_zones_from_templates(store: ProfileStore) -> None:
         rect=(0.78, 0.18, 0.98, 0.26),
         overrides={"policy": {"repeat_cooldown_min": 5}},
     )
-    assert [z.id for z in stored.profile.layout.zones] == ["dialog", "objective"]
+    assert [z.id for z in stored.profile.layout.zones] == ["subtitles_auto", "dialog", "objective"]
     assert dialog.policy is not None and dialog.policy.priority == "high"
     assert dialog.mask.preset == "color"
     assert objective.policy is not None

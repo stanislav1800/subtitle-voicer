@@ -75,6 +75,7 @@ class OverlayZone:
     name: str
     rect: tuple[float, float, float, float]
     state: str
+    plates: tuple[tuple[float, float, float, float], ...] = ()  # TZ 4.2.2, frame fractions
 
 
 @dataclass(frozen=True, slots=True)
@@ -555,10 +556,12 @@ class AppFacade:
             monitor_rect = runtime.monitor_rect(status.window.hwnd)
         if parts is not None:
             states = parts.runner.zone_states()
+            plates = parts.runner.zone_plates()
             layout = self._active_layout(status)
             for zone in layout.zones if layout else []:
                 state = states.get(zone.id, "OFF" if zone.trigger == "off" else "—")
-                zones.append(OverlayZone(zone.id, zone.name or zone.id, zone.rect, state))
+                found = tuple(plates.get(zone.id, ()))
+                zones.append(OverlayZone(zone.id, zone.name or zone.id, zone.rect, state, found))
             scheduler = parts.speech.service.scheduler
             rate = scheduler.current_rate
             current = scheduler.current
@@ -608,6 +611,7 @@ class AppFacade:
             zones[zone.id] = {
                 "rect": list(zone.rect),
                 "text": reading.text,
+                "plates": [list(box) for box in reading.plates],  # TZ 4.2.2, crop pixels
                 "confidence": round(reading.confidence, 3),
                 "input": reading.input_kind,
                 "ms": round(reading.elapsed_ms),

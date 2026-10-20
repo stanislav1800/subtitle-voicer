@@ -38,7 +38,12 @@ from subvoicer.ui.widgets.common import (
 )
 
 PANEL_WIDTH = 400
+PLATES_HINT = (
+    "По подложке: рамка зоны — где искать субтитры, сами реплики находятся по своему фону, "
+    "каждая отдельно. Включите в игре фон субтитров и сделайте его непрозрачным."
+)
 TEMPLATE_TITLES = {
+    "subtitles_auto": "Субтитры (авто)",
     "dialog": "Диалоги",
     "note": "Записка",
     "notification": "Уведомления",
@@ -282,7 +287,11 @@ class ZonePanel(QScrollArea):
         box, duck = toggle_row("Приглушать игру", "", bool(policy.get("duck", True)))
         duck.toggled.connect(lambda on: self._update_policy(duck=on))
         self._props.addWidget(box)
-        self._mask_controls(zone)
+        if zone.get("locate") == "plates":
+            self._props.addWidget(section("Выделение текста"))
+            self._props.addWidget(label(PLATES_HINT, "hint", wrap=True))
+        else:
+            self._mask_controls(zone)
         self._preview_section()
 
     def _mask_controls(self, zone: dict[str, Any]) -> None:
@@ -334,6 +343,13 @@ class ZonePanel(QScrollArea):
             picture.setPixmap(pixmap)
             picture.setStyleSheet(f"border: 1px solid {theme.BORDER_CONTROL}; border-radius: 6px;")
             box.addWidget(picture)
+        if self._zone is not None and self._zone.get("locate") == "plates":
+            found = (
+                f"Найдено подложек: {preview.plates}"
+                if preview.plates
+                else ("Подложек не найдено — включите в игре непрозрачный фон субтитров")
+            )
+            box.addWidget(label(found, "caption", wrap=True))
         text = preview.text or "текст не распознан"
         box.addWidget(label(text, "", wrap=True))
         good = preview.confidence >= 0.8
@@ -438,4 +454,6 @@ def describe(zone: dict[str, Any]) -> str:
     if trigger == "off":
         return "выключена"
     priority = dict(PRIORITY).get(policy.get("priority", "normal"), "").lower().rstrip(".")
+    if zone.get("locate") == "plates":
+        return f"авто · по подложке · {priority}"
     return f"авто · {priority}"

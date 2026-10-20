@@ -45,6 +45,12 @@ class OcrEngine(Protocol):
     def recognize(self, image: npt.NDArray[np.uint8]) -> OcrResult: ...
 
 
+class TextDetector(Protocol):
+    """Text lines of an image without reading them: ``x1, y1, x2, y2`` in its pixels."""
+
+    def detect_lines(self, image: npt.NDArray[np.uint8]) -> list[tuple[int, int, int, int]]: ...
+
+
 class TtsEngine(Protocol):
     name: str
 

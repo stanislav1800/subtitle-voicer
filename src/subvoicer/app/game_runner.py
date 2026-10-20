@@ -48,7 +48,7 @@ from subvoicer.services.game_watcher import GameWatcher
 from subvoicer.services.speech_service import SpeechService
 from subvoicer.services.zone_service import ZoneService
 from subvoicer.sources.manual import SELECT_CHANNEL
-from subvoicer.sources.zone_ocr import NameSource, ZoneOcrSource, ZoneSpec
+from subvoicer.sources.zone_ocr import NameSource, PlateSearch, ZoneOcrSource, ZoneSpec
 
 log = logging.getLogger(__name__)
 
@@ -94,6 +94,11 @@ class OcrEngines:
                 path = self._words_path
                 self._words = load_word_counts(path) if path is not None else {}
             return self._words
+
+    def detector(self) -> Any:
+        """Text lines for the zones that look for subtitle plates (TZ 4.2.2): RapidOCR's
+        detector, whatever engine reads the text."""
+        return self.get("rapidocr")
 
     def get(self, engine_id: str) -> Any:
         with self._lock:
@@ -146,6 +151,7 @@ def zone_spec(profile: Profile, zone: Zone, zones: list[Zone], engines: OcrEngin
         runner=OcrRunner(engines.get(ocr.engine), OcrSettings(upscale=ocr.upscale)),
         junk=JunkFilter(short_words(), min_confidence=ocr.min_confidence),
         words=word_fixer(profile, ocr, engines),
+        plates=PlateSearch(engines.detector()) if zone.locate == "plates" else None,
     )
 
 
@@ -443,6 +449,11 @@ class GameRunner:
     def zone_states(self) -> dict[str, str]:
         session = self._session
         return session.source.states() if isinstance(session, GameSession) else {}
+
+    def zone_plates(self) -> dict[str, list[tuple[float, float, float, float]]]:
+        """Subtitle plates found in the «Субтитры (авто)» zones, in frame fractions."""
+        session = self._session
+        return session.source.plates() if isinstance(session, GameSession) else {}
 
     def latest_frame(self) -> Any:
         session = self._session

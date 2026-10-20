@@ -41,8 +41,16 @@ def _v3_to_v4(data: Data) -> Data:
     return data
 
 
+def _v4_to_v5(data: Data) -> Data:
+    """TZ 1.29: zones may look for subtitle plates; the old ones keep their fixed rect."""
+    layout = dict(data.get("layout") or {})
+    layout["zones"] = [{"locate": "fixed", **zone} for zone in layout.get("zones") or []]
+    data["layout"] = layout
+    return data
+
+
 # from version N to N+1; every entry has a unit test on an example of the old file
-MIGRATIONS: dict[int, Migration] = {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4}
+MIGRATIONS: dict[int, Migration] = {1: _v1_to_v2, 2: _v2_to_v3, 3: _v3_to_v4, 4: _v4_to_v5}
 
 
 class ProfileFormatError(ValueError):

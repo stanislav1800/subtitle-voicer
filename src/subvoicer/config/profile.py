@@ -11,8 +11,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from subvoicer.core.models import Gender
 
-SCHEMA_VERSION = 4  # 2: ocr.fix_words, ocr.confusions (TZ 1.23); 3: one layout (TZ 1.26);
-# 4: capture (TZ 1.28)
+SCHEMA_VERSION = 5  # 2: ocr.fix_words, ocr.confusions (TZ 1.23); 3: one layout (TZ 1.26);
+# 4: capture (TZ 1.28); 5: zone locate (TZ 1.29)
 MAX_ZONES = 12  # per layout (TZ 4.2)
 
 Hsv = tuple[int, int, int]
@@ -27,6 +27,8 @@ TriggerName = Literal["auto", "hotkey", "off"]
 CharacterSource = Literal["auto", "import", "manual"]
 # the window (WGC), the screen cut to the window (DXGI), or the window with the screen fallback
 CaptureName = Literal["auto", "wgc", "dxgi"]
+# the text is in the zone's rect, or the rect is where subtitle plates are looked for (4.2.2)
+LocateName = Literal["fixed", "plates"]
 
 
 class StrictModel(BaseModel):
@@ -145,6 +147,7 @@ class Zone(StrictModel):
     id: str = Field(min_length=1)
     name: str = ""
     kind: Literal["text", "speaker"] = "text"
+    locate: LocateName = "fixed"  # TZ 4.2.2, 1.29
     rect: tuple[Fraction, Fraction, Fraction, Fraction]  # x1, y1, x2, y2 in frame fractions
     mask: MaskConfig
     trigger: TriggerName | None = None  # text zones only
@@ -159,6 +162,8 @@ class Zone(StrictModel):
         if x1 >= x2 or y1 >= y2:
             raise ValueError(f"Зона {self.id}: прямоугольник пустой {self.rect}")
         if self.kind == "speaker":
+            if self.locate != "fixed":
+                raise ValueError(f"Зона {self.id} вида speaker не ищет подложки")
             if self.trigger or self.hotkey or self.policy or self.stabilization or self.ocr:
                 raise ValueError(f"Зона {self.id} вида speaker: только id, name, kind, rect, mask")
             return self

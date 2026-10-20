@@ -14,7 +14,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from subvoicer.core.models import Frame, Rect, Utterance, UtteranceKind
-from subvoicer.core.ports import Clock
+from subvoicer.core.ports import Clock, TextDetector
 from subvoicer.pipeline.dedup import (
     SPLIT_WINDOW_S,
     DedupKind,
@@ -31,6 +31,13 @@ from subvoicer.pipeline.speaker.resolver import SpeakerMode, SpeakerResolver, Sp
 from subvoicer.pipeline.vision.change import mask_empty
 from subvoicer.pipeline.vision.crop import crop
 from subvoicer.pipeline.vision.masks import Image, MaskSpec, build_mask
+from subvoicer.pipeline.vision.plates import (
+    Plate,
+    PlateSettings,
+    find_plates,
+    plate_mask,
+    still_there,
+)
 from subvoicer.pipeline.vision.regions import cut_out, paint_out, without
 from subvoicer.pipeline.vision.stability import (
     Emptied,
@@ -59,6 +66,17 @@ class NameSource:
 
 
 @dataclass(frozen=True)
+class PlateSearch:
+    """A «Субтитры (авто)» zone (TZ 4.2.2): its rect is where subtitle plates are looked
+    for; they are looked for again every ``locate_ms`` and soon when one is gone."""
+
+    detector: TextDetector
+    settings: PlateSettings = field(default_factory=PlateSettings)
+    locate_ms: int = 300
+    min_locate_ms: int = 100  # a vanished plate does not make it search every frame
+
+
+@dataclass(frozen=True)
 class ZoneSpec:
     id: str
     rect: Rect
@@ -71,6 +89,7 @@ class ZoneSpec:
     runner: OcrRunner | None = None  # per-zone OCR engine or settings; else the source's
     junk: JunkFilter | None = None  # per-zone min_confidence; else the source's
     words: WordFixer | None = None  # fixing OCR words by the dictionary (TZ 1.23)
+    plates: PlateSearch | None = None  # look for subtitle plates in rect (TZ 4.2.2)
 
 
 @dataclass
@@ -86,6 +105,8 @@ class _ZoneState:
     shown: list[str] = field(default_factory=list)  # lines of the last reading (TZ 1.22)
     voiced: str = ""  # the last voiced text and when (a split line's second half, TZ 1.28)
     voiced_at: float = float("-inf")
+    found: list[Plate] = field(default_factory=list)  # plates of a plates zone (TZ 4.2.2)
+    located_at: float = float("-inf")
 
 
 @dataclass(frozen=True)
@@ -100,6 +121,12 @@ class ZoneReading:
     input_kind: str
     elapsed_ms: float
     lines: list[SpeakerResult]  # per speaker (TZ 1.17), names already taken out
+    plates: list[tuple[int, int, int, int]] = field(default_factory=list)  # TZ 4.2.2, in crop
+
+
+def locate(image: Image, search: PlateSearch) -> list[Plate]:
+    """Subtitle plates of a zone's crop (TZ 4.2.2)."""
+    return find_plates(image, search.detector.detect_lines(image), search.settings)
 
 
 def fixed_words(spec: ZoneSpec, text: str) -> str:
@@ -111,26 +138,36 @@ def read_once(spec: ZoneSpec, frame: Image, runner: OcrRunner, separator: str = 
     state = _ZoneState(spec, ZoneStabilizer(spec.stabilization))
     state.frame = frame
     state.crop = crop(frame, spec.rect)
-    state.mask = build_mask(state.crop, spec.mask)
+    if spec.plates is not None:
+        state.found = locate(state.crop, spec.plates)
+        state.mask = plate_mask(state.crop, state.found, spec.plates.settings)
+    else:
+        state.mask = build_mask(state.crop, spec.mask)
     if spec.name is not None and spec.name.rect is None:
         state.name_mask = build_mask(state.crop, spec.name.mask)
         state.mask = without(state.mask, state.name_mask)
     active = spec.runner or runner
     image = state.crop if state.name_mask is None else paint_out(state.crop, state.name_mask)
     started = time.perf_counter()
-    outcome = active.run(image, state.mask, spec.ocr_input, separator=separator)
+    if spec.plates is not None:
+        texts, first, confidence = ZoneOcrSource._read_plates(state, image, active)
+        text, kind = separator.join(texts), str(first.input_kind if first else spec.ocr_input)
+    else:
+        outcome = active.run(image, state.mask, spec.ocr_input, separator=separator)
+        text = fixed_words(spec, ZoneOcrSource._keep_prefix_name(spec, outcome, outcome.text))
+        confidence, kind = outcome.mean_confidence, str(outcome.input_kind)
     elapsed = (time.perf_counter() - started) * 1000
-    text = fixed_words(spec, ZoneOcrSource._keep_prefix_name(spec, outcome, text=outcome.text))
     candidate = ZoneOcrSource._read_name(state, active)
     lines = spec.speaker.resolve_all(text, candidate) if text else []
     return ZoneReading(
         state.crop,
         state.mask,
         text,
-        outcome.mean_confidence,
-        str(outcome.input_kind),
+        confidence,
+        kind,
         elapsed,
         lines,
+        [p.box for p in state.found],
     )
 
 
@@ -149,6 +186,21 @@ class ZoneOcrSource:
         self._dedup = dedup
         self._clock = clock
         self._ids = itertools.count(1)
+
+    def plates(self) -> dict[str, list[tuple[float, float, float, float]]]:
+        """Zone id -> the plates found, in fractions of the frame (developer overlay)."""
+        found = {}
+        for zone in self._zones:
+            if zone.spec.plates is None or zone.crop is None:
+                continue
+            height, width = zone.crop.shape[:2]
+            r = zone.spec.rect
+            sx, sy = (r.x2 - r.x1) / width, (r.y2 - r.y1) / height
+            found[zone.spec.id] = [
+                (r.x1 + x1 * sx, r.y1 + y1 * sy, r.x1 + x2 * sx, r.y1 + y2 * sy)
+                for x1, y1, x2, y2 in (p.box for p in zone.found)
+            ]
+        return found
 
     def states(self) -> dict[str, str]:
         """Zone id -> stabiliser state (developer overlay)."""
@@ -169,7 +221,11 @@ class ZoneOcrSource:
             zone.frame_ts = frame.timestamp
             zone.frame = frame.image
             zone.crop = crop(frame.image, spec.rect)
-            zone.mask = build_mask(zone.crop, spec.mask)
+            if spec.plates is not None:
+                self._locate(zone, spec.plates, frame.timestamp)
+                zone.mask = plate_mask(zone.crop, zone.found, spec.plates.settings)
+            else:
+                zone.mask = build_mask(zone.crop, spec.mask)
             if spec.name is not None and spec.name.rect is None:
                 zone.name_mask = build_mask(zone.crop, spec.name.mask)
                 zone.mask = without(zone.mask, zone.name_mask)
@@ -178,7 +234,10 @@ class ZoneOcrSource:
             event_time = now  # no new frame: only time passes
 
         before = stabilizer.state
-        decision = stabilizer.update(zone.mask, event_time)
+        area = None  # a plates zone: shares of the plates, the search area is far bigger
+        if spec.plates is not None:
+            area = sum((x2 - x1) * (y2 - y1) for x1, y1, x2, y2 in (p.box for p in zone.found))
+        decision = stabilizer.update(zone.mask, event_time, area)
         if stabilizer.state is not before:
             log.debug("Зона %s: %s -> %s", spec.id, before, stabilizer.state)
         if isinstance(decision, Emptied) or decision is None:
@@ -186,38 +245,96 @@ class ZoneOcrSource:
         assert isinstance(decision, RunOcr)
         return self._recognize(zone, decision)
 
+    def _locate(self, zone: _ZoneState, search: PlateSearch, now: float) -> None:
+        """Plates again every ``locate_ms``, and sooner when a plate is gone (TZ 4.2.2)."""
+        assert zone.crop is not None
+        since = (now - zone.located_at) * 1000
+        gone = any(not still_there(zone.crop, p, search.settings) for p in zone.found)
+        if not (since >= search.locate_ms or (gone and since >= search.min_locate_ms)):
+            return
+        zone.located_at = now
+        before = [p.box for p in zone.found]
+        zone.found = locate(zone.crop, search)
+        if [p.box for p in zone.found] != before:
+            log.debug("Зона %s: подложки %s", zone.spec.id, [p.box for p in zone.found])
+
+    @staticmethod
+    def _read_plates(
+        zone: _ZoneState, image: Image, runner: OcrRunner
+    ) -> tuple[list[str], OcrOutcome | None, float]:
+        """Every plate read on its own, top to bottom: its text (names kept, words fixed),
+        the first outcome (for the log and the input kind) and the mean confidence."""
+        assert zone.mask is not None
+        spec = zone.spec
+        texts, outcomes = [], []
+        for plate in zone.found:
+            x1, y1, x2, y2 = plate.box
+            outcome = runner.run(image[y1:y2, x1:x2], zone.mask[y1:y2, x1:x2], spec.ocr_input)
+            text = fixed_words(spec, ZoneOcrSource._keep_prefix_name(spec, outcome, outcome.text))
+            if text.strip():
+                texts.append(text)
+                outcomes.append(outcome)
+        if not outcomes:
+            return [], None, 0.0
+        weights = [max(1, len(t)) for t in texts]
+        confidence = sum(o.mean_confidence * w for o, w in zip(outcomes, weights, strict=True))
+        return texts, outcomes[0], confidence / sum(weights)
+
     def _recognize(self, zone: _ZoneState, decision: RunOcr) -> list[Utterance]:
         spec, stabilizer = zone.spec, zone.stabilizer
         assert zone.crop is not None and zone.mask is not None
         runner = spec.runner or self._runner
         image = zone.crop if zone.name_mask is None else paint_out(zone.crop, zone.name_mask)
         started = time.perf_counter()
-        outcome = runner.run(image, zone.mask, spec.ocr_input)
+        plate_texts: list[str] = []  # a plates zone: one text per plate (TZ 4.2.2)
+        first: OcrOutcome | None
+        if spec.plates is not None:
+            plate_texts, first, confidence = self._read_plates(zone, image, runner)
+            text = " ".join(plate_texts)
+        else:
+            first = runner.run(image, zone.mask, spec.ocr_input)
+            confidence = first.mean_confidence
+            text = fixed_words(spec, self._keep_prefix_name(spec, first, text=first.text))
         elapsed_ms = (time.perf_counter() - started) * 1000
+        input_kind = str(first.input_kind) if first is not None else str(spec.ocr_input)
         log.debug(
             "Зона %s: OCR %.0f мс, вход %s, уверенность %.2f: %r",
             spec.id,
             elapsed_ms,
-            outcome.input_kind,
-            outcome.mean_confidence,
-            outcome.text,
+            input_kind,
+            confidence,
+            plate_texts or text,
         )
-        text = fixed_words(spec, self._keep_prefix_name(spec, outcome, text=outcome.text))
         if decision.still_typing:
             # read before typing ended: the last word is likely cut, it comes with the rest
             text = drop_last_word(text)
+            if plate_texts:
+                plate_texts[-1] = drop_last_word(plate_texts[-1])
         # the next line's name shows before its text: wait for the text (TZ 1.22)
         text = spec.speaker.without_trailing_name(text)
-        verdict = (spec.junk or self._junk).check(text, outcome.mean_confidence)
+        if plate_texts:
+            plate_texts[-1] = spec.speaker.without_trailing_name(plate_texts[-1])
+        verdict = (spec.junk or self._junk).check(text, confidence)
         if not verdict.ok:
             log.debug(
                 "Зона %s: не озвучиваю — фильтр мусора (%s, уверенность %.2f): %r",
                 spec.id,
                 verdict.reason,
-                outcome.mean_confidence,
+                confidence,
                 text,
             )
             return []
+
+        # a plates zone: plates whose text is still on screen are not part of the new line
+        # — dedup compares only the new plates (TZ 4.2.2: a short line over a long one)
+        still: list[str] = []
+        if len(plate_texts) > 1 and not stabilizer.was_empty:
+            fresh = [t for t in plate_texts if not on_screen(t, zone.shown)]
+            if not fresh:
+                log.debug("Зона %s: не озвучиваю — все подложки ещё на экране", spec.id)
+                return []
+            still = [t for t in plate_texts if t not in fresh]
+            plate_texts, text = fresh, " ".join(fresh)
 
         now = self._clock.now()
         t_change = decision.t_change
@@ -244,11 +361,14 @@ class ZoneOcrSource:
         # TZ 1.22: lines of the previous reading that are still on screen are not voiced again
         previous = [] if was_empty else zone.shown
         candidate = self._name_candidate(zone)
-        zone.shown = [part.text for part in spec.speaker.parts(text, candidate)]
+        # every plate is a line of its own, as if one under another in one zone (4.2.2)
+        readings = plate_texts if len(plate_texts) > 1 else [text]
+        zone.shown = [p.text for t in readings for p in spec.speaker.parts(t, candidate)]
+        zone.shown += [p.text for t in still for p in spec.speaker.parts(t)]
         lines: list[tuple[UtteranceKind, str | None, str]] = []
         speaker = spec.speaker
         new_text = result.text
-        whole = speaker.parts(text, candidate)
+        whole = [part for t in readings for part in speaker.parts(t, candidate)]
         # a stacked subtitle that does not start with a name (a line without a name above, or
         # the cut top of an older one), some of its lines already voiced: line by line too
         stacked = (
@@ -320,8 +440,8 @@ class ZoneOcrSource:
                     speaker=speaker_name,
                     t_change=t_change,
                     t_detected=now,
-                    confidence=outcome.mean_confidence,
-                    ocr_input=str(outcome.input_kind),
+                    confidence=confidence,
+                    ocr_input=input_kind,
                     id=utterance_id,
                 )
             )

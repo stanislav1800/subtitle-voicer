@@ -87,10 +87,14 @@ class ZoneStabilizer:
         self._t_change = 0.0
         self._t_last_change = 0.0
         self._growing = True
+        self._area: int | None = None
 
-    def update(self, mask: Mask, now: float) -> Decision:
+    def update(self, mask: Mask, now: float, area: int | None = None) -> Decision:
+        """``area``: where text can be, if not the whole mask (the plates of a plates zone,
+        TZ 4.2.2) — the change and emptiness shares are of it."""
         s = self.settings
-        empty = mask_empty(mask, s.empty_ratio)
+        self._area = area
+        empty = mask_empty(mask, s.empty_ratio, area)
         previous, self._previous = self._previous, mask
 
         if empty:
@@ -112,7 +116,7 @@ class ZoneStabilizer:
             assert self._shown is not None
             # only a real change (change_ratio) leaves SHOWN: small growth here is usually a
             # bright blob of the background behind unchanged text, not typing
-            if mask_changed(self._shown, mask, s.change_ratio):
+            if mask_changed(self._shown, mask, s.change_ratio, area):
                 self._begin_change(now, growing=self._is_growth(self._shown, mask))
                 return self._maybe_ocr(mask, now)
             return None
@@ -120,7 +124,7 @@ class ZoneStabilizer:
         # CHANGING
         if previous is None:
             self._t_last_change = now
-        elif mask_changed(previous, mask, s.change_ratio):
+        elif mask_changed(previous, mask, s.change_ratio, area):
             self._t_last_change = now
             if not self._is_growth(previous, mask):
                 self._growing = False
@@ -155,7 +159,7 @@ class ZoneStabilizer:
         if before.shape != after.shape:
             return False
         added, removed = _added_removed(before, after)
-        enough = added >= self.settings.min_growth_ratio * after.size
+        enough = added >= self.settings.min_growth_ratio * (self._area or after.size)
         return enough and added >= self.settings.growth_share * (added + removed)
 
     def _maybe_ocr(self, mask: Mask, now: float) -> Decision:

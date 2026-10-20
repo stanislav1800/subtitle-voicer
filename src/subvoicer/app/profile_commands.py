@@ -56,7 +56,8 @@ def new_profile(
     install_dir: str | None = None,
     icon: str | None = None,
 ) -> StoredProfile:
-    """Voices by TZ 4.6 from the voice catalog, the default speaker stop-list, no zones.
+    """Voices by TZ 4.6 from the voice catalog, the default speaker stop-list and the zone
+    «Субтитры (авто)» (TZ 4.2.2): nothing to set up for a game with subtitle plates.
     ``exe`` is None for a Steam game: it is bound on the first run (4.11)."""
     profiles = store.load_all()
     if exe is not None and install_dir is None and store.match(profiles, exe, None) is not None:
@@ -70,12 +71,44 @@ def new_profile(
         narrator_voice=defaults.narrator,
         default_voices=DefaultVoices(male=defaults.male, female=defaults.female),
         speaker_stoplist=speaker_stoplist(),
+        layout=Layout(zones=[zone_from_template(AUTO_TEMPLATE, AUTO_RECT, set())]),
     )
     return store.save(profile, store.path_for(profile, profiles))
 
 
+AUTO_TEMPLATE = "subtitles_auto"
+AUTO_RECT = (0.0, 0.55, 1.0, 1.0)  # where subtitle plates are looked for (TZ 4.2.2)
+
+
 def zone_templates() -> dict[str, dict[str, Any]]:
     return read_toml("zone_templates.toml")
+
+
+def zone_from_template(
+    template: str,
+    rect: tuple[float, float, float, float],
+    taken: set[str],
+    *,
+    zone_id: str | None = None,
+    overrides: dict[str, Any] | None = None,
+) -> Zone:
+    """A zone from a template (TZ 4.2) with an id not in ``taken``; ``overrides`` replaces
+    top-level fields such as mask and is merged into ``policy``."""
+    templates = zone_templates()
+    if template not in templates:
+        raise KeyError(f"Нет шаблона {template!r} (есть: {', '.join(templates)})")
+    data = dict(templates[template])
+    for key, value in (overrides or {}).items():
+        if key == "policy" and isinstance(value, dict):
+            data["policy"] = {**data.get("policy", {}), **value}
+        else:
+            data[key] = value
+    base = zone_id or template
+    new_id = base
+    counter = 2
+    while new_id in taken:
+        new_id, counter = f"{base}{counter}", counter + 1
+    return Zone.model_validate({"id": new_id, **data, "rect": rect})
 
 
 def add_zone(
@@ -89,24 +122,11 @@ def add_zone(
 ) -> tuple[StoredProfile, Zone]:
     """A zone from a template (TZ 4.2); ``overrides`` replaces top-level fields such as mask
     and is merged into ``policy``."""
-    templates = zone_templates()
-    if template not in templates:
-        raise KeyError(f"Нет шаблона {template!r} (есть: {', '.join(templates)})")
-    data = dict(templates[template])
-    for key, value in (overrides or {}).items():
-        if key == "policy" and isinstance(value, dict):
-            data["policy"] = {**data.get("policy", {}), **value}
-        else:
-            data[key] = value
     stored = find_profile(store, ref)
     layout = stored.profile.layout
-    taken = {z.id for z in layout.zones}
-    base = zone_id or template
-    new_id = base
-    counter = 2
-    while new_id in taken:
-        new_id, counter = f"{base}{counter}", counter + 1
-    zone = Zone.model_validate({"id": new_id, **data, "rect": rect})
+    zone = zone_from_template(
+        template, rect, {z.id for z in layout.zones}, zone_id=zone_id, overrides=overrides
+    )
     profile = stored.profile.model_copy(update={"layout": Layout(zones=[*layout.zones, zone])})
     return store.save(profile, stored.path), zone
 

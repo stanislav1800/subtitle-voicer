@@ -65,7 +65,7 @@ def test_never_ask_and_create_from_notification(tmp_path: Path) -> None:
     window = WindowRef(1, 999_999, "Game.exe", "Новая игра", 1920, 1080)
     stored = facade.create_profile_for(window)
     assert stored.profile.exe == "Game.exe" and stored.profile.title == "Новая игра"
-    assert stored.profile.layout.zones == []
+    assert [z.locate for z in stored.profile.layout.zones] == ["plates"]  # TZ 4.2.2
 
 
 def test_zone_hotkeys_are_registered_only_while_the_game_is_active(tmp_path: Path) -> None:

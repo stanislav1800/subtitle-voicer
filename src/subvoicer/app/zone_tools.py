@@ -26,6 +26,7 @@ log = logging.getLogger(__name__)
 Image = npt.NDArray[np.uint8]
 HsvRange = tuple[tuple[int, int, int], tuple[int, int, int]]
 FRAME_TIMEOUT_S = 2.0
+PLATE_FRAME = (120, 200, 80)  # BGR: the plates found in the preview
 
 
 def grab_window(hwnd: int, timeout_s: float = FRAME_TIMEOUT_S) -> Image | None:
@@ -77,6 +78,7 @@ class ZonePreview:
     voice: str | None = None  # the voice the line would get
     voice_reason: str = ""
     error: str = ""
+    plates: int = 0  # plates found, for a «Субтитры (авто)» zone (TZ 4.2.2)
 
 
 def preview_zone(
@@ -101,14 +103,20 @@ def preview_zone(
     speaker = first.name if first else None
     text = " ".join(line.text for line in reading.lines) if reading.lines else reading.text
     voice, reason = _voice_for(zone, profile, speaker, text, gender)
+    mask = reading.mask
+    if zone.locate == "plates":  # the plates found, framed on the mask (TZ 4.2.2)
+        mask = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
+        for x1, y1, x2, y2 in reading.plates:
+            cv2.rectangle(mask, (x1, y1), (x2 - 1, y2 - 1), PLATE_FRAME, 3)
     return ZonePreview(
-        reading.mask,
+        mask,
         text,
         reading.confidence,
         reading.elapsed_ms,
         speaker,
         voice,
         reason,
+        plates=len(reading.plates),
     )
 
 

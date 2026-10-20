@@ -93,6 +93,8 @@ def zone_behaviour(zone: Zone) -> str:
     if zone.trigger == "hotkey":
         return f"По клавише {pretty(zone.hotkey) if zone.hotkey else ''}".strip()
     parts = [TRIGGER_TEXT.get(zone.trigger or "", "")]
+    if zone.locate == "plates":
+        parts.append("по подложке")  # TZ 4.2.2
     if zone.trigger == "auto" and policy is not None:
         parts.append(f"{PRIORITY_TEXT[policy.priority]} приоритет")
         if policy.repeat_cooldown_min:

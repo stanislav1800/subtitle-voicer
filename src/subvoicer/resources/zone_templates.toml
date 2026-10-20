@@ -1,5 +1,14 @@
 # Шаблоны зон (ТЗ 4.2): заполняют поля новой зоны, дальше всё можно поменять.
 
+# ТЗ 4.2.2: прямоугольник — где искать подложки субтитров; есть у нового профиля сразу
+[subtitles_auto]
+name = "Субтитры (авто)"
+kind = "text"
+locate = "plates"
+trigger = "auto"
+mask = { preset = "bright_on_dark" }
+policy = { priority = "high", voice = { mode = "speaker" }, speaker = { mode = "prefix" }, repeat_cooldown_min = 0, duck = true }
+
 [dialog]
 name = "Диалоги"
 kind = "text"

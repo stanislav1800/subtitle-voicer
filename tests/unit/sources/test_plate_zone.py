@@ -1,0 +1,154 @@
+"""A «Субтитры (авто)» zone end to end on fakes (TZ 4.2.2): plates are found in the search
+area, each plate is a line of its own, a line still on screen is not voiced again."""
+
+from __future__ import annotations
+
+import numpy as np
+
+from subvoicer.config.resources import short_words, speaker_stoplist
+from subvoicer.core.models import Frame, OcrLine, OcrResult, Rect, Utterance, UtteranceKind
+from subvoicer.pipeline.dedup import Deduplicator
+from subvoicer.pipeline.ocr.junk_filter import JunkFilter
+from subvoicer.pipeline.ocr.runner import OcrRunner
+from subvoicer.pipeline.speaker.resolver import SpeakerMode, SpeakerResolver
+from subvoicer.pipeline.vision.masks import MaskPreset, MaskSpec
+from subvoicer.sources.zone_ocr import PlateSearch, ZoneOcrSource, ZoneSpec, read_once
+from tests.fakes.clock import FakeClock
+
+H, W = 360, 1280
+FRAME_S = 0.1
+Box = tuple[int, int, int, int]
+
+
+class Screen:
+    """A noisy scene with plates on it; the detector reports the plates' text lines, the
+    OCR tells the plates apart by their width (the crop it gets is one plate)."""
+
+    def __init__(self) -> None:
+        self.clock = FakeClock(100.0)
+        self.plates: dict[Box, str] = {}
+        self.hud: Box | None = None
+        self.ocr_calls = 0
+        self.detector_calls = 0
+        zone = ZoneSpec(
+            id="subtitles_auto",
+            rect=Rect(0.0, 0.0, 1.0, 1.0),
+            mask=MaskSpec(MaskPreset.BRIGHT_ON_DARK),
+            speaker=SpeakerResolver(SpeakerMode.PREFIX, speaker_stoplist()),
+            plates=PlateSearch(self),
+        )
+        self.zone = zone
+        self.source = ZoneOcrSource(
+            [zone], OcrRunner(self), JunkFilter(short_words()), Deduplicator(), self.clock
+        )
+        self.out: list[Utterance] = []
+        self.rng = np.random.default_rng(3)
+
+    # the text detector and the OCR engine of the zone
+    def detect_lines(self, image: np.ndarray) -> list[Box]:
+        self.detector_calls += 1
+        lines = [self._line(box) for box in self.plates]
+        return lines + ([self.hud] if self.hud else [])
+
+    def recognize(self, image: np.ndarray) -> OcrResult:
+        self.ocr_calls += 1
+        aspect = image.shape[1] / image.shape[0]
+        _box, text = min(
+            self.plates.items(),
+            key=lambda item: abs((item[0][2] - item[0][0]) / (item[0][3] - item[0][1]) - aspect),
+        )
+        return OcrResult((OcrLine(text, 0.97, (0, 0, 10, 10)),))
+
+    @staticmethod
+    def _line(box: Box) -> Box:
+        x1, y1, x2, y2 = box
+        pad = (y2 - y1) // 4
+        return (x1 + pad, y1 + pad, x2 - pad, y2 - pad)
+
+    def frame(self) -> Frame:
+        image = self.rng.integers(60, 140, (H, W, 3), dtype=np.uint8)
+        for box in self.plates:
+            x1, y1, x2, y2 = box
+            image[y1:y2, x1:x2] = 12
+            lx1, ly1, lx2, ly2 = self._line(box)
+            for x in range(lx1, lx2 - 3, 9):
+                image[ly1:ly2, x : x + 3] = 235
+        if self.hud:
+            x1, y1, x2, y2 = self.hud
+            for x in range(x1, x2 - 3, 9):
+                image[y1:y2, x : x + 3] = 235
+        return Frame(image, self.clock.now())
+
+    def run(self, seconds: float) -> None:
+        for _ in range(round(seconds / FRAME_S)):
+            self.clock.advance(FRAME_S)
+            self.out += self.source.process(self.frame())
+
+
+AD = "Пока вы у нас, рекомендую скандинавскую ходьбу."
+HELLO = "Алло? Алло!"
+
+
+def test_a_plate_is_voiced_once() -> None:
+    s = Screen()
+    s.plates = {(340, 262, 940, 322): AD}
+    s.run(3)
+    assert [u.text for u in s.out] == [AD]
+    assert s.detector_calls <= 3 / 0.3 + 1  # plates looked for every 300 ms, not every frame
+
+
+def test_a_new_plate_above_a_line_still_on_screen_is_voiced_alone() -> None:
+    """Alan Wake: a short line appears over the long one still showing — only it sounds
+    (it used to be lost, glued to the long one)."""
+    s = Screen()
+    s.plates = {(340, 262, 940, 322): AD}
+    s.run(2)
+    s.plates = {(540, 200, 740, 250): HELLO, (340, 262, 940, 322): AD}
+    s.run(2)
+    assert [(u.kind, u.text) for u in s.out] == [
+        (UtteranceKind.NEW, AD),
+        (UtteranceKind.NEW, HELLO),
+    ]
+
+
+def test_text_without_a_plate_is_not_read_and_a_gone_plate_empties_the_zone() -> None:
+    s = Screen()
+    s.hud = (40, 40, 400, 80)  # HUD letters right on the scene
+    s.run(2)
+    assert s.out == [] and s.ocr_calls == 0
+    s.plates = {(340, 262, 940, 322): AD}
+    s.run(2)
+    s.plates = {}
+    s.run(1)
+    s.plates = {(340, 262, 940, 322): AD}  # the same line said again after a pause
+    s.run(2)
+    assert [u.text for u in s.out] == [AD, AD]
+
+
+def test_read_once_reads_plates_only() -> None:
+    s = Screen()
+    s.plates = {(540, 200, 740, 250): HELLO, (340, 262, 940, 322): AD}
+    s.hud = (40, 40, 400, 80)
+    reading = read_once(s.zone, s.frame().image, OcrRunner(s), separator="\n")
+    assert reading.text == f"{HELLO}\n{AD}"
+    assert len(reading.plates) == 2
+
+
+def test_the_old_plate_going_away_voices_nothing_again() -> None:
+    s = Screen()
+    s.plates = {(340, 262, 940, 322): AD}
+    s.run(2)
+    s.plates = {(540, 200, 740, 250): HELLO, (340, 262, 940, 322): AD}
+    s.run(2)
+    s.plates = {(540, 200, 740, 250): HELLO}  # the long line ends, the short one stays
+    s.run(2)
+    assert [u.text for u in s.out] == [AD, HELLO]
+
+
+def test_plates_for_the_overlay_are_in_frame_fractions() -> None:
+    s = Screen()
+    s.plates = {(340, 262, 940, 322): AD}
+    s.run(1)
+    ((x1, y1, x2, y2),) = s.source.plates()["subtitles_auto"]
+    assert abs(x1 - 340 / W) < 0.01 and abs(y2 - 322 / H) < 0.01
+    assert abs(x2 - 940 / W) < 0.01 and abs(y1 - 262 / H) < 0.01

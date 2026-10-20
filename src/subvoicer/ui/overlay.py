@@ -112,6 +112,16 @@ class Overlay(QWidget):
             painter.drawRect(area)
             top = area.y() - 5 if area.y() >= 16 else area.y() + 14  # inside at the window top
             painter.drawText(QPointF(area.x() + 2, top), f"{zone.id} · {zone.state}")
+            painter.setPen(QPen(color, 2))
+            for px1, py1, px2, py2 in zone.plates:  # the subtitle plates found (TZ 4.2.2)
+                painter.drawRect(
+                    QRectF(
+                        game.x() + px1 * game.width(),
+                        game.y() + py1 * game.height(),
+                        (px2 - px1) * game.width(),
+                        (py2 - py1) * game.height(),
+                    )
+                )
         self._panel(painter, state)
         painter.end()
 

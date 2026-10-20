@@ -34,6 +34,7 @@ log = logging.getLogger(__name__)
 
 PREVIEW_DELAY_MS = 400
 DEFAULT_RECTS: dict[str, Fractions] = {
+    "subtitles_auto": pc.AUTO_RECT,  # where the plates are looked for (TZ 4.2.2)
     "dialog": (0.2, 0.82, 0.8, 0.95),
     "note": (0.3, 0.15, 0.7, 0.8),
     "notification": (0.62, 0.05, 0.98, 0.15),
