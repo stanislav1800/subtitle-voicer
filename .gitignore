@@ -20,6 +20,8 @@ logs/
 
 # Сгенерированные фикстуры (реальные кадры в tests/fixtures/real/ коммитим)
 tests/fixtures/synthetic/
+# Кадры для поиска подложек (~100 МБ): только у пользователя; разметка — в tests/fixtures/real/<игра>/plates.json
+tests/fixtures/plates/
 
 # IDE / ОС
 .vscode/
