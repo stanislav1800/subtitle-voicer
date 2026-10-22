@@ -11,6 +11,7 @@ from pathlib import Path
 from PySide6.QtCore import QSize, Qt, QTimer
 from PySide6.QtGui import QPainter, QPainterPath, QPixmap
 from PySide6.QtWidgets import (
+    QApplication,
     QFileDialog,
     QFrame,
     QHBoxLayout,
@@ -202,6 +203,7 @@ class ProfilesPage(Page):
         self._speech_timer.timeout.connect(self._save_speech)
         self._open_editor = open_editor
         self._selected: Path | None = None
+        self._shown: Path | None = None  # the profile on the right
         columns = QHBoxLayout()
         columns.setSpacing(16)
         self.content.addLayout(columns)
@@ -344,6 +346,19 @@ class ProfilesPage(Page):
                 label(f"Профиль не читается: {format_error(exc)}", "caption", wrap=True)
             )
             return
+        # the same profile redrawn after a change: the page stays where it was — the changed
+        # field goes away with the old cards, and the focus jumped to a button at the bottom
+        # and the page scrolled after it
+        same = path == self._shown
+        self._shown = path
+        bar = self.verticalScrollBar()
+        position = bar.value()
+        focused = QApplication.focusWidget()
+        name = (
+            focused.accessibleName() if focused is not None and self.isAncestorOf(focused) else ""
+        )
+        if name:
+            self.setFocus()
         clear_layout(self._detail)
         self._detail.addWidget(self._header(path, profile))
         self._detail.addWidget(self._zones(path, profile))
@@ -353,6 +368,17 @@ class ProfilesPage(Page):
         self._detail.addWidget(self._stoplist(path, profile))
         self._fill_dictionary(path, profile)
         self.fit_height()
+        if same:
+            QTimer.singleShot(0, lambda: self._restore(position, name))
+
+    def _restore(self, position: int, name: str) -> None:
+        if name:
+            field = next(
+                (w for w in self.findChildren(QWidget) if w.accessibleName() == name), None
+            )
+            if field is not None:
+                field.setFocus(Qt.FocusReason.OtherFocusReason)
+        self.verticalScrollBar().setValue(position)
 
     def _header(self, path: Path, profile: Profile) -> QWidget:
         card = Card()

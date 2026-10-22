@@ -62,3 +62,32 @@ def test_character_dialog_locks_what_was_changed() -> None:
     created = new.result_character()
     assert created is not None and created.source == "manual" and created.gender_locked
     assert created.voice is None and not created.voice_locked
+
+
+def test_a_change_keeps_the_page_where_it_was(qt: QApplication, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """Choosing in a drop-down redraws the profile: the page jumped to the bottom after the
+    focus, which went to the last button when the changed field went away."""
+    from PySide6.QtWidgets import QComboBox
+
+    from subvoicer.app.facade import AppFacade
+    from subvoicer.config.paths import AppPaths
+    from subvoicer.ui.settings.profiles import ProfilesPage
+
+    facade = AppFacade(AppPaths(tmp_path))
+    facade.store.save(Profile.model_validate(profile_data()))
+    page = ProfilesPage(facade, lambda *_: None)
+    page.resize(900, 400)
+    page.show()
+    page.refresh()
+    for _ in range(5):
+        qt.processEvents()
+    bar = page.verticalScrollBar()
+    assert bar.maximum() > 100
+    bar.setValue(100)
+    box = next(b for b in page.findChildren(QComboBox) if b.accessibleName() == "Рассказчик")
+    box.setFocus()
+    box.setCurrentIndex((box.currentIndex() + 1) % box.count())
+    for _ in range(10):
+        qt.processEvents()
+    assert bar.value() == 100
+    page.close()
