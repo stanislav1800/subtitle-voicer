@@ -13,6 +13,7 @@ from subvoicer.pipeline.speaker.gender import GenderGuesser
 
 class VoiceMode(StrEnum):
     SPEAKER = "speaker"  # by who speaks: character voice / gender default / narrator
+    GENDER = "gender"  # by gender, the profile voices only (TZ 1.32)
     FIXED = "fixed"
     NARRATOR = "narrator"
 
@@ -65,10 +66,13 @@ class VoicePicker:
                 return fixed_id
             case VoiceMode.NARRATOR:
                 return self.defaults.narrator
-            case VoiceMode.SPEAKER:
-                gender = self._gender.guess(text)
-                if gender is Gender.MALE:
-                    return self.defaults.male
-                if gender is Gender.FEMALE:
-                    return self.defaults.female
-                return self.defaults.narrator
+            case VoiceMode.SPEAKER | VoiceMode.GENDER:
+                return self.by_gender(self._gender.guess(text))
+
+    def by_gender(self, gender: Gender) -> str:
+        """The profile voice of a gender; unknown — the narrator."""
+        if gender is Gender.MALE:
+            return self.defaults.male
+        if gender is Gender.FEMALE:
+            return self.defaults.female
+        return self.defaults.narrator

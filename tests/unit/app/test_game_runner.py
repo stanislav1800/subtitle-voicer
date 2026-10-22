@@ -132,6 +132,28 @@ def test_hand_edited_voice_is_not_overwritten(rig: Rig) -> None:
     assert rig.router.request(line("Я пошёл.", speaker="Керри")).voice_id == "m2"  # type: ignore[union-attr]
 
 
+def test_by_gender_characters_speak_with_the_profile_voices(tmp_path: Path) -> None:
+    """TZ 1.32: characters are recorded, but voiced only by the profile voices — even one
+    that was given a voice of its own by hand."""
+    zones = [dialog_zone(voice={"mode": "gender"})]
+    store = ProfileStore(tmp_path / "profiles")
+    path = store.save(Profile.model_validate(profile_data(layout={"zones": zones}))).path
+    gender = GenderGuesser(gender_exceptions())
+    router = ProfileRouter(store, CharacterBook(VOICES, gender), gender)
+    router.set_profile(path, store.load(path), "16:9")
+    assert router.request(line("Я сама разберусь.", speaker="Панам")).voice_id == "f"  # type: ignore[union-attr]
+    (panam,) = store.load(path).characters
+    assert panam.name == "Панам" and panam.voice in {"f1", "f2"}  # recorded as usual
+    assert router.request(line("Пошли.", speaker="Джеки")).voice_id == "n"  # gender unknown
+    assert router.request(line("Я пошёл.", speaker="Ривер")).voice_id == "m"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["characters"][0].update(voice="m2", voice_locked=True)
+    path.write_text(json.dumps(data), encoding="utf-8")
+    router.set_profile(path, store.load(path), "16:9")
+    assert router.request(line("Поехали.", speaker="Панам")).voice_id == "f"  # still by gender
+    assert router.request(line("Я пошла.")).voice_id == "f"  # no name: by the text
+
+
 def test_continuation_keeps_the_voice(rig: Rig) -> None:
     first = rig.router.request(line("Я пошла.", speaker="Джуди"))
     tail = rig.router.request(line("и всё", cont=True))

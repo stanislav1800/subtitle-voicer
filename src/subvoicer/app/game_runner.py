@@ -28,7 +28,15 @@ from subvoicer.config.resources import gender_exceptions, short_words
 from subvoicer.config.settings import Settings
 from subvoicer.config.words import load_word_counts
 from subvoicer.core.events import CaptureStopped, GameActivated, GameClosed, UtteranceDetected
-from subvoicer.core.models import Priority, Rect, SpeechRequest, Utterance, UtteranceKind, WindowRef
+from subvoicer.core.models import (
+    Gender,
+    Priority,
+    Rect,
+    SpeechRequest,
+    Utterance,
+    UtteranceKind,
+    WindowRef,
+)
 from subvoicer.core.ports import EventBus
 from subvoicer.pipeline.dedup import Deduplicator
 from subvoicer.pipeline.games.matching import OfferPolicy
@@ -354,6 +362,13 @@ class ProfileRouter:
         character = resolved.character
         how = "вручную" if character.voice_locked else "авто"
         matched = "" if character.name == utterance.speaker else f"«{utterance.speaker}» → "
+        if mode is VoiceMode.GENDER:
+            # recorded as a character, voiced by the profile voices only (TZ 1.32)
+            gender = character.gender
+            if gender is Gender.UNKNOWN:
+                gender = self._gender.guess(utterance.text)
+            what = {"male": "мужской", "female": "женский"}.get(gender.value, "рассказчик")
+            return picker.by_gender(gender), f"{matched}персонаж {character.name}, по полу: {what}"
         if character.voice:
             return character.voice, f"{matched}персонаж {character.name}, {how}"
         return picker.pick(mode, utterance.text), f"{matched}персонаж {character.name} без голоса"

@@ -77,7 +77,12 @@ CAPTURE_HINT = (
     "в полноэкранном режиме: читается всё, что лежит поверх игры"
 )
 TRIGGER_TEXT = {"auto": "Авто", "hotkey": "По клавише", "off": "Выключена"}
-VOICE_MODE_TEXT = {"speaker": "По говорящему", "narrator": "Рассказчик", "fixed": "Свой голос"}
+VOICE_MODE_TEXT = {
+    "speaker": "По говорящему",
+    "gender": "По полу",
+    "narrator": "Рассказчик",
+    "fixed": "Свой голос",
+}
 
 
 def initials(title: str) -> str:

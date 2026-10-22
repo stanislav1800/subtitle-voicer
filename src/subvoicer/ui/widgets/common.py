@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QButtonGroup,
     QComboBox,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QLayout,
@@ -199,12 +200,16 @@ class Segmented(QFrame):
 
     changed = Signal(str)
 
-    def __init__(self, options: Sequence[tuple[str, str]], value: str) -> None:
+    def __init__(
+        self, options: Sequence[tuple[str, str]], value: str, columns: int | None = None
+    ) -> None:
+        """``columns``: buttons per row — four long ones do not fit the 400 px editor panel."""
         super().__init__()
         self.setObjectName("segments")
-        layout = QHBoxLayout(self)
+        layout = QGridLayout(self)
         layout.setContentsMargins(3, 3, 3, 3)
         layout.setSpacing(2)
+        per_row = columns or len(options)
         self._group = QButtonGroup(self)
         self._buttons: dict[str, QPushButton] = {}
         for key, text in options:
@@ -215,7 +220,8 @@ class Segmented(QFrame):
             button.clicked.connect(lambda _=False, k=key: self.changed.emit(k))
             self._group.addButton(button)
             self._buttons[key] = button
-            layout.addWidget(button)
+            index = len(self._buttons) - 1
+            layout.addWidget(button, index // per_row, index % per_row)
 
     def value(self) -> str:
         return next((k for k, b in self._buttons.items() if b.isChecked()), "")

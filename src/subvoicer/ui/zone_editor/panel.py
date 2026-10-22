@@ -52,7 +52,19 @@ TEMPLATE_TITLES = {
 }
 PRIORITY = (("high", "Высокий"), ("normal", "Обычн."), ("low", "Низкий"))
 TRIGGER = (("auto", "Авто"), ("hotkey", "Клавиша"), ("off", "Выкл"))
-VOICE = (("speaker", "По говорящему"), ("narrator", "Рассказчик"), ("fixed", "Выбранный"))
+VOICE = (
+    ("speaker", "По говорящему"),
+    ("gender", "По полу"),  # characters by the profile voices only (TZ 1.32)
+    ("narrator", "Рассказчик"),
+    ("fixed", "Выбранный"),
+)
+VOICE_HINT = {
+    "speaker": "У каждого персонажа свой голос: назначается сам или вручную в «Профилях»",
+    "gender": "Персонажи запоминаются, но звучат голосами профиля: мужской, женский, "
+    "пол неизвестен — рассказчик",
+    "narrator": "Всё — голосом рассказчика профиля",
+    "fixed": "Всё — одним выбранным голосом",
+}
 SPEAKER = (
     ("color", "По цвету"),
     ("prefix", "Перед текстом"),
@@ -235,9 +247,12 @@ class ZonePanel(QScrollArea):
             self._props.addWidget(priority)
         self._props.addWidget(section("Голос"))
         voice = policy.get("voice", {"mode": "speaker"})
-        voice_mode = Segmented(VOICE, voice.get("mode", "speaker"))
+        voice_mode = Segmented(VOICE, voice.get("mode", "speaker"), columns=2)
         voice_mode.changed.connect(self._set_voice_mode)
         self._props.addWidget(voice_mode)
+        self._props.addWidget(
+            label(VOICE_HINT.get(voice.get("mode", "speaker"), ""), "hint", wrap=True)
+        )
         if voice.get("mode") == "fixed":
             fixed_id = voice.get("id") or ""
             choose = combo(voice_items(self._voices, current=fixed_id), fixed_id, "Голос зоны")

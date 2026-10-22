@@ -61,6 +61,12 @@ def _v6_to_v7(data: Data) -> Data:
     return data
 
 
+def _v7_to_v8(data: Data) -> Data:
+    """TZ 1.32: a zone may speak «по полу» (voice mode gender) — nothing to change in old
+    data, the version keeps older apps from reading a mode they do not know."""
+    return data
+
+
 # from version N to N+1; every entry has a unit test on an example of the old file
 MIGRATIONS: dict[int, Migration] = {
     1: _v1_to_v2,
@@ -69,6 +75,7 @@ MIGRATIONS: dict[int, Migration] = {
     4: _v4_to_v5,
     5: _v5_to_v6,
     6: _v6_to_v7,
+    7: _v7_to_v8,
 }
 
 

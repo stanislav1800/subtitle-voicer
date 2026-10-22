@@ -11,8 +11,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from subvoicer.core.models import Gender
 
-SCHEMA_VERSION = 7  # 2: ocr.fix_words, ocr.confusions (TZ 1.23); 3: one layout (TZ 1.26);
-# 4: capture (TZ 1.28); 5: zone locate (TZ 1.29); 6: pause_in_editor (TZ 1.30); 7: speech (1.31)
+SCHEMA_VERSION = 8  # 2: ocr.fix_words, ocr.confusions (TZ 1.23); 3: one layout (TZ 1.26);
+# 4: capture (TZ 1.28); 5: zone locate (TZ 1.29); 6: pause_in_editor (TZ 1.30); 7: speech (1.31);
+# 8: voice mode gender (1.32)
 MAX_ZONES = 12  # per layout (TZ 4.2)
 
 Hsv = tuple[int, int, int]
@@ -21,7 +22,7 @@ Fraction = Annotated[float, Field(ge=0.0, le=1.0)]
 
 MaskPresetName = Literal["color", "bright_on_dark", "dark_on_bright", "adaptive"]
 PriorityName = Literal["high", "normal", "low"]
-VoiceModeName = Literal["speaker", "fixed", "narrator"]
+VoiceModeName = Literal["speaker", "gender", "fixed", "narrator"]
 SpeakerModeName = Literal["prefix", "zone", "color", "none"]
 TriggerName = Literal["auto", "hotkey", "off"]
 CharacterSource = Literal["auto", "import", "manual"]
