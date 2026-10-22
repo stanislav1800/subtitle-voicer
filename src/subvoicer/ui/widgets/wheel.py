@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QAbstractSpinBox,
     QApplication,
     QComboBox,
+    QScrollBar,
     QWidget,
 )
 
@@ -20,16 +21,26 @@ FIELDS = (QComboBox, QAbstractSlider, QAbstractSpinBox)
 
 
 class WheelGuard(QObject):
+    def __init__(self, parent: QObject | None = None) -> None:
+        super().__init__(parent)
+        self._passing = False  # a wheel is being handed to a page now
+
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:
-        if not isinstance(watched, FIELDS):
+        # a scroll bar is a slider too, and a page hands its wheel to its scroll bar: it
+        # must keep it, or the wheel goes round between them and the app crashes
+        if not isinstance(watched, FIELDS) or isinstance(watched, QScrollBar):
             return False
         if event.type() == QEvent.Type.Polish:
             # the wheel must not give the focus by itself (Qt.WheelFocus of a drop-down)
             watched.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         elif event.type() == QEvent.Type.Wheel and not watched.hasFocus():
             page = _scrolling_parent(watched)
-            if page is not None:
-                QCoreApplication.sendEvent(page.viewport(), event)
+            if page is not None and not self._passing:
+                self._passing = True
+                try:
+                    QCoreApplication.sendEvent(page.viewport(), event)
+                finally:
+                    self._passing = False
             return True
         return False
 
