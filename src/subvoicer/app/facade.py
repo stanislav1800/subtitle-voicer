@@ -168,6 +168,8 @@ class AppFacade:
         self._reader: ManualReader | None = None
         self._library_lock = threading.Lock()
         self._hardware: CharacterHardware | None = None
+        self._engine_sizes: dict[tuple[bool, str], int] = {}  # (installed, device) -> bytes
+        self._engine_lock = threading.Lock()
         self._device: str | None = None  # what to build the engine for; None — the best one
         self._installing: CharacterSetup | None = None
         set_zone_details(self.settings.dev_mode)
@@ -420,7 +422,8 @@ class AppFacade:
                     found[zone.hotkey] = f"{title} · {zone.name or zone.id}"
         return found
 
-    def output_devices(self) -> list[str]:
+    def output_devices(self) -> list[tuple[str, str]]:
+        """(stored name, name to show)."""
         return runtime.output_devices()
 
     def voices(self) -> list[Voice]:
@@ -495,7 +498,29 @@ class AppFacade:
     def character_engine(self) -> tuple[bool, int, str | None]:
         """(installed, bytes on disk — or to be, what it is built for) of the shared engine."""
         setup = self._character_setup(self.character_device)
-        return setup.engine_installed(), setup.engine_size(), setup.env_device()
+        installed = setup.engine_installed()
+        return installed, self._engine_size(setup, installed), setup.env_device()
+
+    def _engine_size(self, setup: CharacterSetup, installed: bool) -> int:
+        """-1 while it is being counted. The installed engine is counted file by file (~8 s
+        for its ~2 GB) in the background, once — «Общие» showed after a long freeze each time;
+        installing or removing anything counts it again."""
+        if not installed:
+            return setup.engine_size()  # an estimate from the manifest, instant
+        key = (installed, self.character_device)
+        with self._engine_lock:
+            if key in self._engine_sizes:
+                return self._engine_sizes[key]
+            self._engine_sizes[key] = -1
+
+        def count() -> None:
+            size = setup.engine_size()
+            with self._engine_lock:
+                if self._engine_sizes.get(key) == -1:
+                    self._engine_sizes[key] = size
+
+        threading.Thread(target=count, name="EngineSize", daemon=True).start()
+        return -1
 
     def install_character(
         self,
@@ -601,6 +626,8 @@ class AppFacade:
         return CharacterSetup(self.paths, device=device)
 
     def _refresh_characters(self) -> None:
+        with self._engine_lock:
+            self._engine_sizes.clear()  # something was installed or removed
         parts = self._parts
         if parts is not None and parts.speech.characters is not None:
             parts.speech.characters.set_installed(

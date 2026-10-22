@@ -129,7 +129,8 @@ def set_autostart(enabled: bool) -> None:
         autostart.set_enabled(enabled, autostart_command())
 
 
-def output_devices() -> list[str]:
+def output_devices() -> list[tuple[str, str]]:
+    """(stored name, name to show) of every output device."""
     from subvoicer.engines.audio.output import output_devices as devices
 
     try:

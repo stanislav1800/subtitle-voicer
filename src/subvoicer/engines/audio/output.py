@@ -211,13 +211,32 @@ class SoundDeviceOutput:
         line.fade_left = 0 if written == 0 else line.fade_left - n
 
 
-def output_devices() -> list[str]:
-    """Names of the output devices of the default host API (what ``device=`` accepts)."""
+def output_devices() -> list[tuple[str, str]]:
+    """Output devices of the default host API: (name ``device=`` accepts, name to show)."""
     import sounddevice as sd
 
-    hostapi = sd.default.hostapi
-    names = []
-    for device in sd.query_devices():
-        if device["max_output_channels"] > 0 and device["hostapi"] == hostapi:
-            names.append(str(device["name"]))
-    return names
+    return device_choices(
+        [dict(d) for d in sd.query_devices()],
+        [dict(h) for h in sd.query_hostapis()],
+        int(sd.default.hostapi),
+    )
+
+
+def device_choices(
+    devices: list[dict[str, Any]], hostapis: list[dict[str, Any]], default: int
+) -> list[tuple[str, str]]:
+    """The default host API (MME) cuts names at 31 characters («P275MR+ (NVIDIA High
+    Definition»): the full name is taken from another host API's device that starts with it;
+    the stored name stays the MME one. MME's sound mapper is «Системное по умолчанию» again
+    and is not listed."""
+    outputs = [d for d in devices if d["max_output_channels"] > 0]
+    others = [str(d["name"]) for d in outputs if d["hostapi"] != default]
+    mme = hostapis[default]["name"] == "MME" if default < len(hostapis) else False
+    choices = []
+    for position, device in enumerate(d for d in outputs if d["hostapi"] == default):
+        name = str(device["name"])
+        if mme and position == 0 and name.endswith("- Output"):
+            continue  # Microsoft Sound Mapper — the system default
+        full = next((o for o in others if len(o) > len(name) and o.startswith(name)), name)
+        choices.append((name, full))
+    return choices

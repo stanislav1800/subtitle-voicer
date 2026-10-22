@@ -22,6 +22,7 @@ from subvoicer.ui import theme
 from subvoicer.ui.widgets.common import label
 
 WINDOW_SIZE = (1100, 720)
+MIN_WINDOW_SIZE = (1050, 560)
 SIDEBAR_WIDTH = 240
 
 
@@ -72,6 +73,8 @@ class SettingsWindow(QWidget):
         self.setWindowTitle("Subtitle Voicer")
         self.setWindowIcon(theme.app_icon())
         self.resize(*WINDOW_SIZE)
+        # narrower, the profile page does not fit and is cut at the side (measured: 1045 px)
+        self.setMinimumSize(*MIN_WINDOW_SIZE)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)

@@ -159,7 +159,10 @@ class CharactersCard(Card):
         self, hardware: CharacterHardware, installed: bool, size: int, device: str
     ) -> QWidget:
         target = "процессора" if device == CPU else f"видеокарты ({self._gpu(hardware, device)})"
-        size_note = f"на диске {size_text(size)}" if installed else f"~{size_text(size)}"
+        if size < 0:
+            size_note = "размер на диске считается…"
+        else:
+            size_note = f"на диске {size_text(size)}" if installed else f"~{size_text(size)}"
         details = f"для {target}, общий для всех голосов · {size_note}"
         if self._installing == ENGINE:
             button = QPushButton("Отмена")

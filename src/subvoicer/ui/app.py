@@ -45,6 +45,7 @@ from subvoicer.ui.settings.hotkeys import HotkeysPage
 from subvoicer.ui.settings.profiles import ProfilesPage
 from subvoicer.ui.settings.window import SettingsWindow
 from subvoicer.ui.tray import Tray, pretty
+from subvoicer.ui.widgets.wheel import install_wheel_guard
 from subvoicer.ui.zone_editor.editor import ZoneEditor
 
 log = logging.getLogger("subvoicer.ui")
@@ -422,6 +423,7 @@ def main() -> int:
         tell_first_copy()
         return 0
     theme.apply(qt)
+    install_wheel_guard(qt)  # the wheel scrolls the page, not the field under it
     facade = AppFacade(paths)
     if facade.settings.autostart:
         try:  # the command follows the environment (venv moved, new flags)

@@ -44,11 +44,17 @@ def combo(items: Sequence[tuple[str, object]], value: object, name: str) -> QCom
     """A drop-down that does not grow with its longest item."""
     box = QComboBox()
     box.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
-    box.setMinimumContentsLength(14)
+    box.setMinimumContentsLength(10)
     box.setAccessibleName(name)
-    for text, data in items:
+    for index, (text, data) in enumerate(items):
         box.addItem(text, data)
+        box.setItemData(index, text, Qt.ItemDataRole.ToolTipRole)
     box.setCurrentIndex(max(box.findData(value), 0))
+    # the field may be narrow, the open list is as wide as its longest item
+    view = box.view()
+    view.setMinimumWidth(view.sizeHintForColumn(0) + 2 * view.frameWidth() + 24)
+    box.setToolTip(box.currentText())
+    box.currentTextChanged.connect(box.setToolTip)
     return box
 
 
@@ -124,7 +130,22 @@ def row(left: QWidget, right: QWidget) -> QWidget:
     layout = QHBoxLayout(box)
     layout.setContentsMargins(0, 0, 0, 0)
     layout.addWidget(left, 1)
-    layout.addWidget(right, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+    if isinstance(right, QComboBox):  # a drop-down takes half the row: its text is readable
+        layout.addWidget(right, 1, Qt.AlignmentFlag.AlignVCenter)
+    else:
+        layout.addWidget(right, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+    return box
+
+
+def stacked(top: QWidget, field: QWidget) -> QWidget:
+    """A title over a field as wide as the card: a drop-down in a narrow column stays
+    readable."""
+    box = QWidget()
+    layout = QVBoxLayout(box)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(6)
+    layout.addWidget(top)
+    layout.addWidget(field)
     return box
 
 

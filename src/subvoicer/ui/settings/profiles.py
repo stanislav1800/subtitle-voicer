@@ -55,10 +55,11 @@ from subvoicer.ui.widgets.common import (
     icon_button,
     label,
     primary,
-    row,
+    stacked,
     titled,
     toggle_row,
 )
+from subvoicer.ui.widgets.flow import FlowLayout
 
 log = logging.getLogger(__name__)
 
@@ -264,6 +265,7 @@ class ProfilesPage(Page):
                 is_configured(stored.profile),
                 self._facade.icon_path(stored.profile),
             )
+            row.setToolTip(tip)  # the row covers the item: the full title on hover
             item = QListWidgetItem()
             item.setData(Qt.ItemDataRole.UserRole, str(stored.path))
             item.setToolTip(tip)
@@ -364,7 +366,8 @@ class ProfilesPage(Page):
         top.addLayout(names, 1)
         card.body.addLayout(top)
         running = self._facade.status().profile_path == str(path)
-        actions = QHBoxLayout()
+        holder = QWidget()
+        actions = FlowLayout(holder, spacing=8)  # buttons wrap to a new line in a narrow window
         in_game = primary("  Настроить в игре", lambda: self._open_editor(path, "game"))
         in_game.setIcon(theme.icon("crosshair", theme.ON_ACCENT))
         in_game.setEnabled(running)
@@ -374,22 +377,21 @@ class ProfilesPage(Page):
         screenshot.setIcon(theme.icon("image"))
         screenshot.clicked.connect(lambda: self._open_editor(path, "screenshot"))
         actions.addWidget(screenshot)
-        actions.addStretch(1)
         export = QPushButton("Экспорт")
         export.clicked.connect(lambda: self._export(path))
         actions.addWidget(export)
         delete = QPushButton("Удалить")
         delete.clicked.connect(lambda: self._delete(path, title))
         actions.addWidget(delete)
-        card.body.addLayout(actions)
+        card.body.addWidget(holder)
         return card
 
     def _zones(self, path: Path, profile: Profile) -> QWidget:
         card = Card()
-        head = QHBoxLayout()
-        head.addWidget(label("ЗОНЫ", "sectionTitle"), 1)
-        head.addWidget(label("В долях окна — для любого размера · изменяются в редакторе", "hint"))
-        card.body.addLayout(head)
+        card.body.addWidget(label("ЗОНЫ", "sectionTitle"))
+        card.body.addWidget(
+            label("В долях окна — для любого размера · изменяются в редакторе", "hint", wrap=True)
+        )
         zones = profile.layout.zones
         if not zones:
             card.body.addWidget(
@@ -458,7 +460,7 @@ class ProfilesPage(Page):
             )
             card.body.addLayout(line)
         if any(v.preferred for v in voices):
-            card.body.addWidget(label(PREFERRED_HINT, "hint"))
+            card.body.addWidget(label(PREFERRED_HINT, "hint", wrap=True))
         return card
 
     def _speech(self, path: Path, profile: Profile) -> QWidget:
@@ -474,7 +476,7 @@ class ProfilesPage(Page):
             lambda _i: self._set_speech(path, overlap_mode=overlap.currentData())
         )
         card.body.addWidget(
-            row(
+            stacked(
                 titled(
                     "Новая реплика, пока звучит старая",
                     f"того же приоритета · в общих: {modes[general.overlap_mode].lower()}",

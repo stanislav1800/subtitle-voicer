@@ -28,6 +28,7 @@ from subvoicer.ui.widgets.common import (
     combo,
     label,
     row,
+    stacked,
     titled,
     toggle_row,
 )
@@ -112,6 +113,7 @@ class GeneralPage(Page):
         self._timer.timeout.connect(self._apply)
         self._building = False
         self._fine_open = False  # «Тонкая настройка» shown
+        self._built_from: Settings | None = None
         self._grid = QGridLayout()
         self._grid.setSpacing(16)
         self.content.addLayout(self._grid)
@@ -126,10 +128,15 @@ class GeneralPage(Page):
     # ------------------------------------------------------------------ building
 
     def refresh(self) -> None:
-        """Rebuilt from the current settings (they may change from the tray or a hotkey)."""
+        """Rebuilt from the current settings (they may change from the tray or a hotkey);
+        the same settings as last time — only the character voices are looked at again."""
+        s = self._facade.settings
+        if s == self._built_from and self._grid.count():
+            self.characters.refresh()
+            return
+        self._built_from = s
         self._building = True
         clear_layout(self._grid)
-        s = self._facade.settings
         left, right = QVBoxLayout(), QVBoxLayout()
         left.setSpacing(16)
         right.setSpacing(16)
@@ -167,12 +174,13 @@ class GeneralPage(Page):
         )
         rate.changed.connect(lambda v: self._set(base_rate=v))
         card.body.addWidget(rate)
-        devices = [("Системное по умолчанию", ""), *((n, n) for n in self._facade.output_devices())]
+        choices = self._facade.output_devices()
+        devices = [("Системное по умолчанию", ""), *((shown, name) for name, shown in choices)]
         device = combo(devices, s.output_device, "Устройство вывода")
         device.currentIndexChanged.connect(
             lambda _i: self._set(output_device=device.currentData(), now=True)
         )
-        card.body.addWidget(row(label("Устройство вывода", wrap=True), device))
+        card.body.addWidget(stacked(label("Устройство вывода", wrap=True), device))
         return card
 
     def _queue(self, s: Settings) -> Card:
@@ -186,7 +194,7 @@ class GeneralPage(Page):
             lambda _i: self._set(overlap_mode=overlap.currentData(), now=True)
         )
         card.body.addWidget(
-            row(titled("Новая реплика, пока звучит старая", "того же приоритета"), overlap)
+            stacked(titled("Новая реплика, пока звучит старая", "того же приоритета"), overlap)
         )
         hurry = SliderRow(
             "Ускорение дочитывания", 1.0, 2.0, 0.05, s.hurry_rate, lambda v: f"{v:.2f}×"
@@ -264,14 +272,14 @@ class GeneralPage(Page):
         never = ExeList(s.never_ask_exes)
         never.changed.connect(lambda values: self._set(never_ask_exes=values, now=True))
         card.body.addWidget(never)
-        more = QPushButton(("▾ " if self._fine_open else "▸ ") + "Тонкая настройка")
+        more = QPushButton()
         more.setCheckable(True)
-        more.setChecked(self._fine_open)
         card.body.addWidget(more)
         fine = self._fine(s)
-        fine.setVisible(self._fine_open)
-        more.toggled.connect(lambda on: self._show_fine(on))
-        card.body.addWidget(fine)
+        card.body.addWidget(fine)  # in the card first: a shown widget without a parent is a window
+        more.toggled.connect(lambda on: self._show_fine(on, more, fine))
+        more.setChecked(self._fine_open)
+        self._show_fine(self._fine_open, more, fine)
         return card
 
     def _fine(self, s: Settings) -> QWidget:
@@ -322,9 +330,12 @@ class GeneralPage(Page):
             body.addWidget(row(titled("Кеш синтеза", "сколько фраз хранить готовыми"), cache))
         return box
 
-    def _show_fine(self, on: bool) -> None:
+    def _show_fine(self, on: bool, button: QPushButton, fine: QWidget) -> None:
+        """Shown or hidden in place, the page is not rebuilt."""
         self._fine_open = on
-        self.refresh()
+        button.setText(("▾ " if on else "▸ ") + "Тонкая настройка")
+        fine.setVisible(on)
+        QTimer.singleShot(0, self.fit_height)
 
     def sync(self) -> None:
         """The tray switch or a hotkey changed «enabled» while the page is open."""
@@ -366,3 +377,5 @@ class GeneralPage(Page):
         self._facade.apply_settings(new)
         if rebuild:
             QTimer.singleShot(0, self.refresh)
+        else:
+            self._built_from = self._facade.settings  # the controls already show it

@@ -20,6 +20,7 @@ from subvoicer.app.facade import AppFacade
 from subvoicer.core.models import HistoryEntry
 from subvoicer.ui import theme
 from subvoicer.ui.app import Application
+from subvoicer.ui.widgets.wheel import install_wheel_guard
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -35,6 +36,7 @@ def main() -> int:
     runtime.prepare_process()
     qt = QApplication(sys.argv)
     theme.apply(qt)
+    install_wheel_guard(qt)
     facade = AppFacade()
     if args.dev:  # in memory only: the settings file is not touched
         facade.settings = facade.settings.model_copy(update={"dev_mode": True})
