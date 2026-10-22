@@ -7,6 +7,7 @@ import logging
 from dataclasses import dataclass
 
 import psutil
+import pywintypes
 import win32api
 import win32con
 import win32gui
@@ -103,8 +104,11 @@ def monitors() -> list[MonitorRef]:
 
 
 def monitor_of_window(hwnd: int) -> MonitorRef:
-    handle = win32api.MonitorFromWindow(hwnd, win32con.MONITOR_DEFAULTTONEAREST)
-    device = win32api.GetMonitorInfo(handle)["Device"]
+    try:
+        handle = win32api.MonitorFromWindow(hwnd, win32con.MONITOR_DEFAULTTONEAREST)
+        device = win32api.GetMonitorInfo(handle)["Device"]
+    except pywintypes.error as exc:  # the window is closing (the game quits)
+        raise LookupError(f"Монитор окна {hwnd} недоступен: {exc}") from exc
     for monitor in monitors():
         if monitor.device == device:
             return monitor

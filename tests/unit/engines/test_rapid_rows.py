@@ -25,3 +25,11 @@ def test_small_punctuation_box_joins_its_row() -> None:
 
 def test_empty() -> None:
     assert merge_rows([]) == []
+
+
+def test_a_tall_icon_does_not_glue_two_lines() -> None:
+    """Alan Wake: a key at the right end of a two-line plate is as tall as both lines — the
+    whole plate became one «line» and was read as «Д, ндотр сисны.неиажии с»."""
+    line1, icon, line2 = (20, 11, 2343, 72), (2353, 35, 2386, 122), (1005, 69, 1352, 129)
+    rows = merge_rows([line1, icon, line2])
+    assert line1 in rows and line2 in rows

@@ -133,25 +133,42 @@ def zone_spec(profile: Profile, zone: Zone, zones: list[Zone], engines: OcrEngin
     elif speaker.mode == "color":
         name = NameSource(mask_spec(MaskConfig(preset="color", colors_hsv=speaker.colors_hsv)))
     stab = profile.stabilization.merged(zone.stabilization)
+    settled = StabilizationSettings(
+        stable_ms=stab.stable_ms,
+        max_wait_ms=stab.max_wait_ms,
+        typing_max_wait_ms=stab.typing_max_wait_ms,
+        change_ratio=stab.change_ratio,
+        empty_ratio=stab.empty_ratio,
+    )
     ocr = profile.ocr.merged(zone.ocr)
     return ZoneSpec(
         id=zone.id,
         rect=rect_of(zone),
         mask=mask_spec(zone.mask),
         speaker=SpeakerResolver(SpeakerMode(speaker.mode), profile.speaker_stoplist),
-        stabilization=StabilizationSettings(
-            stable_ms=stab.stable_ms,
-            max_wait_ms=stab.max_wait_ms,
-            typing_max_wait_ms=stab.typing_max_wait_ms,
-            change_ratio=stab.change_ratio,
-            empty_ratio=stab.empty_ratio,
-        ),
+        stabilization=plate_stabilization(settled) if zone.locate == "plates" else settled,
         repeat_cooldown_min=zone.policy.repeat_cooldown_min,
         name=name,
         runner=OcrRunner(engines.get(ocr.engine), OcrSettings(upscale=ocr.upscale)),
         junk=JunkFilter(short_words(), min_confidence=ocr.min_confidence),
         words=word_fixer(profile, ocr, engines),
         plates=PlateSearch(engines.detector()) if zone.locate == "plates" else None,
+    )
+
+
+PLATE_MAX_WAIT_MS = 600  # a plate is there: its text is read by then, settled or not
+PLATE_MIN_GROWTH = 0.01  # of the plates' area: a character or two of a short line
+
+
+def plate_stabilization(settings: StabilizationSettings) -> StabilizationSettings:
+    """A «Субтитры (авто)» zone (TZ 4.2.2): the shares are of the plates, and a short line's
+    plate is small — the growth of 0.02% that catches one typed character in a whole zone is
+    3 pixels of it, so noise around the letters kept the zone «changing» and short lines
+    (~1 s on screen in Alan Wake) went away unread before the 1.5 s limit."""
+    return replace(
+        settings,
+        max_wait_ms=min(settings.max_wait_ms, PLATE_MAX_WAIT_MS),
+        min_growth_ratio=max(settings.min_growth_ratio, PLATE_MIN_GROWTH),
     )
 
 

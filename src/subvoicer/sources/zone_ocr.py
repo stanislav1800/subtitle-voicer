@@ -32,8 +32,10 @@ from subvoicer.pipeline.vision.change import mask_empty
 from subvoicer.pipeline.vision.crop import crop
 from subvoicer.pipeline.vision.masks import Image, MaskSpec, build_mask
 from subvoicer.pipeline.vision.plates import (
+    Box,
     Plate,
     PlateSettings,
+    cut_short,
     find_plates,
     plate_mask,
     still_there,
@@ -74,6 +76,10 @@ class PlateSearch:
     settings: PlateSettings = field(default_factory=PlateSettings)
     locate_ms: int = 300
     min_locate_ms: int = 100  # a vanished plate does not make it search every frame
+    # plates just gone are looked for every min_locate_ms for this long: the detector now
+    # and then misses a plate for one search — the miss must be shorter than the flicker
+    # rule (300 ms, TZ 1.17), or the same line is voiced again
+    recheck_ms: int = 1000
 
 
 @dataclass(frozen=True)
@@ -107,6 +113,7 @@ class _ZoneState:
     voiced_at: float = float("-inf")
     found: list[Plate] = field(default_factory=list)  # plates of a plates zone (TZ 4.2.2)
     located_at: float = float("-inf")
+    seen_at: float = float("-inf")  # plates were last found then
 
 
 @dataclass(frozen=True)
@@ -125,8 +132,39 @@ class ZoneReading:
 
 
 def locate(image: Image, search: PlateSearch) -> list[Plate]:
-    """Subtitle plates of a zone's crop (TZ 4.2.2)."""
-    return find_plates(image, search.detector.detect_lines(image), search.settings)
+    """Subtitle plates of a zone's crop (TZ 4.2.2).
+
+    The detector on the whole search area now and then misses a line of a tight two-line
+    plate (Alan Wake: the lower line is gone at 800 and 1280 px, found at 960) — the plate
+    then ends at the first line and the second one comes and goes, voiced again each time.
+    So it looks again at a strip around a plate with letters at its edge (``cut_short``),
+    where it sees both lines."""
+    lines = search.detector.detect_lines(image)
+    plates = find_plates(image, lines, search.settings)
+    height, width = image.shape[:2]
+    extra: list[Box] = []
+    for plate in plates:
+        if not cut_short(image, plate, search.settings):
+            continue
+        x1, y1, x2, y2 = plate.box
+        reach = max(b[3] - b[1] for b in plate.lines)
+        left, top = max(0, x1 - reach), max(0, y1 - reach)
+        strip = image[top : min(height, y2 + reach), left : min(width, x2 + reach)]
+        for bx1, by1, bx2, by2 in search.detector.detect_lines(strip):
+            box = (bx1 + left, by1 + top, bx2 + left, by2 + top)
+            if bx2 - bx1 < search.settings.min_aspect * (by2 - by1):
+                continue  # a key hint by the plate («F5»), not a line of it
+            if not any(_covers(known, box) for known in [*lines, *extra]):
+                extra.append(box)
+    return find_plates(image, [*lines, *extra], search.settings) if extra else plates
+
+
+def _covers(known: Box, box: Box) -> bool:
+    """Most of ``box`` is a line already known."""
+    common = max(0, min(known[2], box[2]) - max(known[0], box[0])) * max(
+        0, min(known[3], box[3]) - max(known[1], box[1])
+    )
+    return common >= 0.5 * max(1, (box[2] - box[0]) * (box[3] - box[1]))
 
 
 def fixed_words(spec: ZoneSpec, text: str) -> str:
@@ -250,11 +288,14 @@ class ZoneOcrSource:
         assert zone.crop is not None
         since = (now - zone.located_at) * 1000
         gone = any(not still_there(zone.crop, p, search.settings) for p in zone.found)
-        if not (since >= search.locate_ms or (gone and since >= search.min_locate_ms)):
+        recheck = not zone.found and (now - zone.seen_at) * 1000 <= search.recheck_ms
+        if not (since >= search.locate_ms or ((gone or recheck) and since >= search.min_locate_ms)):
             return
         zone.located_at = now
         before = [p.box for p in zone.found]
         zone.found = locate(zone.crop, search)
+        if zone.found:
+            zone.seen_at = now
         if [p.box for p in zone.found] != before:
             log.debug("Зона %s: подложки %s", zone.spec.id, [p.box for p in zone.found])
 

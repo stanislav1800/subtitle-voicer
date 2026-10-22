@@ -17,13 +17,14 @@ import cv2
 import pytest
 
 from subvoicer.config.paths import AppPaths
-from subvoicer.pipeline.vision.plates import Box, find_plates
+from subvoicer.pipeline.vision.plates import Box
+from subvoicer.sources.zone_ocr import PlateSearch, locate
 
 ROOT = Path(__file__).resolve().parents[1] / "fixtures"
 DET_MODEL = AppPaths.default().models_dir / "rapidocr" / "ch_PP-OCRv5_det_mobile.onnx"
 SEARCH_TOP = 0.55  # the default search area of the zone starts here (TZ 4.2.2)
 # game -> (plates that must be found, of how many), extra boxes allowed
-EXPECTED = {"alan_wake": (29, 29, 0), "cyberpunk": (11, 12, 1), "silent_hill_f": (12, 12, 0)}
+EXPECTED = {"alan_wake": (31, 31, 0), "cyberpunk": (11, 12, 1), "silent_hill_f": (12, 12, 0)}
 
 
 def matches(found: Box, label: Box) -> bool:
@@ -57,7 +58,7 @@ def test_plates_on_real_frames(game: str, detector) -> None:  # type: ignore[no-
         lower = cv2.imread(str(folder / f"{name}.png"))
         offset = round((SEARCH_TOP - 0.5) * 2 * lower.shape[0])
         search = lower[offset:]
-        plates = find_plates(search, detector.detect_lines(search))
+        plates = locate(search, PlateSearch(detector))  # as the app looks for them
         found = [(x1, y1 + offset, x2, y2 + offset) for x1, y1, x2, y2 in (p.box for p in plates)]
         boxes = [(x, y, x + w, y + h) for x, y, w, h in (p["box"] for p in entry["plates"])]
         extra += sum(not any(matches(f, b) for b in boxes) for f in found)

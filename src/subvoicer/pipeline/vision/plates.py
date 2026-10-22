@@ -21,6 +21,8 @@ import numpy.typing as npt
 from subvoicer.pipeline.vision.masks import Image
 
 Box = tuple[int, int, int, int]  # x1, y1, x2, y2 in pixels of the search image
+CUT_PLATE = 0.6  # a strip at the plate's edge: this share in the plate colour...
+CUT_LETTERS = 0.1  # ...and this share of letter pixels — a line of the plate is there
 
 
 @dataclass(frozen=True, slots=True)
@@ -127,6 +129,25 @@ def plate_mask(
         lighter = part.sum(axis=2) > int(colour.sum())
         mask[y1:y2, x1:x2] = np.where(far & lighter, 255, 0).astype(np.uint8)
     return mask
+
+
+def cut_short(image: Image, plate: Plate, settings: PlateSettings | None = None) -> bool:
+    """Right above or below the plate there are letters on the plate colour: a text line
+    of this plate the detector missed (the plate stopped growing at it)."""
+    s = settings or PlateSettings()
+    height = image.shape[0]
+    x1, y1, x2, y2 = plate.box
+    reach = max(2, max(b[3] - b[1] for b in plate.lines) // 2)
+    colour = np.array(plate.colour, np.int16)
+    for top, bottom in ((max(0, y1 - reach), y1), (y2, min(height, y2 + reach))):
+        if bottom <= top:
+            continue
+        part = image[top:bottom, x1:x2, :3].astype(np.int16)
+        diff = np.abs(part - colour).max(axis=2)
+        letters = (diff > s.letter_diff) & (part.sum(axis=2) > int(colour.sum()))
+        if (diff <= s.tolerance).mean() >= CUT_PLATE and letters.mean() >= CUT_LETTERS:
+            return True
+    return False
 
 
 def still_there(image: Image, plate: Plate, settings: PlateSettings | None = None) -> bool:

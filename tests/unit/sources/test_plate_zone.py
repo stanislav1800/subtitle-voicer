@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from subvoicer.app.game_runner import plate_stabilization
 from subvoicer.config.resources import short_words, speaker_stoplist
 from subvoicer.core.models import Frame, OcrLine, OcrResult, Rect, Utterance, UtteranceKind
 from subvoicer.pipeline.dedup import Deduplicator
@@ -12,6 +13,7 @@ from subvoicer.pipeline.ocr.junk_filter import JunkFilter
 from subvoicer.pipeline.ocr.runner import OcrRunner
 from subvoicer.pipeline.speaker.resolver import SpeakerMode, SpeakerResolver
 from subvoicer.pipeline.vision.masks import MaskPreset, MaskSpec
+from subvoicer.pipeline.vision.stability import StabilizationSettings
 from subvoicer.sources.zone_ocr import PlateSearch, ZoneOcrSource, ZoneSpec, read_once
 from tests.fakes.clock import FakeClock
 
@@ -30,12 +32,15 @@ class Screen:
         self.hud: Box | None = None
         self.ocr_calls = 0
         self.detector_calls = 0
+        self.misses = 0  # searches the detector sees nothing
+        self.noise = 0  # bright specks on every plate, new each frame (a shimmering edge)
         zone = ZoneSpec(
             id="subtitles_auto",
             rect=Rect(0.0, 0.0, 1.0, 1.0),
             mask=MaskSpec(MaskPreset.BRIGHT_ON_DARK),
             speaker=SpeakerResolver(SpeakerMode.PREFIX, speaker_stoplist()),
             plates=PlateSearch(self),
+            stabilization=plate_stabilization(StabilizationSettings()),
         )
         self.zone = zone
         self.source = ZoneOcrSource(
@@ -47,6 +52,9 @@ class Screen:
     # the text detector and the OCR engine of the zone
     def detect_lines(self, image: np.ndarray) -> list[Box]:
         self.detector_calls += 1
+        if self.misses:
+            self.misses -= 1
+            return []
         lines = [self._line(box) for box in self.plates]
         return lines + ([self.hud] if self.hud else [])
 
@@ -73,6 +81,9 @@ class Screen:
             lx1, ly1, lx2, ly2 = self._line(box)
             for x in range(lx1, lx2 - 3, 9):
                 image[ly1:ly2, x : x + 3] = 235
+            for _ in range(self.noise):
+                y, x = self.rng.integers(ly1, ly2), self.rng.integers(lx1, lx2)
+                image[y, x] = 235
         if self.hud:
             x1, y1, x2, y2 = self.hud
             for x in range(x1, x2 - 3, 9):
@@ -123,6 +134,30 @@ def test_text_without_a_plate_is_not_read_and_a_gone_plate_empties_the_zone() ->
     s.plates = {(340, 262, 940, 322): AD}  # the same line said again after a pause
     s.run(2)
     assert [u.text for u in s.out] == [AD, AD]
+
+
+def test_a_plate_missed_by_one_search_is_not_voiced_again() -> None:
+    """Alan Wake: the detector lost a plate for one search; it used to come back after
+    ~300 ms — longer than the flicker rule — and «Нет, так не пойдет.» sounded twice."""
+    s = Screen()
+    s.plates = {(340, 262, 940, 322): AD}
+    s.run(1.5)
+    for _ in range(3):
+        s.misses = 1
+        s.run(1.5)
+    assert [u.text for u in s.out] == [AD]
+
+
+def test_a_short_line_on_a_shimmering_plate_is_read_before_it_goes() -> None:
+    """Alan Wake: «Нет!» after a long line — a small plate, ~1 s on screen; specks at the
+    letters kept the zone «changing» and the line went away unread."""
+    s = Screen()
+    s.noise = 60
+    s.plates = {(560, 262, 720, 322): "Нет!"}
+    s.run(1.0)
+    s.plates = {}
+    s.run(1)
+    assert [u.text for u in s.out] == ["Нет!"]
 
 
 def test_read_once_reads_plates_only() -> None:

@@ -20,6 +20,7 @@ MODELS = ("cyrillic", "eslav")
 Box = tuple[int, int, int, int]  # x1, y1, x2, y2
 
 SAME_ROW_OVERLAP = 0.5  # boxes overlapping vertically by half of the lower one share a row
+TALL_BOX = 1.3  # a box this much taller than the row is not of the row
 MAX_ROW_GAP = 2.0  # boxes of one row further apart than 2 row heights stay separate
 LINE_PADDING = 0.15  # padding around a merged line, in row heights
 
@@ -164,7 +165,10 @@ def merge_rows(boxes: list[Box]) -> list[Box]:
             current = _union(rows[-1])
             overlap = min(current[3], box[3]) - max(current[1], box[1])
             lower = min(current[3] - current[1], box[3] - box[1])
-            if lower > 0 and overlap >= SAME_ROW_OVERLAP * lower:
+            # a box much taller than the row (a key icon at the end of a two-line plate in
+            # Alan Wake) starts its own row: it must not bridge two text lines into one box
+            tall = box[3] - box[1] > TALL_BOX * (current[3] - current[1])
+            if lower > 0 and overlap >= SAME_ROW_OVERLAP * lower and not tall:
                 rows[-1].append(box)
                 continue
         rows.append([box])
