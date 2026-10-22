@@ -10,6 +10,7 @@ import itertools
 import json
 import logging
 import threading
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import datetime
@@ -67,6 +68,7 @@ from subvoicer.sources.zone_ocr import ZoneSpec, read_once
 log = logging.getLogger(__name__)
 
 MANUAL_ID_START = 2_000_000  # ids of manual lines, apart from zone lines and repeats
+FREEZE_WATCHDOG_S = 3.0  # a paused game goes on if the interface is stuck this long (TZ 1.30)
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,6 +162,9 @@ class AppFacade:
         self._freezer = runtime.make_freezer(self.paths.frozen_games_file)
         self._freezer.thaw_all()
         self._frozen: int | None = None
+        self._freeze_lock = threading.Lock()
+        self._ui_beat = 0.0
+        self.freeze_watchdog_s = FREEZE_WATCHDOG_S
         self._reader: ManualReader | None = None
         self._library_lock = threading.Lock()
         self._hardware: CharacterHardware | None = None
@@ -213,20 +218,42 @@ class AppFacade:
         if not profile.pause_in_editor:
             return None
         pid = status.window.pid
-        if not self._freezer.freeze(pid):
-            return False
-        self._frozen = pid
+        with self._freeze_lock:
+            if self._frozen is not None:
+                return True
+            if not self._freezer.freeze(pid):
+                return False
+            self._frozen = pid
+            self._ui_beat = time.monotonic()
         parts = self._parts
         if parts is not None:
             parts.runner.hold(True)
+        threading.Thread(
+            target=self._watch_frozen, args=(pid,), name="FreezeWatchdog", daemon=True
+        ).start()
         return True
 
+    def ui_alive(self) -> None:
+        """The interface is responsive (a timer in the UI thread): the paused game may wait."""
+        self._ui_beat = time.monotonic()
+
+    def _watch_frozen(self, pid: int) -> None:
+        """A safety net: a window shown over a paused game may wait forever for an answer
+        from it (Windows sends it messages), so a stuck interface lets the game go on."""
+        while self._frozen == pid:
+            time.sleep(0.25)
+            if self._frozen == pid and time.monotonic() - self._ui_beat > self.freeze_watchdog_s:
+                log.warning("Интерфейс не отвечает — игра снята с паузы")
+                self.thaw_game()
+                return
+
     def thaw_game(self) -> None:
-        """The zone editor closed: the game goes on, its capture starts again."""
-        pid, self._frozen = self._frozen, None
-        if pid is None:
-            return
-        self._freezer.thaw(pid)
+        """The zone editor closes: the game goes on, its capture starts again."""
+        with self._freeze_lock:
+            pid, self._frozen = self._frozen, None
+            if pid is None:
+                return
+            self._freezer.thaw(pid)
         parts = self._parts
         if parts is not None:
             parts.runner.hold(False)

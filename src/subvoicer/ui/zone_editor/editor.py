@@ -7,8 +7,8 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QKeyEvent
+from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtGui import QCloseEvent, QKeyEvent
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -44,6 +44,8 @@ DEFAULT_RECTS: dict[str, Fractions] = {
 
 
 class ZoneEditor(QWidget):
+    closing = Signal()  # close() was called, the window is still shown
+
     def __init__(
         self,
         facade: AppFacade,
@@ -145,6 +147,10 @@ class ZoneEditor(QWidget):
         self.raise_()
         self.activateWindow()
         runtime.force_foreground(int(self.winId()))  # over the game that has the focus
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        self.closing.emit()  # before the window hides (the paused game goes on, TZ 1.30)
+        super().closeEvent(event)
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         if event.key() == Qt.Key.Key_Escape:

@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 
 from subvoicer.app.facade import AppFacade, tuning
@@ -146,8 +147,23 @@ def test_the_game_is_paused_while_the_zone_editor_is_over_it(tmp_path: Path) -> 
     assert facade.freeze_game() is True and freezer.frozen == {4242}
     facade.thaw_game()
     assert freezer.frozen == set() and Parts.runner.held == [True, False]
+    # the interface got stuck over the paused game: the watchdog lets the game go on
+    facade.freeze_watchdog_s = 0.3
+    assert facade.freeze_game() is True
+    deadline = time.monotonic() + 3
+    while freezer.frozen and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert freezer.frozen == set() and Parts.runner.held == [True, False, True, False]
+    # ...while a beating interface keeps it paused
+    assert facade.freeze_game() is True
+    for _ in range(12):
+        facade.ui_alive()
+        time.sleep(0.05)
+    assert freezer.frozen == {4242}
+    facade.thaw_game()
+    Parts.runner.held.clear()
     freezer.refuse = True
-    assert facade.freeze_game() is False and Parts.runner.held == [True, False]
+    assert facade.freeze_game() is False and Parts.runner.held == []
     facade.store.save(stored.profile.model_copy(update={"pause_in_editor": False}), stored.path)
     freezer.refuse = False
     assert facade.freeze_game() is None and freezer.frozen == set()

@@ -59,6 +59,8 @@ def _force_exit() -> None:
     os._exit(0)
 
 
+FREEZE_DELAY_MS = 300  # the editor takes the focus from the game before it is paused
+UI_BEAT_MS = 500  # the interface tells the facade it is alive (the paused-game watchdog)
 SERVER_NAME = "SubtitleVoicer.Show"  # a second copy asks the first to show its window
 STATUS_EVENTS = (GameActivated, GameClosed, LayoutMissing)
 
@@ -133,6 +135,9 @@ class Application:
         self.selector: AreaSelector | None = None
         self.loader = Loader(facade)
         self.loader.done.connect(self._on_loaded)
+        self._beat = QTimer()
+        self._beat.timeout.connect(facade.ui_alive)
+        self._beat.start(UI_BEAT_MS)
 
     def _build_pages(self) -> None:
         self.general = GeneralPage(self.facade)
@@ -201,9 +206,15 @@ class Application:
         if frame is None:
             self.tray.showMessage("Subtitle Voicer", "Не удалось получить кадр игры")
             return
-        if self.editor is not None:
-            self.editor.close()  # its game goes on before this one is paused
-        # the frame is taken: the game waits while its zones are set up (TZ 1.30)
+        editor = ZoneEditor(self.facade, Path(status.profile_path), frame, "game")
+        self._show_editor(editor)
+        # the game waits while its zones are set up (TZ 1.30) — paused only once the editor
+        # is over it: showing a window over a paused game waits for an answer from the game
+        QTimer.singleShot(FREEZE_DELAY_MS, lambda: self._freeze_for(editor))
+
+    def _freeze_for(self, editor: ZoneEditor) -> None:
+        if self.editor is not editor:
+            return  # closed already
         if self.facade.freeze_game() is False:
             self.notifier.show(
                 Notification(
@@ -212,7 +223,6 @@ class Application:
                     "Поставьте паузу в самой игре или выключите паузу в профиле игры.",
                 )
             )
-        self._show_editor(ZoneEditor(self.facade, Path(status.profile_path), frame, "game"))
 
     def select_and_read(self) -> None:
         """Ctrl+Alt+A: select an area on the frozen game frame, it is read once (TZ 4.12)."""
@@ -242,6 +252,8 @@ class Application:
         if self.editor is not None:
             self.editor.close()
         self.editor = editor
+        # the game goes on before the editor hides: hiding gives the focus back to the game
+        editor.closing.connect(lambda e=editor: self._editor_closed(e))
         editor.destroyed.connect(lambda _=None, e=editor: self._editor_closed(e))
         editor.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         editor.open()
