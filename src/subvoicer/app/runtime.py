@@ -238,3 +238,13 @@ def force_foreground(hwnd: int) -> None:
         from subvoicer.engines.system import windows
 
         windows.force_foreground(hwnd)
+
+
+def is_foreground(hwnd: int) -> bool:
+    """The window has the keyboard: the active window of the desktop."""
+    if sys.platform != "win32":
+        return True
+    from subvoicer.engines.system import windows
+
+    ref = windows.foreground()
+    return ref is not None and ref.hwnd == hwnd

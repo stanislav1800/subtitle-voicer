@@ -61,6 +61,7 @@ def _force_exit() -> None:
 
 
 FREEZE_DELAY_MS = 300  # the editor takes the focus from the game before it is paused
+FREEZE_TRIES = 5  # ...looked at this many times; not active by then — the game is not paused
 UI_BEAT_MS = 500  # the interface tells the facade it is alive (the paused-game watchdog)
 SERVER_NAME = "SubtitleVoicer.Show"  # a second copy asks the first to show its window
 STATUS_EVENTS = (GameActivated, GameClosed, LayoutMissing)
@@ -129,7 +130,7 @@ class Application:
         self.line_window: LineWindow | None = None
         self.editor: ZoneEditor | None = None
         self.hotkey_signals = HotkeySignals()
-        self.hotkey_signals.zone_editor.connect(self.open_zone_editor)
+        self.hotkey_signals.zone_editor.connect(self.toggle_zone_editor)
         facade.set_hotkey_action("zone_editor", self.hotkey_signals.zone_editor.emit)
         self.hotkey_signals.select_read.connect(self.select_and_read)
         facade.set_hotkey_action("select_read", self.hotkey_signals.select_read.emit)
@@ -197,6 +198,14 @@ class Application:
             )
         self._show_editor(ZoneEditor(self.facade, path, image, "screenshot", warnings))
 
+    def toggle_zone_editor(self) -> None:
+        """Ctrl+Alt+Z: opens the editor over the game, and closes it when it is open — a way
+        out that works even if the keyboard stayed with the paused game (TZ 1.30)."""
+        if self.editor is not None and self.editor.isVisible():
+            self.editor.close()
+            return
+        self.open_zone_editor()
+
     def open_zone_editor(self) -> None:
         """Ctrl+Alt+Z or «Настроить зоны»: a frozen frame of the active game."""
         status = self.facade.status()
@@ -211,11 +220,20 @@ class Application:
         self._show_editor(editor)
         # the game waits while its zones are set up (TZ 1.30) — paused only once the editor
         # is over it: showing a window over a paused game waits for an answer from the game
-        QTimer.singleShot(FREEZE_DELAY_MS, lambda: self._freeze_for(editor))
+        QTimer.singleShot(FREEZE_DELAY_MS, lambda: self._freeze_for(editor, FREEZE_TRIES))
 
-    def _freeze_for(self, editor: ZoneEditor) -> None:
+    def _freeze_for(self, editor: ZoneEditor, tries: int) -> None:
         if self.editor is not editor:
             return  # closed already
+        # only once the editor has the keyboard: a game paused while it is still the active
+        # window keeps the keyboard, and Esc never reaches the editor (seen with Firefox)
+        if not runtime.is_foreground(int(editor.winId())):
+            if tries > 1:
+                runtime.force_foreground(int(editor.winId()))
+                QTimer.singleShot(FREEZE_DELAY_MS, lambda: self._freeze_for(editor, tries - 1))
+            else:
+                log.warning("Редактор зон не стал активным окном — игра не ставится на паузу")
+            return
         if self.facade.freeze_game() is False:
             self.notifier.show(
                 Notification(
