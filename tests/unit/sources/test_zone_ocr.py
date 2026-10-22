@@ -216,8 +216,9 @@ def test_latency_marks() -> None:
 # ---------------------------------------------------------------- speaker zone and colour (4.5)
 
 
-class ByWidthOcr:
-    """Narrow images are the name, wide ones the text; records what it was shown."""
+class ByOrderOcr:
+    """The zone's text is read first, then its name (a small name cut-out is enlarged, so
+    its width tells nothing); records what it was shown."""
 
     def __init__(self, name: str, text: str) -> None:
         self.name, self.text = name, text
@@ -225,11 +226,11 @@ class ByWidthOcr:
 
     def recognize(self, image: np.ndarray) -> OcrResult:
         self.images.append(image)
-        said = self.name if image.shape[1] < 300 else self.text
+        said = self.text if len(self.images) % 2 else self.name
         return OcrResult((OcrLine(said, 0.97, (0, 0, 10, 10)),))
 
 
-def run_named(zone: ZoneSpec, image: np.ndarray, ocr: ByWidthOcr) -> list[Utterance]:
+def run_named(zone: ZoneSpec, image: np.ndarray, ocr: ByOrderOcr) -> list[Utterance]:
     clock = FakeClock(100.0)
     source = ZoneOcrSource([zone], OcrRunner(ocr), JunkFilter(short_words()), Deduplicator(), clock)
     out: list[Utterance] = []
@@ -250,7 +251,7 @@ def test_speaker_from_a_speaker_zone() -> None:
         speaker=SpeakerResolver(SpeakerMode.ZONE, speaker_stoplist()),
         name=NameSource(MaskSpec(MaskPreset.BRIGHT_ON_DARK), Rect(0.0, 0.0, 0.3, 0.25)),
     )
-    out = run_named(zone, image, ByWidthOcr("Джуди", "Ты вовремя."))
+    out = run_named(zone, image, ByOrderOcr("Джуди", "Ты вовремя."))
     assert [(u.speaker, u.text) for u in out] == [("Джуди", "Ты вовремя.")]
 
 
@@ -264,7 +265,7 @@ def test_empty_speaker_zone_gives_no_name() -> None:
         speaker=SpeakerResolver(SpeakerMode.ZONE, speaker_stoplist()),
         name=NameSource(MaskSpec(MaskPreset.BRIGHT_ON_DARK), Rect(0.0, 0.0, 0.3, 0.25)),
     )
-    ocr = ByWidthOcr("Джуди", "Ты вовремя.")
+    ocr = ByOrderOcr("Джуди", "Ты вовремя.")
     out = run_named(zone, image, ocr)
     assert [(u.speaker, u.text) for u in out] == [(None, "Ты вовремя.")]
     assert len(ocr.images) == 1  # the empty speaker zone is not recognised
@@ -282,13 +283,13 @@ def test_speaker_by_colour_inside_the_zone() -> None:
         speaker=SpeakerResolver(SpeakerMode.COLOR, speaker_stoplist()),
         name=NameSource(MaskSpec(MaskPreset.COLOR, colors_hsv=red)),
     )
-    ocr = ByWidthOcr("Панам", "Поехали отсюда.")
+    ocr = ByOrderOcr("Панам", "Поехали отсюда.")
     out = run_named(zone, image, ocr)
     assert [(u.speaker, u.text) for u in out] == [("Панам", "Поехали отсюда.")]
     text_image, name_image = ocr.images
     red_pixels = (text_image[..., 2] > 200) & (text_image[..., 1] < 50)
     assert not red_pixels.any()  # the name is painted out of the text input
-    assert name_image.shape[1] < 200  # only the name part (78 px, upscaled x2) is read
+    assert name_image.shape[1] < text_image.shape[1] / 2  # the name part, not the zone
 
 
 # ---------------------------------------------------------------- TZ 1.17

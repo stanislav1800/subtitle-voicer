@@ -2,7 +2,7 @@ import pytest
 
 from subvoicer.config.resources import speaker_stoplist
 from subvoicer.pipeline.speaker.extract import extract_prefix
-from subvoicer.pipeline.speaker.resolver import SpeakerMode, SpeakerResolver
+from subvoicer.pipeline.speaker.resolver import SpeakerMode, SpeakerResolver, SpeakerResult
 from subvoicer.pipeline.speaker.validate import NameValidator
 
 
@@ -113,3 +113,19 @@ def test_continuation_split() -> None:
     assert r.split_inner("Джеки: Стой!") == [(None, "Джеки: Стой!")]  # no sentence end before
     none = SpeakerResolver(SpeakerMode.NONE, speaker_stoplist())
     assert none.split_inner("Раз. Джеки: Стой!") == [(None, "Раз. Джеки: Стой!")]
+
+
+@pytest.mark.parametrize(
+    ("read", "name"),
+    [
+        ("Джеки:", "Джеки"),  # the colon after the name
+        ("Пациентка: Не зн", "Пациентка"),  # words of the line read with the name
+        ("Bи:", "Ви"),  # a Latin twin in a Cyrillic name
+        ("Bu", "Ви"),  # Cyberpunk's italic «Ви» read all in Latin
+        ("Ти-Баг:", "Ти-Баг"),
+        ("Jackie", "Jackie"),  # a Latin name stays
+    ],
+)
+def test_a_name_read_by_colour_is_cleaned(read: str, name: str) -> None:
+    resolver = SpeakerResolver(SpeakerMode.COLOR, [])
+    assert resolver.resolve("Привет.", read) == SpeakerResult(name, "Привет.")

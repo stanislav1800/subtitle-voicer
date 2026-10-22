@@ -40,7 +40,13 @@ from subvoicer.pipeline.vision.plates import (
     plate_mask,
     still_there,
 )
-from subvoicer.pipeline.vision.regions import cut_out, paint_out, without
+from subvoicer.pipeline.vision.regions import (
+    cut_out,
+    enlarged,
+    name_beside_text,
+    paint_out,
+    without,
+)
 from subvoicer.pipeline.vision.stability import (
     Emptied,
     RunOcr,
@@ -516,12 +522,19 @@ class ZoneOcrSource:
             mask = build_mask(image, name.mask)
             if mask_empty(mask, spec.stabilization.empty_ratio):
                 return None
+            image = enlarged(image)
+            mask = build_mask(image, name.mask)
         else:
             if zone.name_mask is None:
                 return None
-            part = cut_out(zone.crop, zone.name_mask)
+            part = None
+            if zone.mask is not None:  # the text mask, the name taken out of it
+                part = name_beside_text(zone.crop, zone.name_mask, zone.mask)
+            if part is None:
+                part = cut_out(zone.crop, zone.name_mask)
             if part is None:
                 return None
+            part = enlarged(part)
             image, mask = part, build_mask(part, name.mask)
         outcome = runner.run(image, mask, OcrInput.RAW)
         log.debug("Зона %s: имя %r (%.2f)", spec.id, outcome.text, outcome.mean_confidence)

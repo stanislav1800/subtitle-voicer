@@ -16,6 +16,32 @@ INNER_NAME = re.compile(r"(?<=[.!?…»\"])\s+([^\s:.!?…][^:.!?…]{0,29}):\s+
 TRAILING_NAME = re.compile(r"(?<=[.!?…»\"])\s+([^\s:.!?…][^:.!?…]{0,29}):\s*$")
 
 
+# OCR reads Cyrillic name letters as Latin twins («Bu» for «Ви» in Cyberpunk's italic font)
+NAME_HOMOGLYPHS = str.maketrans("ABCEHKMOPTXaceopxyu", "АВСЕНКМОРТХасеорхуи")
+_LATIN = re.compile(r"[A-Za-z]")
+_EDGES = " 	:;,.-–—=_|'\"«»"
+
+
+def clean_name(candidate: str) -> str:
+    """A name read from the name zone or the name colour (TZ 4.5): the colon after it and
+    any text read along with it go («Пациентка: Не зн» -> «Пациентка»), Latin look-alikes in
+    a Cyrillic name become Cyrillic («Bи» -> «Ви»; a Latin name like «Jackie» stays)."""
+    name = candidate.split(":", 1)[0].strip(_EDGES)
+    words = []
+    for word in name.split():
+        latin = len(_LATIN.findall(word))
+        mixed = 0 < latin < len(word)  # «Bи»
+        short_twins = latin == len(word) <= 3 and _all_twins(word)  # «Bu»; «Jack» stays
+        if mixed or short_twins:
+            word = word.translate(NAME_HOMOGLYPHS)
+        words.append(word)
+    return " ".join(words)
+
+
+def _all_twins(word: str) -> bool:
+    return all(ch in "ABCEHKMOPTXaceopxyu" for ch in word)
+
+
 class SpeakerMode(StrEnum):
     PREFIX = "prefix"
     ZONE = "zone"
@@ -52,8 +78,9 @@ class SpeakerResolver:
                 # rejected candidate: the prefix stays in the text ("Совет: нажмите Q")
                 return SpeakerResult(None, text)
             case SpeakerMode.ZONE | SpeakerMode.COLOR:
-                if candidate is not None and self._validator.is_name(candidate):
-                    return SpeakerResult(candidate.strip(), text)
+                name = clean_name(candidate) if candidate is not None else ""
+                if name and self._validator.is_name(name):
+                    return SpeakerResult(name, text)
                 return SpeakerResult(None, text)
 
     def resolve_all(self, text: str, candidate: str | None = None) -> list[SpeakerResult]:

@@ -52,3 +52,44 @@ def cut_out(image: Image, mask: Image) -> Image | None:
     return image[
         max(0, y - PAD) : min(height, y + h + PAD), max(0, x - PAD) : min(width, x + w + PAD)
     ]
+
+
+NAME_REACH = 14  # a name ends within this many text-line heights left of the text start
+NAME_MIN_HEIGHT = 96  # a smaller name cut-out is enlarged: OCR misses short ones («Ви:»)
+
+
+def name_beside_text(image: Image, name_mask: Image, text_mask: Image) -> Image | None:
+    """The name in front of the first text line: name-colour pixels on that line's rows,
+    left of where the text starts. Pixels of the name colour elsewhere in the zone (neon of
+    the scene in Cyberpunk) stretched the cut-out over the background and the text, and the
+    name came out empty or with words of the line («Пациентка: Не зн»). None — no text, or
+    nothing of the name colour before it."""
+    rows = np.flatnonzero(text_mask.any(axis=1))
+    if len(rows) == 0:
+        return None
+    top = bottom = int(rows[0])
+    for row in rows[1:]:  # the first line: rows of text with no gap
+        if row - bottom > 3:
+            break
+        bottom = int(row)
+    height = bottom - top + 1
+    start = int(np.flatnonzero(text_mask[top : bottom + 1].any(axis=0))[0])
+    y1, y2 = max(0, top - height // 3), min(image.shape[0], bottom + 1 + height // 3)
+    x1, x2 = max(0, start - NAME_REACH * height), start + height // 2
+    points = cv2.findNonZero(name_mask[y1:y2, x1:x2])
+    if points is None:
+        return None
+    x, y, w, h = cv2.boundingRect(points)
+    return image[
+        max(0, y1 + y - PAD) : min(image.shape[0], y1 + y + h + PAD),
+        max(0, x1 + x - PAD) : min(image.shape[1], x1 + x + w + PAD),
+    ]
+
+
+def enlarged(image: Image, min_height: int = NAME_MIN_HEIGHT) -> Image:
+    """A small cut-out scaled up (up to 3x) so OCR reads a two-letter name."""
+    height = image.shape[0]
+    if height == 0 or height >= min_height:
+        return image
+    factor = min(3.0, min_height / height)
+    return cv2.resize(image, None, fx=factor, fy=factor, interpolation=cv2.INTER_CUBIC)
