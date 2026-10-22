@@ -35,12 +35,7 @@ from subvoicer.config.resources import (
     short_words,
     voice_catalog,
 )
-from subvoicer.config.settings import (
-    Settings,
-    default_excluded_exes,
-    load_settings,
-    save_settings,
-)
+from subvoicer.config.settings import Settings, load_settings, save_settings
 from subvoicer.core.events import (
     DebugCaptured,
     Event,
@@ -73,7 +68,6 @@ from subvoicer.sources.zone_ocr import ZoneSpec, read_once
 log = logging.getLogger(__name__)
 
 MANUAL_ID_START = 2_000_000  # ids of manual lines, apart from zone lines and repeats
-NOT_PAUSED = frozenset(exe.lower() for exe in default_excluded_exes())  # browsers, players
 FREEZE_WATCHDOG_S = 3.0  # a paused game goes on if the interface is stuck this long (TZ 1.30)
 
 
@@ -224,10 +218,6 @@ class AppFacade:
         except (OSError, ValueError):
             return None
         if not profile.pause_in_editor:
-            return None
-        if status.window.exe.lower() in NOT_PAUSED:
-            # a browser or a player with a let's play: only its window would stop (the video
-            # plays in other processes) and the whole browser would hang
             return None
         pid = status.window.pid
         with self._freeze_lock:

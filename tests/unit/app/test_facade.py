@@ -162,11 +162,6 @@ def test_the_game_is_paused_while_the_zone_editor_is_over_it(tmp_path: Path) -> 
     assert freezer.frozen == {4242}
     facade.thaw_game()
     Parts.runner.held.clear()
-    # a let's play in a browser: the browser is never paused
-    browser = WindowRef(1, 777, "firefox.exe", "Firefox", 1920, 1080)
-    facade.bus.publish(GameActivated(str(stored.path), browser, "16:9"))
-    assert facade.freeze_game() is None and freezer.frozen == set()
-    facade.bus.publish(GameActivated(str(stored.path), window, "16:9"))
     freezer.refuse = True
     assert facade.freeze_game() is False and Parts.runner.held == []
     facade.store.save(stored.profile.model_copy(update={"pause_in_editor": False}), stored.path)
