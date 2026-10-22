@@ -112,7 +112,6 @@ class GeneralPage(Page):
         self._timer.setInterval(APPLY_DELAY_MS)
         self._timer.timeout.connect(self._apply)
         self._building = False
-        self._fine_open = False  # «Тонкая настройка» shown
         self._built_from: Settings | None = None
         self._grid = QGridLayout()
         self._grid.setSpacing(16)
@@ -206,6 +205,16 @@ class GeneralPage(Page):
         )
         lag.changed.connect(lambda v: self._set(max_lag_s=v))
         card.body.addWidget(lag)
+        low = SliderRow(
+            "Реплика низкого приоритета ждёт не дольше",
+            1,
+            20,
+            1,
+            s.low_priority_ttl_s,
+            lambda v: f"{v:.0f} с",
+        )
+        low.changed.connect(lambda v: self._set(low_priority_ttl_s=v))
+        card.body.addWidget(low)
         card.body.addWidget(label(PER_GAME_HINT, "hint", wrap=True))
         return card
 
@@ -216,10 +225,20 @@ class GeneralPage(Page):
         )
         level.changed.connect(lambda v: self._set(duck_level=v))
         card.body.addWidget(level)
+        fade = SliderRow(
+            "Плавность приглушения", 0, 1000, 10, s.duck_fade_ms, lambda v: f"{v:.0f} мс"
+        )
+        fade.changed.connect(lambda v: self._set(duck_fade_ms=round(v)))
+        card.body.addWidget(fade)
+        release = SliderRow(
+            "Возврат громкости после фразы", 0, 2000, 50, s.duck_release_ms, lambda v: f"{v:.0f} мс"
+        )
+        release.changed.connect(lambda v: self._set(duck_release_ms=round(v)))
+        card.body.addWidget(release)
         card.body.addWidget(
             label(
-                "Приглушается только звук игры. Исходная громкость восстанавливается "
-                "при выходе и после сбоя.",
+                "Приглушается только звук игры. 100% — игра не приглушается. Исходная "
+                "громкость восстанавливается при выходе и после сбоя.",
                 "hint",
                 wrap=True,
             )
@@ -228,6 +247,20 @@ class GeneralPage(Page):
 
     def _system(self, s: Settings) -> Card:
         card = Card("Система")
+        poll = combo([(f"{hz} Гц", hz) for hz in POLL_RATES], round(s.poll_hz), "Частота")
+        poll.setMinimumContentsLength(6)
+        poll.currentIndexChanged.connect(lambda _i: self._set(poll_hz=poll.currentData(), now=True))
+        card.body.addWidget(
+            row(
+                titled(
+                    "Частота проверки субтитров",
+                    "Сколько раз в секунду смотреть, изменился ли текст. Новые подложки "
+                    "ищутся раз в 0,3 с при любой частоте",
+                ),
+                poll,
+                wide=False,
+            )
+        )
         box, autostart = toggle_row("Запускать вместе с Windows", "", s.autostart)
         autostart.toggled.connect(lambda on: self._set(autostart=on, now=True))
         card.body.addWidget(box)
@@ -272,70 +305,14 @@ class GeneralPage(Page):
         never = ExeList(s.never_ask_exes)
         never.changed.connect(lambda values: self._set(never_ask_exes=values, now=True))
         card.body.addWidget(never)
-        more = QPushButton()
-        more.setCheckable(True)
-        card.body.addWidget(more)
-        fine = self._fine(s)
-        card.body.addWidget(fine)  # in the card first: a shown widget without a parent is a window
-        more.toggled.connect(lambda on: self._show_fine(on, more, fine))
-        more.setChecked(self._fine_open)
-        self._show_fine(self._fine_open, more, fine)
-        return card
-
-    def _fine(self, s: Settings) -> QWidget:
-        """Rarely changed: hidden until «Тонкая настройка» is pressed."""
-        box = QWidget()
-        body = QVBoxLayout(box)
-        body.setContentsMargins(0, 0, 0, 0)
-        body.setSpacing(12)
-        poll = combo([(f"{hz} Гц", hz) for hz in POLL_RATES], round(s.poll_hz), "Частота")
-        poll.setMinimumContentsLength(6)
-        poll.currentIndexChanged.connect(lambda _i: self._set(poll_hz=poll.currentData(), now=True))
-        body.addWidget(
-            row(
-                titled(
-                    "Частота проверки субтитров",
-                    "Сколько раз в секунду смотреть, изменился ли текст. Новые подложки "
-                    "ищутся раз в 0,3 с при любой частоте",
-                ),
-                poll,
-            )
-        )
-        low = SliderRow(
-            "Реплика низкого приоритета ждёт не дольше",
-            1,
-            20,
-            1,
-            s.low_priority_ttl_s,
-            lambda v: f"{v:.0f} с",
-        )
-        low.changed.connect(lambda v: self._set(low_priority_ttl_s=v))
-        body.addWidget(low)
-        fade = SliderRow(
-            "Плавность приглушения", 0, 1000, 10, s.duck_fade_ms, lambda v: f"{v:.0f} мс"
-        )
-        fade.changed.connect(lambda v: self._set(duck_fade_ms=round(v)))
-        body.addWidget(fade)
-        release = SliderRow(
-            "Возврат громкости после фразы", 0, 2000, 50, s.duck_release_ms, lambda v: f"{v:.0f} мс"
-        )
-        release.changed.connect(lambda v: self._set(duck_release_ms=round(v)))
-        body.addWidget(release)
         if s.dev_mode:
             cache = QSpinBox()
             cache.setRange(0, 2000)
             cache.setValue(s.tts_cache_size)
             cache.valueChanged.connect(lambda v: self._set(tts_cache_size=v))
             cache.setAccessibleName("Кеш синтеза")
-            body.addWidget(row(titled("Кеш синтеза", "сколько фраз хранить готовыми"), cache))
-        return box
-
-    def _show_fine(self, on: bool, button: QPushButton, fine: QWidget) -> None:
-        """Shown or hidden in place, the page is not rebuilt."""
-        self._fine_open = on
-        button.setText(("▾ " if on else "▸ ") + "Тонкая настройка")
-        fine.setVisible(on)
-        QTimer.singleShot(0, self.fit_height)
+            card.body.addWidget(row(titled("Кеш синтеза", "сколько фраз хранить готовыми"), cache))
+        return card
 
     def sync(self) -> None:
         """The tray switch or a hotkey changed «enabled» while the page is open."""

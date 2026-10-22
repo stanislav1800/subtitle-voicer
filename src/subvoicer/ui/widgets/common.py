@@ -125,12 +125,13 @@ def titled(title: str, hint: str = "") -> QWidget:
     return box
 
 
-def row(left: QWidget, right: QWidget) -> QWidget:
+def row(left: QWidget, right: QWidget, *, wide: bool = True) -> QWidget:
+    """``wide``: a drop-down takes half the row (``False`` — a short one like «20 Гц»)."""
     box = QWidget()
     layout = QHBoxLayout(box)
     layout.setContentsMargins(0, 0, 0, 0)
     layout.addWidget(left, 1)
-    if isinstance(right, QComboBox):  # a drop-down takes half the row: its text is readable
+    if wide and isinstance(right, QComboBox):  # half the row: its text is readable
         layout.addWidget(right, 1, Qt.AlignmentFlag.AlignVCenter)
     else:
         layout.addWidget(right, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
