@@ -5,13 +5,13 @@ from __future__ import annotations
 import os
 import tomllib
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 import tomlkit
 from pydantic import Field
 
 from subvoicer.config.migrations import Migration, ProfileTooNewError, migrate
-from subvoicer.config.profile import StrictModel
+from subvoicer.config.profile import OverlapName, StrictModel
 from subvoicer.config.resources import read_list
 
 DEFAULT_HOTKEYS = {  # TZ 4.12
@@ -52,7 +52,7 @@ class Settings(StrictModel):
     output_device: str = ""
     voice_volume: float = Field(default=1.0, ge=0, le=1)
     base_rate: float = Field(default=1.0, gt=0)
-    overlap_mode: Literal["cut", "queue", "speedup", "adaptive"] = "speedup"
+    overlap_mode: OverlapName = "speedup"
     hurry_rate: float = Field(default=1.5, ge=1)
     max_lag_s: float = Field(default=8, gt=0)
     duck_level: float = Field(default=0.4, ge=0, le=1)

@@ -41,6 +41,10 @@ OVERLAP_MODES = (
     ("adaptive", "Ускорять по длине очереди"),
     ("cut", "Оборвать старую"),
 )
+PER_GAME_HINT = (
+    "Это значения для всех игр. У игры могут быть свои скорость речи, режим и ускорение — "
+    "в «Профилях»"
+)
 LIBRARY_SOURCES = (("steam", "Steam"), ("epic", "Epic Games"), ("gog", "GOG"))
 
 
@@ -107,6 +111,7 @@ class GeneralPage(Page):
         self._timer.setInterval(APPLY_DELAY_MS)
         self._timer.timeout.connect(self._apply)
         self._building = False
+        self._fine_open = False  # «Тонкая настройка» shown
         self._grid = QGridLayout()
         self._grid.setSpacing(16)
         self.content.addLayout(self._grid)
@@ -193,16 +198,7 @@ class GeneralPage(Page):
         )
         lag.changed.connect(lambda v: self._set(max_lag_s=v))
         card.body.addWidget(lag)
-        low = SliderRow(
-            "Низкий приоритет ждёт не дольше",
-            1,
-            20,
-            1,
-            s.low_priority_ttl_s,
-            lambda v: f"{v:.0f} с",
-        )
-        low.changed.connect(lambda v: self._set(low_priority_ttl_s=v))
-        card.body.addWidget(low)
+        card.body.addWidget(label(PER_GAME_HINT, "hint", wrap=True))
         return card
 
     def _ducking(self, s: Settings) -> Card:
@@ -212,16 +208,6 @@ class GeneralPage(Page):
         )
         level.changed.connect(lambda v: self._set(duck_level=v))
         card.body.addWidget(level)
-        fade = SliderRow(
-            "Плавность приглушения", 0, 1000, 10, s.duck_fade_ms, lambda v: f"{v:.0f} мс"
-        )
-        fade.changed.connect(lambda v: self._set(duck_fade_ms=round(v)))
-        card.body.addWidget(fade)
-        release = SliderRow(
-            "Возврат громкости после фразы", 0, 2000, 50, s.duck_release_ms, lambda v: f"{v:.0f} мс"
-        )
-        release.changed.connect(lambda v: self._set(duck_release_ms=round(v)))
-        card.body.addWidget(release)
         card.body.addWidget(
             label(
                 "Приглушается только звук игры. Исходная громкость восстанавливается "
@@ -234,32 +220,9 @@ class GeneralPage(Page):
 
     def _system(self, s: Settings) -> Card:
         card = Card("Система")
-        poll = combo([(f"{hz} Гц", hz) for hz in POLL_RATES], round(s.poll_hz), "Частота")
-        poll.setMinimumContentsLength(6)
-        poll.currentIndexChanged.connect(lambda _i: self._set(poll_hz=poll.currentData(), now=True))
-        card.body.addWidget(
-            row(
-                titled("Частота проверки субтитров", "Выше — быстрее реакция, больше нагрузка"),
-                poll,
-            )
-        )
         box, autostart = toggle_row("Запускать вместе с Windows", "", s.autostart)
         autostart.toggled.connect(lambda on: self._set(autostart=on, now=True))
         card.body.addWidget(box)
-        card.body.addWidget(
-            label(
-                "Распознавание запускается, только когда текст в зоне меняется, поэтому "
-                "нагрузка почти не зависит от частоты.",
-                "hint",
-                wrap=True,
-            )
-        )
-        cache = QSpinBox()
-        cache.setRange(0, 2000)
-        cache.setValue(s.tts_cache_size)
-        cache.valueChanged.connect(lambda v: self._set(tts_cache_size=v))
-        cache.setAccessibleName("Кеш синтеза")
-        card.body.addWidget(row(titled("Кеш синтеза", "сколько фраз хранить готовыми"), cache))
         sources = QWidget()
         sources_row = QHBoxLayout(sources)
         sources_row.setContentsMargins(0, 0, 0, 0)
@@ -268,7 +231,7 @@ class GeneralPage(Page):
             check.setChecked(key in s.library_sources)
             check.toggled.connect(lambda on, k=key: self._toggle_source(k, on))
             sources_row.addWidget(check)
-        card.body.addWidget(titled("Где искать игры", "Библиотека игр появится на этапе 9"))
+        card.body.addWidget(titled("Где искать игры", "Для списка игр в «Профилях»"))
         card.body.addWidget(sources)
         return card
 
@@ -301,7 +264,67 @@ class GeneralPage(Page):
         never = ExeList(s.never_ask_exes)
         never.changed.connect(lambda values: self._set(never_ask_exes=values, now=True))
         card.body.addWidget(never)
+        more = QPushButton(("▾ " if self._fine_open else "▸ ") + "Тонкая настройка")
+        more.setCheckable(True)
+        more.setChecked(self._fine_open)
+        card.body.addWidget(more)
+        fine = self._fine(s)
+        fine.setVisible(self._fine_open)
+        more.toggled.connect(lambda on: self._show_fine(on))
+        card.body.addWidget(fine)
         return card
+
+    def _fine(self, s: Settings) -> QWidget:
+        """Rarely changed: hidden until «Тонкая настройка» is pressed."""
+        box = QWidget()
+        body = QVBoxLayout(box)
+        body.setContentsMargins(0, 0, 0, 0)
+        body.setSpacing(12)
+        poll = combo([(f"{hz} Гц", hz) for hz in POLL_RATES], round(s.poll_hz), "Частота")
+        poll.setMinimumContentsLength(6)
+        poll.currentIndexChanged.connect(lambda _i: self._set(poll_hz=poll.currentData(), now=True))
+        body.addWidget(
+            row(
+                titled(
+                    "Частота проверки субтитров",
+                    "Сколько раз в секунду смотреть, изменился ли текст. Новые подложки "
+                    "ищутся раз в 0,3 с при любой частоте",
+                ),
+                poll,
+            )
+        )
+        low = SliderRow(
+            "Реплика низкого приоритета ждёт не дольше",
+            1,
+            20,
+            1,
+            s.low_priority_ttl_s,
+            lambda v: f"{v:.0f} с",
+        )
+        low.changed.connect(lambda v: self._set(low_priority_ttl_s=v))
+        body.addWidget(low)
+        fade = SliderRow(
+            "Плавность приглушения", 0, 1000, 10, s.duck_fade_ms, lambda v: f"{v:.0f} мс"
+        )
+        fade.changed.connect(lambda v: self._set(duck_fade_ms=round(v)))
+        body.addWidget(fade)
+        release = SliderRow(
+            "Возврат громкости после фразы", 0, 2000, 50, s.duck_release_ms, lambda v: f"{v:.0f} мс"
+        )
+        release.changed.connect(lambda v: self._set(duck_release_ms=round(v)))
+        body.addWidget(release)
+        if s.dev_mode:
+            cache = QSpinBox()
+            cache.setRange(0, 2000)
+            cache.setValue(s.tts_cache_size)
+            cache.valueChanged.connect(lambda v: self._set(tts_cache_size=v))
+            cache.setAccessibleName("Кеш синтеза")
+            body.addWidget(row(titled("Кеш синтеза", "сколько фраз хранить готовыми"), cache))
+        return box
+
+    def _show_fine(self, on: bool) -> None:
+        self._fine_open = on
+        self.refresh()
 
     def sync(self) -> None:
         """The tray switch or a hotkey changed «enabled» while the page is open."""

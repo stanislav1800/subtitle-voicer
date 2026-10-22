@@ -38,6 +38,7 @@ from subvoicer.pipeline.ocr.words import WordFixer
 from subvoicer.pipeline.speaker.characters import CharacterBook
 from subvoicer.pipeline.speaker.gender import GenderGuesser
 from subvoicer.pipeline.speaker.resolver import SpeakerMode, SpeakerResolver
+from subvoicer.pipeline.speech.scheduler import OverlapMode
 from subvoicer.pipeline.speech.voices import VoiceDefaults, VoiceMode, VoicePicker
 from subvoicer.pipeline.text.preparer import TextPreparer
 from subvoicer.pipeline.text.pronunciation import PronunciationDict, PronunciationEntry
@@ -45,7 +46,7 @@ from subvoicer.pipeline.vision.masks import MaskPreset, MaskSpec
 from subvoicer.pipeline.vision.stability import StabilizationSettings
 from subvoicer.services.capture_service import CaptureService
 from subvoicer.services.game_watcher import GameWatcher
-from subvoicer.services.speech_service import SpeechService
+from subvoicer.services.speech_service import GameSpeech, SpeechService
 from subvoicer.services.zone_service import ZoneService
 from subvoicer.sources.manual import SELECT_CHANNEL
 from subvoicer.sources.zone_ocr import NameSource, PlateSearch, ZoneOcrSource, ZoneSpec
@@ -425,6 +426,7 @@ class GameRunner:
             self._router.set_profile(path, profile, event.aspect)
             self._preparer.dictionary = pronunciation(profile)
             self._speech.set_game(event.window.pid)
+            self._speech.set_game_speech(game_speech(profile))
             if key == self._key and self._session is not None:
                 return  # same game and zones: only voices/characters/dictionary changed
             self._stop_session()
@@ -471,6 +473,7 @@ class GameRunner:
             self._key = None
             self._router.set_profile(None, None)
             self._speech.set_game(None)
+            self._speech.set_game_speech(GameSpeech())
 
     def zone_states(self) -> dict[str, str]:
         session = self._session
@@ -497,6 +500,13 @@ class GameRunner:
         session, self._session = self._session, None
         if session is not None:
             session.stop()
+
+
+def game_speech(profile: Profile) -> GameSpeech:
+    """The game's own speech settings (TZ 1.31) for the speech service."""
+    own = profile.speech
+    overlap = OverlapMode(own.overlap_mode) if own.overlap_mode is not None else None
+    return GameSpeech(own.base_rate, overlap, own.hurry_rate)
 
 
 def speech_config(settings: Settings, hotkeys: bool = True) -> SpeechConfig:

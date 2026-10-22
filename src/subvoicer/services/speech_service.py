@@ -99,13 +99,22 @@ class SpeechTuning:
     output_device: str
 
 
+@dataclass(frozen=True, slots=True)
+class GameSpeech:
+    """The active game's own speech settings (TZ 4.9, 1.31); None — the general one."""
+
+    base_rate: float | None = None
+    overlap: OverlapMode | None = None
+    hurry_rate: float | None = None
+
+
 class _Hotkey(StrEnum):
     SKIP = "skip"
     REPEAT = "repeat"
     TOGGLE_PAUSE = "toggle_pause"
 
 
-_Message = _Submit | _Started | _Finished | _Hotkey | _Game | _Pause | SpeechTuning
+_Message = _Submit | _Started | _Finished | _Hotkey | _Game | _Pause | SpeechTuning | GameSpeech
 
 
 class SpeechService(Service):
@@ -133,6 +142,9 @@ class SpeechService(Service):
         self._inbox: queue.Queue[_Message] = queue.Queue()
         self._lines: dict[int, _Line] = {}
         self._prefetched: set[int] = set()  # continuations synthesized ahead (TZ 1.28)
+        # rate, overlap and hurry of the general settings (TZ 4.14), the scheduler's at first
+        self._general = (scheduler.base_rate, scheduler.overlap, scheduler.hurry_rate)
+        self._game_speech = GameSpeech()  # what the active game changes in them (TZ 1.31)
         output.set_listeners(self._on_started, self._on_finished)
 
     # ------------------------------------------------------------------ any thread
@@ -164,6 +176,10 @@ class SpeechService(Service):
     @property
     def paused(self) -> bool:
         return self._scheduler.paused
+
+    def set_game_speech(self, speech: GameSpeech) -> None:
+        """The active game's own rate and overlap settings; ``GameSpeech()`` — none."""
+        self._inbox.put(speech)
 
     def set_game(self, pid: int | None) -> None:
         """The game to duck from now on; the previous one gets its volume back."""
@@ -220,6 +236,10 @@ class SpeechService(Service):
                 self._switch_game(pid)
             case SpeechTuning():
                 self._tune(message)
+            case GameSpeech():
+                if message != self._game_speech:
+                    self._game_speech = message
+                    self._apply_speed()
             case _Started(line_id=line_id, t_play=t_play):
                 line = self._lines.get(line_id)
                 if line is not None:
@@ -334,7 +354,8 @@ class SpeechService(Service):
 
     def _tune(self, t: SpeechTuning) -> None:
         s = self._scheduler
-        s.base_rate, s.overlap, s.hurry_rate = t.base_rate, t.overlap, t.hurry_rate
+        self._general = (t.base_rate, t.overlap, t.hurry_rate)
+        self._apply_speed()
         s.max_lag_s, s.low_priority_ttl_s = t.max_lag_s, t.low_priority_ttl_s
         self._cache.resize(t.cache_size)
         self._output.set_volume(t.volume)
@@ -349,7 +370,15 @@ class SpeechService(Service):
             self._output.set_device(t.output_device or None)
         except Exception:
             log.exception("Не удалось открыть устройство вывода %r", t.output_device)
-        log.info("Настройки озвучки применены (скорость %.2f, %s)", t.base_rate, t.overlap)
+
+    def _apply_speed(self) -> None:
+        """Rate and overlap: the game's own where it has them, else the general ones."""
+        (rate, overlap, hurry), g, s = self._general, self._game_speech, self._scheduler
+        s.base_rate = rate if g.base_rate is None else g.base_rate
+        s.overlap = overlap if g.overlap is None else g.overlap
+        s.hurry_rate = hurry if g.hurry_rate is None else g.hurry_rate
+        own = " (свои настройки игры)" if g != GameSpeech() else ""
+        log.info("Настройки озвучки применены (скорость %.2f, %s)%s", s.base_rate, s.overlap, own)
 
     def _switch_game(self, pid: int | None) -> None:
         d = self._ducking

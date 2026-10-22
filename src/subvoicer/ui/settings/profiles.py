@@ -8,7 +8,7 @@ import threading
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import QSize, Qt, QTimer
 from PySide6.QtGui import QPainter, QPainterPath, QPixmap
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -42,17 +42,20 @@ from subvoicer.ui.settings.dialogs import (
     voice_items,
     voice_text,
 )
+from subvoicer.ui.settings.general import APPLY_DELAY_MS, OVERLAP_MODES
 from subvoicer.ui.settings.window import Page
 from subvoicer.ui.tray import pretty
 from subvoicer.ui.widgets.common import (
     Card,
     ElidedLabel,
+    SliderRow,
     chip,
     clear_layout,
     combo,
     icon_button,
     label,
     primary,
+    row,
     titled,
     toggle_row,
 )
@@ -190,6 +193,12 @@ class ProfilesPage(Page):
     def __init__(self, facade: AppFacade, open_editor: GameEditor) -> None:
         super().__init__("Профили и голоса")
         self._facade = facade
+        # a speech slider of the profile: saved once dragging stops (TZ 1.31)
+        self._speech_pending: tuple[Path, dict[str, object]] | None = None
+        self._speech_timer = QTimer(self)
+        self._speech_timer.setSingleShot(True)
+        self._speech_timer.setInterval(APPLY_DELAY_MS)
+        self._speech_timer.timeout.connect(self._save_speech)
         self._open_editor = open_editor
         self._selected: Path | None = None
         columns = QHBoxLayout()
@@ -337,6 +346,7 @@ class ProfilesPage(Page):
         self._detail.addWidget(self._header(path, profile))
         self._detail.addWidget(self._zones(path, profile))
         self._detail.addWidget(self._voices(path, profile))
+        self._detail.addWidget(self._speech(path, profile))
         self._detail.addWidget(self._characters(path, profile))
         self._detail.addWidget(self._stoplist(path, profile))
         self._fill_dictionary(path, profile)
@@ -450,6 +460,81 @@ class ProfilesPage(Page):
         if any(v.preferred for v in voices):
             card.body.addWidget(label(PREFERRED_HINT, "hint"))
         return card
+
+    def _speech(self, path: Path, profile: Profile) -> QWidget:
+        """The game's own rate, overlap and hurry (TZ 1.31); off — the general settings."""
+        card = Card("Озвучка в этой игре")
+        general = self._facade.settings
+        own = profile.speech
+        modes = dict(OVERLAP_MODES)
+        items: list[tuple[str, object]] = [("Как в общих", None)]
+        items += [(text, key) for key, text in OVERLAP_MODES]
+        overlap = combo(items, own.overlap_mode, "Новая реплика, пока звучит старая")
+        overlap.currentIndexChanged.connect(
+            lambda _i: self._set_speech(path, overlap_mode=overlap.currentData())
+        )
+        card.body.addWidget(
+            row(
+                titled(
+                    "Новая реплика, пока звучит старая",
+                    f"того же приоритета · в общих: {modes[general.overlap_mode].lower()}",
+                ),
+                overlap,
+            )
+        )
+        for key, switch_title, title, low, high, current in (
+            ("base_rate", "Своя скорость речи", "Скорость речи", 0.5, 2.0, general.base_rate),
+            (
+                "hurry_rate",
+                "Своё ускорение дочитывания",
+                "Ускорение дочитывания",
+                1.0,
+                2.0,
+                general.hurry_rate,
+            ),
+        ):
+            value = getattr(own, key)
+            box, switch = toggle_row(
+                switch_title, f"В общих настройках: {current:.2f}×", value is not None
+            )
+            switch.toggled.connect(
+                lambda on, k=key, c=current: self._set_speech(path, **{k: c if on else None})
+            )
+            card.body.addWidget(box)
+            if value is not None:
+                slider = SliderRow(title, low, high, 0.05, value, lambda v: f"{v:.2f}×")
+                slider.changed.connect(
+                    lambda v, k=key: self._set_speech(path, quiet=True, **{k: v})
+                )
+                card.body.addWidget(slider)
+        return card
+
+    def _set_speech(self, path: Path, *, quiet: bool = False, **fields: object) -> None:
+        """A switch or the mode: saved and the page redrawn; a slider: saved once dragging
+        stops, the page not redrawn under the mouse."""
+        if not quiet:
+            self._change(
+                path, lambda p: p.model_copy(update={"speech": p.speech.model_copy(update=fields)})
+            )
+            return
+        self._speech_pending = (
+            (path, {**self._speech_pending[1], **fields})
+            if (self._speech_pending is not None and self._speech_pending[0] == path)
+            else (path, dict(fields))
+        )
+        self._speech_timer.start()
+
+    def _save_speech(self) -> None:
+        pending, self._speech_pending = self._speech_pending, None
+        if pending is None:
+            return
+        path, fields = pending
+        try:
+            self._facade.update_profile(
+                path, lambda p: p.model_copy(update={"speech": p.speech.model_copy(update=fields)})
+            )
+        except (OSError, ValueError) as exc:
+            QMessageBox.warning(self, "Не сохранено", format_error(exc))
 
     def _characters(self, path: Path, profile: Profile) -> QWidget:
         card = Card()

@@ -223,7 +223,20 @@ def test_unknown_capture_mode_is_refused() -> None:
 
 def test_v5_profile_pauses_the_game_in_the_editor() -> None:
     """TZ 1.30: version 5 -> 6 — the game is paused while the zone editor is over it."""
-    new = migrate(profile_data(schema_version=5))
+    new = migrate(profile_data(schema_version=5), current=6)
     assert new["schema_version"] == 6 and new["pause_in_editor"] is True
     off = migrate(profile_data(schema_version=5, pause_in_editor=False))
     assert Profile.model_validate(off).pause_in_editor is False
+
+
+def test_v6_profile_speaks_as_the_general_settings_say() -> None:
+    """TZ 1.31: version 6 -> 7 — the game's own speech settings, none yet."""
+    new = migrate(profile_data(schema_version=6))
+    assert new["schema_version"] == 7 and new["speech"] == {}
+    speech = Profile.model_validate(new).speech
+    assert (speech.base_rate, speech.overlap_mode, speech.hurry_rate) == (None, None, None)
+    own = {"base_rate": 1.3, "overlap_mode": "queue", "hurry_rate": 1.6}
+    kept = migrate(profile_data(schema_version=6, speech=own))
+    assert Profile.model_validate(kept).speech.overlap_mode == "queue"
+    with pytest.raises(ValueError):
+        Profile.model_validate({**profile_data(), "speech": {"overlap_mode": "shout"}})

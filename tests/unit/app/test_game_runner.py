@@ -10,7 +10,7 @@ from typing import Any
 import pytest
 
 from subvoicer.app.game_runner import GameRunner, ProfileRouter, zone_specs
-from subvoicer.config.profile import Layout, Profile
+from subvoicer.config.profile import Layout, Profile, SpeechOverride
 from subvoicer.config.profile_store import ProfileStore
 from subvoicer.config.resources import gender_exceptions, letter_names, translit_table
 from subvoicer.core.events import GameActivated, GameClosed
@@ -19,10 +19,10 @@ from subvoicer.pipeline.speaker.characters import CharacterBook
 from subvoicer.pipeline.speaker.gender import GenderGuesser
 from subvoicer.pipeline.speaker.resolver import SpeakerMode
 from subvoicer.pipeline.speech.cache import SpeechCache
-from subvoicer.pipeline.speech.scheduler import SpeechScheduler
+from subvoicer.pipeline.speech.scheduler import OverlapMode, SpeechScheduler
 from subvoicer.pipeline.text.latin import LatinReader
 from subvoicer.pipeline.text.preparer import TextPreparer
-from subvoicer.services.speech_service import SpeechService
+from subvoicer.services.speech_service import GameSpeech, SpeechService
 from tests.fakes.audio import FakeOutput, FakeTts
 from tests.fakes.capture import RecordingBus
 from tests.fakes.clock import FakeClock
@@ -184,9 +184,13 @@ class FakeSession:
 class FakeSpeech:
     def __init__(self) -> None:
         self.games: list[int | None] = []
+        self.speech: list[GameSpeech] = []
 
     def set_game(self, pid: int | None) -> None:
         self.games.append(pid)
+
+    def set_game_speech(self, speech: GameSpeech) -> None:
+        self.speech.append(speech)
 
 
 def test_runner_rebuilds_only_when_zones_change(rig: Rig) -> None:
@@ -222,6 +226,20 @@ def test_runner_rebuilds_only_when_zones_change(rig: Rig) -> None:
     assert len(built) == 5 and built[4].stopped
     runner.on_closed(GameClosed(WINDOW.pid))
     assert speech.games[-1] is None and rig.router.request(line("Привет.")) is None
+    assert speech.speech[-1] == GameSpeech()
+
+
+def test_the_game_s_own_speech_settings_reach_the_speech_service(rig: Rig) -> None:
+    """TZ 1.31: rate, overlap and hurry of the profile; none — the general settings."""
+    speech = FakeSpeech()
+    preparer = TextPreparer(FirstVowelStress(), LatinReader(letter_names(), translit_table()))
+    runner = GameRunner(rig.store, rig.router, speech, preparer, lambda *_: None)  # type: ignore[arg-type]
+    runner.on_activated(GameActivated(str(rig.path), WINDOW, "16:9"))
+    assert speech.speech[-1] == GameSpeech()
+    own = SpeechOverride(base_rate=1.3, overlap_mode="queue")
+    rig.store.save(rig.saved().model_copy(update={"speech": own}), rig.path)
+    runner.on_activated(GameActivated(str(rig.path), WINDOW, "16:9"))  # the profile changed
+    assert speech.speech[-1] == GameSpeech(base_rate=1.3, overlap=OverlapMode.QUEUE)
 
 
 # ---------------------------------------------------------------- two zones, two priorities

@@ -252,3 +252,37 @@ def test_a_line_of_another_zone_is_not_synthesized_ahead(rig: Rig) -> None:
     rig.service.submit(request(2, "хвост", continuation=True, channel="b"))
     rig.step()
     assert len(rig.tts.calls) == 1
+
+
+def test_the_game_speaks_with_its_own_settings_over_the_general_ones(rig: Rig) -> None:
+    """TZ 1.31: rate, overlap and hurry of the game where it has them, else the general."""
+    from dataclasses import replace
+
+    from subvoicer.services.speech_service import GameSpeech, SpeechTuning
+
+    s = rig.service.scheduler
+    general = SpeechTuning(
+        base_rate=1.0,
+        overlap=OverlapMode.SPEEDUP,
+        hurry_rate=1.5,
+        max_lag_s=8,
+        low_priority_ttl_s=5,
+        volume=1.0,
+        duck_level=0.4,
+        duck_fade_s=0.15,
+        duck_release_s=0.3,
+        cache_size=10,
+        output_device="",
+    )
+    rig.service.set_game_speech(GameSpeech(base_rate=1.3, overlap=OverlapMode.QUEUE))
+    rig.step()  # before any general tuning: over the scheduler's own values
+    assert (s.base_rate, s.overlap, s.hurry_rate) == (1.3, OverlapMode.QUEUE, 1.5)
+    rig.service.tune(general)
+    rig.step()
+    assert (s.base_rate, s.overlap, s.hurry_rate) == (1.3, OverlapMode.QUEUE, 1.5)
+    rig.service.tune(replace(general, hurry_rate=1.8))
+    rig.step()
+    assert s.hurry_rate == 1.8 and s.base_rate == 1.3  # the general change the game keeps
+    rig.service.set_game_speech(GameSpeech())  # the game closed
+    rig.step()
+    assert (s.base_rate, s.overlap, s.hurry_rate) == (1.0, OverlapMode.SPEEDUP, 1.8)

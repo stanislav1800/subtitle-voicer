@@ -11,8 +11,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from subvoicer.core.models import Gender
 
-SCHEMA_VERSION = 6  # 2: ocr.fix_words, ocr.confusions (TZ 1.23); 3: one layout (TZ 1.26);
-# 4: capture (TZ 1.28); 5: zone locate (TZ 1.29); 6: pause_in_editor (TZ 1.30)
+SCHEMA_VERSION = 7  # 2: ocr.fix_words, ocr.confusions (TZ 1.23); 3: one layout (TZ 1.26);
+# 4: capture (TZ 1.28); 5: zone locate (TZ 1.29); 6: pause_in_editor (TZ 1.30); 7: speech (1.31)
 MAX_ZONES = 12  # per layout (TZ 4.2)
 
 Hsv = tuple[int, int, int]
@@ -27,6 +27,7 @@ TriggerName = Literal["auto", "hotkey", "off"]
 CharacterSource = Literal["auto", "import", "manual"]
 # the window (WGC), the screen cut to the window (DXGI), or the window with the screen fallback
 CaptureName = Literal["auto", "wgc", "dxgi"]
+OverlapName = Literal["cut", "queue", "speedup", "adaptive"]  # TZ 4.9
 # the text is in the zone's rect, or the rect is where subtitle plates are looked for (4.2.2)
 LocateName = Literal["fixed", "plates"]
 
@@ -116,6 +117,14 @@ class Stabilization(StrictModel):
         if override is None:
             return self
         return self.model_copy(update=override.model_dump(exclude_none=True))
+
+
+class SpeechOverride(StrictModel):
+    """The game's own speech settings (TZ 4.9, 1.31); null — as in the general settings."""
+
+    base_rate: float | None = Field(default=None, gt=0)
+    overlap_mode: OverlapName | None = None
+    hurry_rate: float | None = Field(default=None, ge=1)
 
 
 Letter = Annotated[str, Field(min_length=1, max_length=1)]
@@ -229,6 +238,7 @@ class Profile(StrictModel):
     layout: Layout = Field(default_factory=Layout)
     capture: CaptureName = "auto"  # TZ 4.1, 1.28
     pause_in_editor: bool = True  # the game is paused while the zone editor is over it (1.30)
+    speech: SpeechOverride = Field(default_factory=SpeechOverride)  # TZ 4.9, 1.31
     narrator_voice: str
     default_voices: DefaultVoices
     speaker_stoplist: list[str] = Field(default_factory=list)

@@ -55,6 +55,12 @@ def _v5_to_v6(data: Data) -> Data:
     return data
 
 
+def _v6_to_v7(data: Data) -> Data:
+    """TZ 1.31: the game's own speech settings, none yet — as in the general settings."""
+    data.setdefault("speech", {})
+    return data
+
+
 # from version N to N+1; every entry has a unit test on an example of the old file
 MIGRATIONS: dict[int, Migration] = {
     1: _v1_to_v2,
@@ -62,6 +68,7 @@ MIGRATIONS: dict[int, Migration] = {
     3: _v3_to_v4,
     4: _v4_to_v5,
     5: _v5_to_v6,
+    6: _v6_to_v7,
 }
 
 
