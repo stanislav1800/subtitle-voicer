@@ -185,13 +185,13 @@ def fixed_words(spec: ZoneSpec, text: str) -> str:
 
 
 def in_colour(
-    spec: ZoneSpec, outcome: OcrOutcome, image: Image, mask: Image, separator: str = " "
+    spec: ZoneSpec, outcome: OcrOutcome, image: Image, separator: str = " "
 ) -> tuple[str, float]:
     """A zone with the text found by colour (TZ 4.3, 1.35): lines mostly of another colour
     are not its text; the text and the confidence of the lines left."""
     if spec.mask.preset is not MaskPreset.COLOR:
         return outcome.text, outcome.mean_confidence
-    kept, dropped = colour_lines(outcome.best.lines, image, mask)
+    kept, dropped = colour_lines(outcome.best.lines, image, spec.mask.colors_hsv)
     if not dropped:
         return outcome.text, outcome.mean_confidence
     log.debug("Зона %s: не того цвета: %r", spec.id, [line.text for line in dropped])
@@ -228,7 +228,7 @@ def read_once(spec: ZoneSpec, frame: Image, runner: OcrRunner, separator: str = 
         text, kind = separator.join(texts), str(first.input_kind if first else spec.ocr_input)
     else:
         outcome = active.run(image, state.mask, spec.ocr_input, separator=separator)
-        text, confidence = in_colour(spec, outcome, image, state.mask, separator)
+        text, confidence = in_colour(spec, outcome, image, separator)
         text = fixed_words(spec, ZoneOcrSource._keep_prefix_name(spec, outcome, text))
         kind = str(outcome.input_kind)
     elapsed = (time.perf_counter() - started) * 1000
@@ -372,7 +372,7 @@ class ZoneOcrSource:
             text = " ".join(plate_texts)
         else:
             first = runner.run(image, zone.mask, spec.ocr_input)
-            text, confidence = in_colour(spec, first, image, zone.mask)
+            text, confidence = in_colour(spec, first, image)
             text = fixed_words(spec, self._keep_prefix_name(spec, first, text=text))
         elapsed_ms = (time.perf_counter() - started) * 1000
         input_kind = str(first.input_kind) if first is not None else str(spec.ocr_input)
