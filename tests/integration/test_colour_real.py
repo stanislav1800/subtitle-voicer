@@ -1,11 +1,13 @@
 """Text and speaker by colour on the user's real frames (TZ 4.3, 4.5, 1.37).
 
-42 zone crops of a Cyberpunk 2077 letsplay, light and dark scenes, two with text of other
-colours (a yellow answer option, a yellow «15M»), one without a subtitle. Labels and the
-zone's colours: ``tests/fixtures/real/cyberpunk/colour.json``; the crops (~18 MB) live only on
-the user's machine in ``tests/fixtures/colour/cyberpunk/`` and the OCR models in the app's
-``models/`` — without them the test is skipped. Measured 2026-10-23 (DECISIONS): text 0.956,
-no read worse than 0.8, no empty read, 38 of 41 names; before the fix 0.827, 7, 5 and 30.
+43 zone crops of a Cyberpunk 2077 letsplay, light and dark scenes, two with text of other
+colours (a yellow answer option, a yellow «15M»), one without a subtitle, one with two
+speakers one under another (TZ 1.38: a label is ``[speaker, text]`` or a list of them).
+Labels and the zone's colours: ``tests/fixtures/real/cyberpunk/colour.json``; the crops
+(~18 MB) live only on the user's machine in ``tests/fixtures/colour/cyberpunk/``, the OCR
+models in the app's ``models/`` — without them the test is skipped. Measured 2026-10-23
+(DECISIONS) on the first 42: text 0.956, no read worse than 0.8, no empty read, 38 of 41
+names; before the fix 0.827, 7, 5 and 30.
 """
 
 from __future__ import annotations
@@ -70,10 +72,18 @@ def accuracy(read: str, truth: str) -> float:
 def test_text_and_speaker_by_colour_on_light_and_dark_frames(spec: ZoneSpec) -> None:
     frames = json.loads(LABELS.read_text(encoding="utf-8"))["frames"]
     scores, names, empty, report = [], 0, 0, []
-    for name, (speaker, truth) in frames.items():
+    for name, label in frames.items():
         image = cv2.cvtColor(cv2.imread(str(CROPS / f"{name}.png")), cv2.COLOR_BGR2BGRA)
         reading = read_once(spec, image, spec.runner)  # type: ignore[arg-type]
         text = " ".join(line.text for line in reading.lines)
+        if isinstance(label[0], list):  # several speakers: each line has its own
+            said_all = [clean_name(line.name or "") for line in reading.lines]
+            want = [speaker for speaker, _ in label]
+            assert len(said_all) == len(want), f"{name}: {said_all} вместо {want}"
+            for said_one, speaker in zip(said_all, want, strict=True):
+                assert find_character([Character(name=speaker)], said_one) == 0, (name, said_all)
+            label = [want[0], " ".join(line for _, line in label)]
+        speaker, truth = label
         said = reading.lines[0].name if reading.lines else None
         score = accuracy(text, truth)
         if not truth:

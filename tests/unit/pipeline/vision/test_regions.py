@@ -59,3 +59,14 @@ def test_patches_of_the_scene_are_not_letters() -> None:
     assert np.count_nonzero(clean[50:70, 20:400]) == np.count_nonzero(mask[50:70, 20:400])
     assert not clean[:, 450:520].any() and not clean[85:100, 100:300].any()
     assert letters_only(np.zeros((10, 10), np.uint8)).sum() == 0
+
+
+def test_the_name_of_the_line_above_is_not_this_rows_name() -> None:
+    """TZ 1.38: «Ви:» ends just above the continuation row — it is not its speaker."""
+    from subvoicer.pipeline.vision.regions import name_before
+
+    image = np.zeros((120, 600, 3), np.uint8)
+    name = np.zeros((120, 600), np.uint8)
+    name[20:42, 40:90] = 255  # «Ви:» of the first row (20-42)
+    assert name_before(image, name, (100, 20, 500, 42)) is not None
+    assert name_before(image, name, (100, 46, 500, 68)) is None  # the continuation row

@@ -17,6 +17,15 @@ INNER_NAME = re.compile(r"(?<=[.!?…»\"])\s+([^\s:.!?…][^:.!?…]{0,29}):\s+
 TRAILING_NAME = re.compile(r"(?<=[.!?…»\"])\s+([^\s:.!?…][^:.!?…]{0,29}):\s*$")
 # «[ П-3 ] Текст» (mode brackets, TZ 1.33): OCR may give «|» for a bracket of a thin font
 BRACKET_NAME = re.compile(r"[\[|]\s*([^\[\]|]{1,40}?)\s*[\]|]")
+# a name read by its colour in front of a row of the text (TZ 1.38): the zone source puts it
+# into the text between two invisible separators, so every row may have a speaker of its own
+NAME_MARK = "\u2063"
+MARKED_NAME = re.compile(NAME_MARK + r"([^" + NAME_MARK + r"]{1,40})" + NAME_MARK)
+
+
+def marked(name: str, text: str) -> str:
+    """``text`` of a row whose speaker ``name`` was read by its colour."""
+    return f"{NAME_MARK}{name}{NAME_MARK} {text}"
 
 
 _LATIN = re.compile(r"[A-Za-z]")
@@ -86,10 +95,12 @@ class SpeakerResolver:
                     return SpeakerResult(found.candidate, found.rest)
                 # rejected candidate: the prefix stays in the text ("Совет: нажмите Q")
                 return SpeakerResult(None, text)
-            case SpeakerMode.BRACKETS:
-                parts = self._bracket_parts(text)
+            case SpeakerMode.BRACKETS | SpeakerMode.COLOR if self._by_marks(text):
+                parts = self._marked_parts(text)
                 if parts and parts[0][0] is not None:
                     return SpeakerResult(parts[0][0], parts[0][1])
+                return SpeakerResult(None, self._unmarked(text))
+            case SpeakerMode.BRACKETS:
                 return SpeakerResult(None, text)
             case SpeakerMode.ZONE | SpeakerMode.COLOR:
                 name = clean_name(candidate) if candidate is not None else ""
@@ -100,8 +111,8 @@ class SpeakerResolver:
     def resolve_all(self, text: str, candidate: str | None = None) -> list[SpeakerResult]:
         """A new line, split into the lines of several speakers when it starts with a name
         (``prefix`` mode, TZ 1.17): ``"Ви: Кто ты? Джеки: Вылезай."`` -> two results."""
-        if self.mode is SpeakerMode.BRACKETS:
-            return [SpeakerResult(name, part) for name, part in self._bracket_parts(text)]
+        if self._by_marks(text):
+            return [SpeakerResult(name, part) for name, part in self._marked_parts(text)]
         first = self.resolve(text, candidate)
         if self.mode is not SpeakerMode.PREFIX or first.name is None:
             return [first]
@@ -117,10 +128,10 @@ class SpeakerResolver:
 
     def without_trailing_name(self, text: str) -> str:
         """``text`` without a bare name at its end, whose line has not appeared yet."""
-        if self.mode is SpeakerMode.BRACKETS:
-            names = list(BRACKET_NAME.finditer(text))
+        if self.mode in (SpeakerMode.BRACKETS, SpeakerMode.COLOR):
+            names = list(self._marks().finditer(text))
             last = names[-1] if names else None
-            if last is None or text[last.end() :].strip() or not self._is_bracket_name(last):
+            if last is None or text[last.end() :].strip() or not self._is_mark_name(last):
                 return text
             return text[: last.start()].rstrip()
         if self.mode is not SpeakerMode.PREFIX:
@@ -133,8 +144,8 @@ class SpeakerResolver:
     def split_inner(self, text: str) -> list[tuple[str | None, str]]:
         """``(None, head)`` for the text before the first inner name (it belongs to the
         current speaker), then ``(name, text)`` per inner name; empty parts are dropped."""
-        if self.mode is SpeakerMode.BRACKETS:
-            return self._bracket_parts(text)
+        if self._by_marks(text):
+            return self._marked_parts(text)
         if self.mode is not SpeakerMode.PREFIX:
             return [(None, text)] if text.strip() else []
         parts: list[tuple[str | None, str]] = []
@@ -157,26 +168,45 @@ class SpeakerResolver:
         glued: list[str] = []
         pending = ""
         for text in texts:
-            if not self._bracket_parts(text) and BRACKET_NAME.search(text):
+            if not self._marked_parts(text) and BRACKET_NAME.search(text):
                 pending = f"{pending} {text}".strip()  # only names: wait for the text
                 continue
             glued.append(f"{pending} {text}".strip())
             pending = ""
         return glued  # a name below the last line: its text has not appeared yet
 
-    def _is_bracket_name(self, match: re.Match[str]) -> bool:
-        return self._validator.is_name(bracket_name(match.group(1)), digits=True)
+    def _marks(self) -> re.Pattern[str]:
+        """Names in the text: «[ Имя ]» (brackets), or read by the colour (marked)."""
+        return BRACKET_NAME if self.mode is SpeakerMode.BRACKETS else MARKED_NAME
 
-    def _bracket_parts(self, text: str) -> list[tuple[str | None, str]]:
-        """Every «[ Имя ]» starts a line of its own (the brackets leave no doubt, no end of a
-        sentence is needed before them); the text before the first one has no name."""
+    def _by_marks(self, text: str) -> bool:
+        if self.mode is SpeakerMode.BRACKETS:
+            return True
+        return self.mode is SpeakerMode.COLOR and NAME_MARK in text
+
+    def _name_of(self, match: re.Match[str]) -> str:
+        if self.mode is SpeakerMode.BRACKETS:
+            return bracket_name(match.group(1))
+        return clean_name(match.group(1))
+
+    def _is_mark_name(self, match: re.Match[str]) -> bool:
+        digits = self.mode is SpeakerMode.BRACKETS  # «[ П-3 ]»
+        return self._validator.is_name(self._name_of(match), digits=digits)
+
+    def _unmarked(self, text: str) -> str:
+        """The text without the marks of names that did not pass (a colour read as junk)."""
+        return MARKED_NAME.sub("", text).strip() if self.mode is SpeakerMode.COLOR else text
+
+    def _marked_parts(self, text: str) -> list[tuple[str | None, str]]:
+        """Every «[ Имя ]» or name read by its colour starts a line of its own (no end of a
+        sentence is needed before it); the text before the first one has no name."""
         parts: list[tuple[str | None, str]] = []
         current: str | None = None
         start = 0
-        for match in BRACKET_NAME.finditer(text):
-            if not self._is_bracket_name(match):
+        for match in self._marks().finditer(text):
+            if not self._is_mark_name(match):
                 continue
             parts.append((current, text[start : match.start()].strip()))
-            current, start = bracket_name(match.group(1)), match.end()
+            current, start = self._name_of(match), match.end()
         parts.append((current, text[start:].strip()))
-        return [(name, part) for name, part in parts if part]
+        return [(name, self._unmarked(part)) for name, part in parts if self._unmarked(part)]

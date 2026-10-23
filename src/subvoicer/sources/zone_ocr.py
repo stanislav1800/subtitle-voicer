@@ -34,6 +34,7 @@ from subvoicer.pipeline.speaker.resolver import (
     SpeakerMode,
     SpeakerResolver,
     SpeakerResult,
+    marked,
 )
 from subvoicer.pipeline.text.latin import twins_to_cyrillic
 from subvoicer.pipeline.text.skip import SkipList
@@ -141,6 +142,7 @@ class _ZoneState:
     seen_at: float = float("-inf")  # plates were last found then
     # the first row OCR read (crop pixels): the name colour is looked for left of it (TZ 4.5)
     first_row: tuple[int, int, int, int] | None = None
+    rows_named: bool = False  # every row's name is in the text already (TZ 1.38)
 
 
 @dataclass(frozen=True)
@@ -303,9 +305,7 @@ def read_once(spec: ZoneSpec, frame: Image, runner: OcrRunner, separator: str = 
         text, kind = separator.join(texts), str(first.input_kind if first else spec.ocr_input)
     else:
         outcome = active.run(image, state.mask, spec.ocr_input, separator=separator)
-        text, confidence = in_colour(spec, outcome, image, state.mask, separator)
-        state.first_row = in_colour_lines(spec, outcome, image, state.mask)[1]
-        text = fixed_words(spec, ZoneOcrSource._keep_prefix_name(spec, outcome, text))
+        text, confidence = ZoneOcrSource._read_text(state, outcome, image, active, separator)
         kind = str(outcome.input_kind)
     elapsed = (time.perf_counter() - started) * 1000
     candidate = ZoneOcrSource._read_name(state, active)
@@ -453,9 +453,7 @@ class ZoneOcrSource:
             text = " ".join(plate_texts)
         else:
             first = runner.run(image, zone.mask, spec.ocr_input)
-            text, confidence = in_colour(spec, first, image, zone.mask)
-            zone.first_row = in_colour_lines(spec, first, image, zone.mask)[1]
-            text = fixed_words(spec, self._keep_prefix_name(spec, first, text=text))
+            text, confidence = self._read_text(zone, first, image, runner)
         elapsed_ms = (time.perf_counter() - started) * 1000
         input_kind = str(first.input_kind) if first is not None else str(spec.ocr_input)
         log.debug(
@@ -634,6 +632,48 @@ class ZoneOcrSource:
         return self._read_name(zone, zone.spec.runner or self._runner)
 
     @staticmethod
+    def _read_text(
+        zone: _ZoneState, outcome: OcrOutcome, image: Image, runner: OcrRunner, separator: str = " "
+    ) -> tuple[str, float]:
+        """The text of an OCR outcome: rows of other colours left out (TZ 4.3), words fixed;
+        with the name by its colour in the zone, every row's speaker put in front of it."""
+        spec = zone.spec
+        assert zone.mask is not None
+        lines, zone.first_row = in_colour_lines(spec, outcome, image, zone.mask)
+        name = spec.name
+        zone.rows_named = (
+            spec.speaker.mode is SpeakerMode.COLOR and name is not None and name.rect is None
+        )
+        if not zone.rows_named:
+            text, confidence = in_colour(spec, outcome, image, zone.mask, separator)
+            text = ZoneOcrSource._keep_prefix_name(spec, outcome, text)
+            return fixed_words(spec, text), confidence
+        # «Ви: …» and «Бестия: …» one under another: each row with a name of the name colour
+        # before it (or above it) starts that speaker's line; one name for the whole reading
+        # gave the second line the first one's speaker (TZ 1.38)
+        rows = []
+        for row in rows_of(lines):
+            box = (
+                min(line.bbox[0] for line in row),
+                min(line.bbox[1] for line in row),
+                max(line.bbox[2] for line in row),
+                max(line.bbox[3] for line in row),
+            )
+            words = fixed_words(spec, " ".join(line.text for line in row))
+            speaker = ZoneOcrSource._read_part(zone, ZoneOcrSource._row_name(zone, box), runner)
+            rows.append(marked(speaker, words) if speaker else words)
+        return separator.join(rows), mean_confidence(lines)
+
+    @staticmethod
+    def _row_name(zone: _ZoneState, box: tuple[int, int, int, int]) -> Image | None:
+        assert zone.spec.name is not None and zone.crop is not None
+        if zone.name_mask is None:
+            return None
+        if zone.spec.name.place == "above":
+            return name_above(zone.crop, zone.name_mask, box)
+        return name_before(zone.crop, zone.name_mask, box)
+
+    @staticmethod
     def _read_name(zone: _ZoneState, runner: OcrRunner) -> str | None:
         """OCR of the speaker zone or of the name-colour part of the zone (TZ 4.5, 1.36)."""
         spec, name = zone.spec, zone.spec.name
@@ -647,11 +687,26 @@ class ZoneOcrSource:
             image = enlarged(image)
             mask = build_mask(image, name.mask)
         else:
-            part = ZoneOcrSource._name_part(zone, name.place)
-            if part is None:
-                return None
-            part = enlarged(part)
-            image, mask = part, build_mask(part, name.mask)
+            if zone.rows_named:
+                return None  # the names are in the text, row by row (TZ 1.38)
+            return ZoneOcrSource._read_part(
+                zone, ZoneOcrSource._name_part(zone, name.place), runner
+            )
+        return ZoneOcrSource._ocr_name(zone, image, mask, runner)
+
+    @staticmethod
+    def _read_part(zone: _ZoneState, part: Image | None, runner: OcrRunner) -> str | None:
+        """OCR of a name-colour part of the zone, enlarged (a two-letter «Ви:»)."""
+        name = zone.spec.name
+        if part is None or name is None:
+            return None
+        part = enlarged(part)
+        return ZoneOcrSource._ocr_name(zone, part, build_mask(part, name.mask), runner)
+
+    @staticmethod
+    def _ocr_name(zone: _ZoneState, image: Image, mask: Image, runner: OcrRunner) -> str | None:
+        spec, name = zone.spec, zone.spec.name
+        assert name is not None
         outcome = runner.run(image, mask, OcrInput.RAW)
         text = outcome.text
         if name.mask.preset is MaskPreset.COLOR:

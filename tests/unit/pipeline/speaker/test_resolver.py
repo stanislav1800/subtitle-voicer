@@ -173,3 +173,28 @@ def test_a_bare_name_in_brackets_waits_for_its_text(brackets: SpeakerResolver) -
 def test_digits_are_a_name_only_in_brackets() -> None:
     validator = NameValidator([])
     assert not validator.is_name("П-3") and validator.is_name("П-3", digits=True)
+
+
+# ---------------------------------------------------------------- names by colour per row (1.38)
+
+
+def test_names_read_by_colour_row_by_row() -> None:
+    from subvoicer.pipeline.speaker.resolver import marked
+
+    colour = SpeakerResolver(SpeakerMode.COLOR, speaker_stoplist())
+    text = " ".join(
+        [
+            marked("Ви:", "Эти мамонты очень быстрые."),
+            "Лезть к ним бессмысленно.",
+            marked("Бестия:", "Речь не про оружие."),
+        ]
+    )
+    assert colour.resolve_all(text) == [
+        SpeakerResult("Ви", "Эти мамонты очень быстрые. Лезть к ним бессмысленно."),
+        SpeakerResult("Бестия", "Речь не про оружие."),
+    ]
+    assert colour.without_trailing_name(f"Пойдём. {marked('Бестия', '')}") == "Пойдём."
+    # junk read as a name is not a name: its row goes on with the line before
+    assert colour.resolve_all(marked("12", "Текст.")) == [SpeakerResult(None, "Текст.")]
+    # no marks: the candidate of the name zone or colour, as before
+    assert colour.resolve("Текст.", "Джуди") == SpeakerResult("Джуди", "Текст.")

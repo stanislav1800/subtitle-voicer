@@ -85,13 +85,25 @@ def name_before(image: Image, name_mask: Image, line: Box) -> Image | None:
     """The name in front of a text line: name-colour pixels on that line's rows, left of
     where the text starts. Pixels of the name colour elsewhere in the zone (neon of the scene,
     a red HUD label in Cyberpunk) stretched the cut-out over the background and the text, and
-    the name came out empty or with words of the line («Пациентка: Не зн»). None — nothing of
+    the name came out empty or with words of the line («Пациентка: Не зн»). Only blobs that
+    cross the middle of the line count: the name of the line above, its bottom just over this
+    one, made a continuation row a new line of the same speaker (TZ 1.38). None — nothing of
     the name colour before it."""
     start, top, _end, bottom = line
     height = max(1, bottom - top)
     y1, y2 = max(0, top - height // 3), min(image.shape[0], bottom + height // 3)
     x1, x2 = max(0, start - NAME_REACH * height), start + height // 2
-    return _part(image, name_mask, y1, y2, x1, x2)
+    if y2 <= y1 or x2 <= x1:
+        return None
+    band = np.ascontiguousarray(name_mask[y1:y2, x1:x2])
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(band, connectivity=8)
+    middle = (top + bottom) // 2 - y1
+    tops, heights = stats[:, cv2.CC_STAT_TOP], stats[:, cv2.CC_STAT_HEIGHT]
+    crossing = [i for i in range(1, count) if tops[i] <= middle < tops[i] + heights[i]]
+    if not crossing:
+        return None
+    keep = u8(np.isin(labels, crossing).astype(np.uint8) * 255)
+    return _part(image[y1:y2, x1:x2], keep, 0, y2 - y1, 0, x2 - x1)
 
 
 def name_above(image: Image, name_mask: Image, line: Box) -> Image | None:

@@ -739,3 +739,34 @@ def test_a_name_zone_with_the_name_colour_reads_only_it() -> None:
         ),
     )
     assert [(u.speaker, u.text) for u in run_zone(zone, image, ocr)] == [("Джуди", "Ты вовремя.")]
+
+
+def test_two_speakers_by_colour_one_under_another() -> None:
+    """TZ 1.38, Cyberpunk: «Ви: …» (two rows) and «Бестия: …» below — the second line got
+    the first one's name."""
+    image = np.full((120, 800, 4), 20, dtype=np.uint8)
+    image[10:30, 10:60, :3] = (0, 0, 255)  # «Ви:»
+    image[10:30, 80:780, :3] = 255
+    image[34:54, 80:600, :3] = 255  # its second row
+    image[62:82, 10:70, :3] = (0, 0, 255)  # «Бестия:»
+    image[62:82, 80:780, :3] = 255
+    zone = ZoneSpec(
+        id="dialog",
+        rect=Rect(0.0, 0.0, 1.0, 1.0),
+        mask=MaskSpec(MaskPreset.BRIGHT_ON_DARK),
+        speaker=SpeakerResolver(SpeakerMode.COLOR, speaker_stoplist()),
+        name=NameSource(MaskSpec(MaskPreset.COLOR, colors_hsv=RED)),
+    )
+    ocr = InTurn(
+        (
+            OcrLine("Эти мамонты очень быстрые.", 0.95, (80, 10, 780, 30)),
+            OcrLine("Лезть к ним бессмысленно.", 0.95, (80, 34, 600, 54)),
+            OcrLine("Речь не про оружие.", 0.95, (80, 62, 780, 82)),
+        ),
+        (OcrLine("Ви:", 0.95, (0, 0, 50, 20)),),
+        (OcrLine("Бестия:", 0.95, (0, 0, 60, 20)),),
+    )
+    assert [(u.speaker, u.text) for u in run_zone(zone, image, ocr)] == [
+        ("Ви", "Эти мамонты очень быстрые. Лезть к ним бессмысленно."),
+        ("Бестия", "Речь не про оружие."),
+    ]
