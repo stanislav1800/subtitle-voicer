@@ -23,16 +23,17 @@ from subvoicer.pipeline.dedup import (
     grown_from,
     on_screen,
 )
+from subvoicer.pipeline.ocr.colour import colour_lines
 from subvoicer.pipeline.ocr.inputs import OcrInput
 from subvoicer.pipeline.ocr.junk_filter import JunkFilter
-from subvoicer.pipeline.ocr.runner import OcrOutcome, OcrRunner
+from subvoicer.pipeline.ocr.runner import OcrOutcome, OcrRunner, mean_confidence
 from subvoicer.pipeline.ocr.words import WordFixer
 from subvoicer.pipeline.speaker.resolver import SpeakerMode, SpeakerResolver, SpeakerResult
 from subvoicer.pipeline.text.latin import twins_to_cyrillic
 from subvoicer.pipeline.text.skip import SkipList
 from subvoicer.pipeline.vision.change import mask_empty
 from subvoicer.pipeline.vision.crop import crop
-from subvoicer.pipeline.vision.masks import Image, MaskSpec, build_mask
+from subvoicer.pipeline.vision.masks import Image, MaskPreset, MaskSpec, build_mask
 from subvoicer.pipeline.vision.plates import (
     Box,
     Plate,
@@ -183,6 +184,20 @@ def fixed_words(spec: ZoneSpec, text: str) -> str:
     return spec.words.fix(text) if spec.words is not None else text
 
 
+def in_colour(
+    spec: ZoneSpec, outcome: OcrOutcome, image: Image, mask: Image, separator: str = " "
+) -> tuple[str, float]:
+    """A zone with the text found by colour (TZ 4.3, 1.35): lines mostly of another colour
+    are not its text; the text and the confidence of the lines left."""
+    if spec.mask.preset is not MaskPreset.COLOR:
+        return outcome.text, outcome.mean_confidence
+    kept, dropped = colour_lines(outcome.best.lines, image, mask)
+    if not dropped:
+        return outcome.text, outcome.mean_confidence
+    log.debug("Зона %s: не того цвета: %r", spec.id, [line.text for line in dropped])
+    return separator.join(line.text for line in kept), mean_confidence(kept)
+
+
 def skipped(spec: ZoneSpec, text: str) -> bool:
     """A text of the game's «Не озвучивать» list (TZ 1.33), with a DEBUG line why."""
     phrase = spec.skip.match(text) if spec.skip else None
@@ -213,8 +228,9 @@ def read_once(spec: ZoneSpec, frame: Image, runner: OcrRunner, separator: str = 
         text, kind = separator.join(texts), str(first.input_kind if first else spec.ocr_input)
     else:
         outcome = active.run(image, state.mask, spec.ocr_input, separator=separator)
-        text = fixed_words(spec, ZoneOcrSource._keep_prefix_name(spec, outcome, outcome.text))
-        confidence, kind = outcome.mean_confidence, str(outcome.input_kind)
+        text, confidence = in_colour(spec, outcome, image, state.mask, separator)
+        text = fixed_words(spec, ZoneOcrSource._keep_prefix_name(spec, outcome, text))
+        kind = str(outcome.input_kind)
     elapsed = (time.perf_counter() - started) * 1000
     candidate = ZoneOcrSource._read_name(state, active)
     lines = spec.speaker.resolve_all(text, candidate) if text else []
@@ -356,8 +372,8 @@ class ZoneOcrSource:
             text = " ".join(plate_texts)
         else:
             first = runner.run(image, zone.mask, spec.ocr_input)
-            confidence = first.mean_confidence
-            text = fixed_words(spec, self._keep_prefix_name(spec, first, text=first.text))
+            text, confidence = in_colour(spec, first, image, zone.mask)
+            text = fixed_words(spec, self._keep_prefix_name(spec, first, text=text))
         elapsed_ms = (time.perf_counter() - started) * 1000
         input_kind = str(first.input_kind) if first is not None else str(spec.ocr_input)
         log.debug(

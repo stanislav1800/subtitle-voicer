@@ -9,7 +9,7 @@ from subvoicer.config.resources import short_words, speaker_stoplist
 from subvoicer.core.models import Frame, OcrLine, OcrResult, Rect, Utterance, UtteranceKind
 from subvoicer.pipeline.dedup import Deduplicator
 from subvoicer.pipeline.ocr.junk_filter import JunkFilter
-from subvoicer.pipeline.ocr.runner import OcrRunner
+from subvoicer.pipeline.ocr.runner import OcrRunner, OcrSettings
 from subvoicer.pipeline.speaker.resolver import SpeakerMode, SpeakerResolver
 from subvoicer.pipeline.text.skip import SkipList
 from subvoicer.pipeline.vision.masks import MaskPreset, MaskSpec
@@ -554,3 +554,42 @@ def test_a_new_sentence_or_a_late_line_is_not_a_continuation() -> None:
     s.show("потом поговорим об этом подробнее.")  # too late after the first half
     s.run(1)
     assert [u.kind for u in s.out] == [UtteranceKind.NEW] * 4
+
+
+def test_a_colour_zone_reads_only_lines_of_its_colour() -> None:
+    """TZ 1.35: a yellow «15M» under a cyan Cyberpunk subtitle is not read."""
+    cyan = ((80, 90, 170), (100, 255, 255))
+    image = np.full((120, 400, 4), 25, dtype=np.uint8)
+    for x in range(60, 360, 8):
+        image[20:40, x : x + 4, :3] = (230, 210, 40)
+    for x in range(180, 220, 8):
+        image[80:95, x : x + 4, :3] = (40, 210, 240)
+
+    class TwoLines:
+        def recognize(self, _image: np.ndarray) -> OcrResult:
+            return OcrResult(
+                (
+                    OcrLine("Видишь, какая-то польза от тебя.", 0.95, (55, 15, 365, 45)),
+                    OcrLine("15M", 0.9, (175, 75, 225, 100)),
+                )
+            )
+
+    zone = ZoneSpec(
+        id="dialog",
+        rect=Rect(0.0, 0.0, 1.0, 1.0),
+        mask=MaskSpec(MaskPreset.COLOR, colors_hsv=(cyan,)),
+        speaker=SpeakerResolver(SpeakerMode.NONE, speaker_stoplist()),
+    )
+    clock = FakeClock(100.0)
+    source = ZoneOcrSource(
+        [zone],
+        OcrRunner(TwoLines(), OcrSettings(upscale=1.0)),
+        JunkFilter(short_words()),
+        Deduplicator(),
+        clock,
+    )
+    out: list[Utterance] = []
+    for _ in range(20):
+        clock.advance(FRAME_S)
+        out += source.process(Frame(image, clock.now()))
+    assert [u.text for u in out] == ["Видишь, какая-то польза от тебя."]
