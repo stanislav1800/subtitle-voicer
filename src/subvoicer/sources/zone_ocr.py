@@ -13,7 +13,9 @@ import time
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
-from subvoicer.core.models import Frame, Rect, Utterance, UtteranceKind
+import numpy as np
+
+from subvoicer.core.models import Frame, OcrLine, Rect, Utterance, UtteranceKind
 from subvoicer.core.ports import Clock, TextDetector
 from subvoicer.pipeline.dedup import (
     SPLIT_WINDOW_S,
@@ -23,7 +25,7 @@ from subvoicer.pipeline.dedup import (
     grown_from,
     on_screen,
 )
-from subvoicer.pipeline.ocr.colour import colour_lines
+from subvoicer.pipeline.ocr.colour import colour_lines, rows_of
 from subvoicer.pipeline.ocr.inputs import OcrInput
 from subvoicer.pipeline.ocr.junk_filter import JunkFilter
 from subvoicer.pipeline.ocr.runner import OcrOutcome, OcrRunner, mean_confidence
@@ -124,6 +126,8 @@ class _ZoneState:
     found: list[Plate] = field(default_factory=list)  # plates of a plates zone (TZ 4.2.2)
     located_at: float = float("-inf")
     seen_at: float = float("-inf")  # plates were last found then
+    # the first row OCR read (crop pixels): the name colour is looked for left of it (TZ 4.5)
+    first_row: tuple[int, int, int, int] | None = None
 
 
 @dataclass(frozen=True)
@@ -189,13 +193,32 @@ def in_colour(
 ) -> tuple[str, float]:
     """A zone with the text found by colour (TZ 4.3, 1.35): lines mostly of another colour
     are not its text; the text and the confidence of the lines left."""
-    if spec.mask.preset is not MaskPreset.COLOR:
+    lines, _ = in_colour_lines(spec, outcome, image)
+    if len(lines) == len(outcome.best.lines):
         return outcome.text, outcome.mean_confidence
-    kept, dropped = colour_lines(outcome.best.lines, image, spec.mask.colors_hsv)
-    if not dropped:
-        return outcome.text, outcome.mean_confidence
-    log.debug("Зона %s: не того цвета: %r", spec.id, [line.text for line in dropped])
-    return separator.join(line.text for line in kept), mean_confidence(kept)
+    return separator.join(line.text for line in lines), mean_confidence(lines)
+
+
+def in_colour_lines(
+    spec: ZoneSpec, outcome: OcrOutcome, image: Image
+) -> tuple[list[OcrLine], tuple[int, int, int, int] | None]:
+    """The lines of the zone's colour (all lines for other presets) and the box of their
+    first row."""
+    lines = list(outcome.best.lines)
+    if spec.mask.preset is MaskPreset.COLOR:
+        lines, dropped = colour_lines(lines, image, spec.mask.colors_hsv)
+        if dropped:
+            log.debug("Зона %s: не того цвета: %r", spec.id, [line.text for line in dropped])
+    if not lines:
+        return lines, None
+    row = rows_of(lines)[0]
+    box = (
+        min(line.bbox[0] for line in row),
+        min(line.bbox[1] for line in row),
+        max(line.bbox[2] for line in row),
+        max(line.bbox[3] for line in row),
+    )
+    return lines, box
 
 
 def skipped(spec: ZoneSpec, text: str) -> bool:
@@ -229,6 +252,7 @@ def read_once(spec: ZoneSpec, frame: Image, runner: OcrRunner, separator: str = 
     else:
         outcome = active.run(image, state.mask, spec.ocr_input, separator=separator)
         text, confidence = in_colour(spec, outcome, image, separator)
+        state.first_row = in_colour_lines(spec, outcome, image)[1]
         text = fixed_words(spec, ZoneOcrSource._keep_prefix_name(spec, outcome, text))
         kind = str(outcome.input_kind)
     elapsed = (time.perf_counter() - started) * 1000
@@ -373,6 +397,7 @@ class ZoneOcrSource:
         else:
             first = runner.run(image, zone.mask, spec.ocr_input)
             text, confidence = in_colour(spec, first, image)
+            zone.first_row = in_colour_lines(spec, first, image)[1]
             text = fixed_words(spec, self._keep_prefix_name(spec, first, text=text))
         elapsed_ms = (time.perf_counter() - started) * 1000
         input_kind = str(first.input_kind) if first is not None else str(spec.ocr_input)
@@ -568,10 +593,20 @@ class ZoneOcrSource:
             if zone.name_mask is None:
                 return None
             part = None
-            if zone.mask is not None:  # the text mask, the name taken out of it
-                part = name_beside_text(zone.crop, zone.name_mask, zone.mask)
-            if part is None:
-                part = cut_out(zone.crop, zone.name_mask)
+            if zone.first_row is not None:
+                # the first row OCR read (other colours left out): the name is left of it on
+                # that row — the text mask's first rows were thrown off by specks of the text
+                # colour above the subtitle, and the whole zone's red took a red HUD label
+                # with it («ОМЕГА-БЛОКАТОРЫ ДЖОННИ», 2026-10-23); nothing there — no name
+                x1, y1, x2, y2 = zone.first_row
+                row = np.zeros(zone.name_mask.shape[:2], dtype=np.uint8)
+                row[max(0, y1) : y2, max(0, x1) : x2] = 255
+                part = name_beside_text(zone.crop, zone.name_mask, row)
+            else:
+                if zone.mask is not None:  # the text mask, the name taken out of it
+                    part = name_beside_text(zone.crop, zone.name_mask, zone.mask)
+                if part is None:
+                    part = cut_out(zone.crop, zone.name_mask)
             if part is None:
                 return None
             part = enlarged(part)

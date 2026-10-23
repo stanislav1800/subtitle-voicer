@@ -242,19 +242,22 @@ class ByOrderOcr:
     """The zone's text is read first, then its name (a small name cut-out is enlarged, so
     its width tells nothing); records what it was shown."""
 
-    def __init__(self, name: str, text: str) -> None:
-        self.name, self.text = name, text
+    def __init__(
+        self, name: str, text: str, box: tuple[int, int, int, int] = (0, 0, 10, 10)
+    ) -> None:
+        self.name, self.text, self.box = name, text, box  # box: where the text line is
         self.images: list[np.ndarray] = []
 
     def recognize(self, image: np.ndarray) -> OcrResult:
         self.images.append(image)
         said = self.text if len(self.images) % 2 else self.name
-        return OcrResult((OcrLine(said, 0.97, (0, 0, 10, 10)),))
+        return OcrResult((OcrLine(said, 0.97, self.box),))
 
 
 def run_named(zone: ZoneSpec, image: np.ndarray, ocr: ByOrderOcr) -> list[Utterance]:
     clock = FakeClock(100.0)
-    source = ZoneOcrSource([zone], OcrRunner(ocr), JunkFilter(short_words()), Deduplicator(), clock)
+    runner = OcrRunner(ocr, OcrSettings(upscale=1.0))  # the fake's boxes are crop pixels
+    source = ZoneOcrSource([zone], runner, JunkFilter(short_words()), Deduplicator(), clock)
     out: list[Utterance] = []
     for _ in range(10):
         clock.advance(FRAME_S)
@@ -305,13 +308,36 @@ def test_speaker_by_colour_inside_the_zone() -> None:
         speaker=SpeakerResolver(SpeakerMode.COLOR, speaker_stoplist()),
         name=NameSource(MaskSpec(MaskPreset.COLOR, colors_hsv=red)),
     )
-    ocr = ByOrderOcr("Панам", "Поехали отсюда.")
+    ocr = ByOrderOcr("Панам", "Поехали отсюда.", (100, 30, 780, 50))
     out = run_named(zone, image, ocr)
     assert [(u.speaker, u.text) for u in out] == [("Панам", "Поехали отсюда.")]
     text_image, name_image = ocr.images
     red_pixels = (text_image[..., 2] > 200) & (text_image[..., 1] < 50)
     assert not red_pixels.any()  # the name is painted out of the text input
     assert name_image.shape[1] < text_image.shape[1] / 2  # the name part, not the zone
+
+
+def test_a_name_coloured_label_above_the_subtitle_is_not_the_name() -> None:
+    """Cyberpunk: the red «ОМЕГА-БЛОКАТОРЫ» above; specks of the text colour by it threw off
+    the text mask's first line, and the whole zone's red was read as the name."""
+    image = np.full((H, 800, 4), 20, dtype=np.uint8)
+    image[5:20, 300:500, :3] = (0, 0, 255)  # a red HUD label, far above the line
+    image[8:12, 700:710, :3] = 255  # a speck of the text colour up there
+    image[50:70, 10:80, :3] = (0, 0, 255)  # the name
+    image[50:70, 100:780, :3] = 255  # the text
+    red = (((0, 100, 100), (10, 255, 255)),)
+    zone = ZoneSpec(
+        id="dialog",
+        rect=Rect(0.0, 0.0, 1.0, 1.0),
+        mask=MaskSpec(MaskPreset.BRIGHT_ON_DARK),
+        speaker=SpeakerResolver(SpeakerMode.COLOR, speaker_stoplist()),
+        name=NameSource(MaskSpec(MaskPreset.COLOR, colors_hsv=red)),
+    )
+    ocr = ByOrderOcr("Панам", "Поехали отсюда.", (100, 50, 780, 70))
+    out = run_named(zone, image, ocr)
+    assert [(u.speaker, u.text) for u in out] == [("Панам", "Поехали отсюда.")]
+    _text_image, name_image = ocr.images
+    assert name_image.shape[1] < 400  # the name only (~240 enlarged), with the label > 600
 
 
 # ---------------------------------------------------------------- TZ 1.17
