@@ -697,7 +697,8 @@ def test_a_name_row_of_the_name_colour_stays_in_a_colour_zone() -> None:
     image = np.full((H, 800, 4), 25, dtype=np.uint8)
     image[5:15, 300:500, :3] = (0, 0, 255)  # a red HUD label
     image[22:36, 10:100, :3] = (0, 0, 255)  # «[ П-3 ]»
-    image[45:65, 10:780, :3] = (230, 210, 40)  # the cyan line
+    for x in range(10, 780, 8):
+        image[45:65, x : x + 4, :3] = (230, 210, 40)  # the cyan line
     zone = ZoneSpec(
         id="dialog",
         rect=Rect(0.0, 0.0, 1.0, 1.0),

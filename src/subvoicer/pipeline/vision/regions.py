@@ -137,3 +137,29 @@ def enlarged(image: Image, min_height: int = NAME_MIN_HEIGHT) -> Image:
         return image
     factor = min(3.0, min_height / height)
     return cv2.resize(image, None, fx=factor, fy=factor, interpolation=cv2.INTER_CUBIC)
+
+
+LETTER_MAX_HEIGHT = 1.6  # text lines: a blob taller than that is not a letter
+LETTER_MAX_FILL = 0.85  # of its box: a solid patch wider than a line is a lit surface
+
+
+def letters_only(mask: Image) -> Image:
+    """The mask without blobs that are not letters: taller than 1.6 text lines (by the
+    median height of the blobs of 6 px and more), or filling their box almost whole and wider
+    than a line is tall (a stroke of «I» or «!» is solid, but narrow). Patches of
+    the scene in the text colour come and go behind a still subtitle and kept the zone
+    «changing» (TZ 4.2.1, 1.37): of 42 letsplay frames 4 had more of them than the change
+    threshold, none after; 99.9% of the letter pixels stay. The width is not limited:
+    letters of a blurry word merge into one wide blob."""
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+    if count <= 1:
+        return mask
+    heights = stats[1:, cv2.CC_STAT_HEIGHT]
+    tall = heights[heights >= 6]
+    line = float(np.median(tall)) if len(tall) else 20.0
+    width, height = stats[:, cv2.CC_STAT_WIDTH], stats[:, cv2.CC_STAT_HEIGHT]
+    fill = stats[:, cv2.CC_STAT_AREA] / np.maximum(1, width * height)
+    solid = (fill >= LETTER_MAX_FILL) & (width > line)
+    keep = (height <= LETTER_MAX_HEIGHT * line) & ~solid
+    keep[0] = False  # the background label
+    return u8(keep[labels].astype(np.uint8) * 255)

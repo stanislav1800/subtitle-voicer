@@ -217,3 +217,19 @@ def test_a_better_reading_after_a_worse_one_is_not_dropped() -> None:
 )
 def test_continues(previous: str, text: str, expected: bool) -> None:
     assert continues(previous, text) is expected
+
+
+def test_a_worse_reading_of_the_same_subtitle_is_not_a_new_line() -> None:
+    """TZ 1.37: the zone never went empty, a blurry frame read the line otherwise."""
+    d = Deduplicator()
+    first = "Ладно, я скажу тебе, почему я хочу разрушить «Арасаку», но скажу только"
+    assert d.process(first, "z", was_empty=True, now=0).kind is DedupKind.NEW
+    again = "Лодняскжутебе,почемуя хочу разрушить «Араса, но скажу только"
+    assert d.process(again, "z", was_empty=False, now=1).kind is DedupKind.SAME
+    assert d.same_as_last("Ладно,яскжутебе,почемухчуразушить «Арасаку»,но скажу только", "z")
+    # a short line keeps the strict match, a line added below is new
+    d.process("Ты кто?", "z", was_empty=True, now=2)
+    assert d.process("Ты что?", "z", was_empty=False, now=3).kind is DedupKind.NEW
+    d.process("Расслабься, все под контролем.", "z", was_empty=True, now=4)
+    added = "Расслабься, все под контролем. Джуди: Я вижу ходячие говорящие трупы."
+    assert d.process(added, "z", was_empty=False, now=5).kind is not DedupKind.SAME

@@ -24,7 +24,7 @@ from subvoicer.pipeline.dedup import (
     grown_from,
     on_screen,
 )
-from subvoicer.pipeline.ocr.colour import MIN_SHARE, colour_lines, colour_share, rows_of
+from subvoicer.pipeline.ocr.colour import MIN_DENSITY, colour_lines, density, rows_of
 from subvoicer.pipeline.ocr.inputs import OcrInput
 from subvoicer.pipeline.ocr.junk_filter import JunkFilter
 from subvoicer.pipeline.ocr.runner import OcrOutcome, OcrRunner, mean_confidence
@@ -53,6 +53,7 @@ from subvoicer.pipeline.vision.regions import (
     cut_out,
     enlarged,
     first_line,
+    letters_only,
     name_above,
     name_before,
     paint_out,
@@ -130,6 +131,7 @@ class _ZoneState:
     crop: Image | None = None
     mask: Image | None = None
     name_mask: Image | None = None  # name colour pixels (speaker mode color)
+    watch: Image | None = None  # what the stabiliser compares: a colour mask without blobs
     speaker: str | None = None  # speaker of the last new line (a continuation keeps it)
     shown: list[str] = field(default_factory=list)  # lines of the last reading (TZ 1.22)
     voiced: str = ""  # the last voiced text and when (a split line's second half, TZ 1.28)
@@ -200,35 +202,39 @@ def fixed_words(spec: ZoneSpec, text: str) -> str:
 
 
 def in_colour(
-    spec: ZoneSpec, outcome: OcrOutcome, image: Image, separator: str = " "
+    spec: ZoneSpec, outcome: OcrOutcome, image: Image, mask: Image, separator: str = " "
 ) -> tuple[str, float]:
-    """A zone with the text found by colour (TZ 4.3, 1.35): lines mostly of another colour
-    are not its text; the text and the confidence of the lines left."""
-    lines, _ = in_colour_lines(spec, outcome, image)
+    """A zone with the text found by colour (TZ 4.3, 1.35, 1.37): rows with few pixels of
+    the colour ``mask`` are not its text; the text and the confidence of the lines left."""
+    lines, _ = in_colour_lines(spec, outcome, image, mask)
     if [line.text for line in lines] == [line.text for line in outcome.best.lines]:
         return outcome.text, outcome.mean_confidence
     return separator.join(line.text for line in lines), mean_confidence(lines)
 
 
 def in_colour_lines(
-    spec: ZoneSpec, outcome: OcrOutcome, image: Image
+    spec: ZoneSpec, outcome: OcrOutcome, image: Image, mask: Image
 ) -> tuple[list[OcrLine], tuple[int, int, int, int] | None]:
     """The lines of the zone's colour (all lines for other presets) and the box of their
     first row."""
     lines = list(outcome.best.lines)
+    brackets = spec.speaker.mode is SpeakerMode.BRACKETS and bool(spec.name_colours)
+    names = (
+        build_mask(image, MaskSpec(MaskPreset.COLOR, colors_hsv=spec.name_colours))
+        if brackets
+        else None
+    )
     if spec.mask.preset is MaskPreset.COLOR:
-        brackets = spec.speaker.mode is SpeakerMode.BRACKETS  # other modes paint names out
         lines, dropped = colour_lines(
             lines,
-            image,
-            spec.mask.colors_hsv,
-            spec.name_colours if brackets else (),
+            mask,
+            names,  # other modes paint names out of the text
             (lambda text: BRACKET_NAME.search(text) is not None) if brackets else None,
         )
         if dropped:
             log.debug("Зона %s: не того цвета: %r", spec.id, [line.text for line in dropped])
-    if spec.speaker.mode is SpeakerMode.BRACKETS and spec.name_colours:
-        lines = [_brackets_in_colour(spec, line, image) for line in lines]
+    if names is not None:
+        lines = [_brackets_in_colour(spec, line, names) for line in lines]
     if not lines:
         return lines, None
     row = rows_of(lines)[0]
@@ -241,7 +247,7 @@ def in_colour_lines(
     return lines, box
 
 
-def _brackets_in_colour(spec: ZoneSpec, line: OcrLine, image: Image) -> OcrLine:
+def _brackets_in_colour(spec: ZoneSpec, line: OcrLine, names: Image) -> OcrLine:
     """«[ Имя ]» not of the name colour is text, not a name (TZ 1.36): its brackets go. The
     part of the line box it takes is told by its place among the line's characters."""
     text = line.text
@@ -255,8 +261,7 @@ def _brackets_in_colour(spec: ZoneSpec, line: OcrLine, image: Image) -> OcrLine:
             int(x1 + match.end() * per_char),
             y2,
         )
-        share = colour_share(image, spec.name_colours, [box])
-        if share is not None and share < MIN_SHARE:
+        if density(names, [box]) < MIN_DENSITY:
             cut.append(match.span())
     if not cut:
         return line
@@ -298,8 +303,8 @@ def read_once(spec: ZoneSpec, frame: Image, runner: OcrRunner, separator: str = 
         text, kind = separator.join(texts), str(first.input_kind if first else spec.ocr_input)
     else:
         outcome = active.run(image, state.mask, spec.ocr_input, separator=separator)
-        text, confidence = in_colour(spec, outcome, image, separator)
-        state.first_row = in_colour_lines(spec, outcome, image)[1]
+        text, confidence = in_colour(spec, outcome, image, state.mask, separator)
+        state.first_row = in_colour_lines(spec, outcome, image, state.mask)[1]
         text = fixed_words(spec, ZoneOcrSource._keep_prefix_name(spec, outcome, text))
         kind = str(outcome.input_kind)
     elapsed = (time.perf_counter() - started) * 1000
@@ -375,6 +380,9 @@ class ZoneOcrSource:
             if spec.name is not None and spec.name.rect is None:
                 zone.name_mask = build_mask(zone.crop, spec.name.mask)
                 zone.mask = without(zone.mask, zone.name_mask)
+            # patches of the scene in the text colour are not text changing (TZ 1.37)
+            colour = spec.mask.preset is MaskPreset.COLOR and spec.plates is None
+            zone.watch = letters_only(zone.mask) if colour else zone.mask
             event_time = frame.timestamp
         else:
             event_time = now  # no new frame: only time passes
@@ -383,7 +391,9 @@ class ZoneOcrSource:
         area = None  # a plates zone: shares of the plates, the search area is far bigger
         if spec.plates is not None:
             area = sum((x2 - x1) * (y2 - y1) for x1, y1, x2, y2 in (p.box for p in zone.found))
-        decision = stabilizer.update(zone.mask, event_time, area)
+        decision = stabilizer.update(
+            zone.watch if zone.watch is not None else zone.mask, event_time, area
+        )
         if stabilizer.state is not before:
             log.debug("Зона %s: %s -> %s", spec.id, before, stabilizer.state)
         if isinstance(decision, Emptied) or decision is None:
@@ -443,8 +453,8 @@ class ZoneOcrSource:
             text = " ".join(plate_texts)
         else:
             first = runner.run(image, zone.mask, spec.ocr_input)
-            text, confidence = in_colour(spec, first, image)
-            zone.first_row = in_colour_lines(spec, first, image)[1]
+            text, confidence = in_colour(spec, first, image, zone.mask)
+            zone.first_row = in_colour_lines(spec, first, image, zone.mask)[1]
             text = fixed_words(spec, self._keep_prefix_name(spec, first, text=text))
         elapsed_ms = (time.perf_counter() - started) * 1000
         input_kind = str(first.input_kind) if first is not None else str(spec.ocr_input)
@@ -646,9 +656,7 @@ class ZoneOcrSource:
         text = outcome.text
         if name.mask.preset is MaskPreset.COLOR:
             # only the name colour is the name: something else in a name zone is not (1.36)
-            kept, dropped = colour_lines(
-                outcome.best.lines, image, name.mask.colors_hsv, by_rows=False
-            )
+            kept, dropped = colour_lines(outcome.best.lines, mask, by_rows=False)
             if dropped:
                 text = " ".join(line.text for line in kept)
                 log.debug("Зона %s: в имени не того цвета: %r", spec.id, [d.text for d in dropped])

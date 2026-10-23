@@ -22,6 +22,8 @@ logs/
 tests/fixtures/synthetic/
 # Кадры для поиска подложек (~100 МБ): только у пользователя; разметка — в tests/fixtures/real/<игра>/plates.json
 tests/fixtures/plates/
+# Кропы зоны летсплея для замера поиска по цвету (~18 МБ): только у пользователя; разметка — tests/fixtures/real/cyberpunk/colour.json
+tests/fixtures/colour/
 
 # IDE / ОС
 .vscode/

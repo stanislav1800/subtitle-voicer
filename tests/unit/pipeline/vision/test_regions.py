@@ -43,3 +43,19 @@ def test_the_name_on_its_own_row_above_the_line() -> None:
     far = np.zeros_like(name)
     far[10:30, 150:260] = 255  # only the label: too far above the line
     assert name_above(image, far, line) is None
+
+
+def test_patches_of_the_scene_are_not_letters() -> None:
+    """TZ 1.37: what the stabiliser of a colour zone compares."""
+    from subvoicer.pipeline.vision.regions import letters_only
+
+    mask = np.zeros((120, 600), np.uint8)
+    for x in range(20, 400, 9):
+        mask[50:70, x : x + 5] = 255  # letters: 20 px tall, solid but narrow strokes
+        mask[52:66, x + 5 : x + 7] = 255
+    mask[0:110, 450:520] = 255  # a tall lit patch of the scene
+    mask[85:100, 100:300] = 255  # a solid wide patch, line-tall
+    clean = letters_only(mask)
+    assert np.count_nonzero(clean[50:70, 20:400]) == np.count_nonzero(mask[50:70, 20:400])
+    assert not clean[:, 450:520].any() and not clean[85:100, 100:300].any()
+    assert letters_only(np.zeros((10, 10), np.uint8)).sum() == 0

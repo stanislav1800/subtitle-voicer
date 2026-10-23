@@ -25,6 +25,13 @@ REVEALED_MIN_SHARE = 0.4  # the earlier piece covers at least this much of the w
 # this share of its letters is found in the line, in order, and it covers this much of it
 SPLIT_WINDOW_S = 15.0  # the second half of a split line comes within this after the first
 DEGRADED_MATCH = 0.78
+# TZ 1.37: the same subtitle read again while the zone never went empty — a blurry video
+# frame reads «Ладно,яскжутебе» and then «Лодняскжутебе»: of 47 such readings in letsplay
+# logs all were 74.6+ alike, of 109 different lines in a row none above 54.3; a short line
+# keeps match_ratio («Ты кто?» / «Ты что?»)
+REREAD_RATIO = 70
+REREAD_MIN_LETTERS = 12
+REREAD_LENGTH = 0.7  # about as long: a line added above or below is not a re-read (0.54)
 DEGRADED_MIN_SHARE = 0.4
 
 
@@ -129,9 +136,13 @@ def continues(previous: str, text: str) -> bool:
 
 class Deduplicator:
     def __init__(
-        self, match_ratio: float = 90, cross_source_window_s: float = CROSS_SOURCE_WINDOW_S
+        self,
+        match_ratio: float = 90,
+        cross_source_window_s: float = CROSS_SOURCE_WINDOW_S,
+        reread_ratio: float = REREAD_RATIO,
     ):
         self.match_ratio = match_ratio
+        self.reread_ratio = reread_ratio
         self.cross_source_window_s = cross_source_window_s
         self._channels: dict[str, _Channel] = {}
         self._recent: deque[tuple[float, str, str]] = deque()  # (time, channel, normalised)
@@ -142,7 +153,7 @@ class Deduplicator:
         return (
             state is not None
             and state.last is not None
-            and self._same(normalize(text), state.last_norm)
+            and self._reread(normalize(text), state.last_norm)
         )
 
     def process(
@@ -190,8 +201,8 @@ class Deduplicator:
                     return DedupResult(DedupKind.SAME)
                 self._remember(state, channel, text, norm, now)
                 return DedupResult(DedupKind.CONTINUATION, tail)
-            # 5. still the same line
-            if self._same(norm, last_norm):
+            # 5. still the same line, maybe read worse or better this time (TZ 1.37)
+            if self._reread(norm, last_norm):
                 return DedupResult(DedupKind.SAME)
 
         # 6. anything else is a new line
@@ -203,6 +214,12 @@ class Deduplicator:
 
     def _same(self, a: str, b: str) -> bool:
         return ratio(a, b) >= self.match_ratio
+
+    def _reread(self, a: str, b: str) -> bool:
+        """``a`` is the line ``b`` read again (no empty zone between, TZ 1.37)."""
+        short, long = sorted((len(a.replace(" ", "")), len(b.replace(" ", ""))))
+        loose = short >= REREAD_MIN_LETTERS and short >= REREAD_LENGTH * long
+        return ratio(a, b) >= (self.reread_ratio if loose else self.match_ratio)
 
     def _remember(self, state: _Channel, channel: str, text: str, norm: str, now: float) -> None:
         state.last = text
