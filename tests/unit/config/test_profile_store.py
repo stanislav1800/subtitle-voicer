@@ -254,10 +254,23 @@ def test_v7_profile_is_read_as_it_is_and_may_speak_by_gender() -> None:
 
 def test_v8_profile_gets_an_empty_skip_list_and_may_read_names_in_brackets() -> None:
     """TZ 1.33: version 8 -> 9 — «Не озвучивать» is empty; speaker mode brackets."""
-    new = migrate(profile_data(schema_version=8, speech={}))
+    new = migrate(profile_data(schema_version=8, speech={}), current=9)
     assert new["schema_version"] == 9 and new["skip_phrases"] == []
-    kept = migrate(profile_data(schema_version=8, speech={}, skip_phrases=["Влезть"]))
+    kept = migrate(profile_data(schema_version=8, speech={}, skip_phrases=["Влезть"]), current=9)
     assert Profile.model_validate(kept).skip_phrases == ["Влезть"]
     zone = {**dialog_zone(speaker={"mode": "brackets"})}
     profile = Profile.model_validate(profile_data(layout={"zones": [zone]}))
     assert profile.layout.zones[0].policy.speaker.mode == "brackets"  # type: ignore[union-attr]
+
+
+def test_v9_name_by_colour_is_a_name_before_the_text_of_that_colour() -> None:
+    """TZ 1.36: «Кто говорит» tells where the name is, its colour is a field of its own."""
+    red = [[[0, 75, 169], [12, 235, 255]]]
+    zone = dialog_zone(speaker={"mode": "color", "colors_hsv": red})
+    new = migrate(profile_data(schema_version=9, speech={}, layout={"zones": [zone]}))
+    assert new["schema_version"] == 10
+    speaker = Profile.model_validate(new).layout.zones[0].policy.speaker  # type: ignore[union-attr]
+    assert speaker.mode == "prefix" and speaker.colors_hsv == [((0, 75, 169), (12, 235, 255))]
+    # «Над текстом» before its colour is picked: saved, finds no name yet
+    above = profile_data(layout={"zones": [dialog_zone(speaker={"mode": "above"})]})
+    assert Profile.model_validate(above).layout.zones[0].policy.speaker.mode == "above"  # type: ignore[union-attr]

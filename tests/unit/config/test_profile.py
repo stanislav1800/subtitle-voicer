@@ -27,7 +27,7 @@ TZ_EXAMPLE: dict[str, Any] = {  # TZ 5.4, voices replaced
                     "priority": "high",
                     "voice": {"mode": "speaker"},
                     "speaker": {
-                        "mode": "color",
+                        "mode": "prefix",
                         "colors_hsv": [[[0, 100, 150], [15, 255, 255]]],
                     },
                     "repeat_cooldown_min": 0,

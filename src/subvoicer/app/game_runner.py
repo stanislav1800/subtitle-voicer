@@ -22,7 +22,14 @@ from subvoicer.app.models_setup import engine_options
 from subvoicer.app.runtime import MonotonicClock, Session
 from subvoicer.config.models import model_path
 from subvoicer.config.paths import AppPaths
-from subvoicer.config.profile import MaskConfig, OcrConfig, Profile, VoicingPolicy, Zone
+from subvoicer.config.profile import (
+    MaskConfig,
+    OcrConfig,
+    Profile,
+    SpeakerConfig,
+    VoicingPolicy,
+    Zone,
+)
 from subvoicer.config.profile_store import ProfileStore, format_error
 from subvoicer.config.resources import gender_exceptions, short_words
 from subvoicer.config.settings import Settings
@@ -136,12 +143,7 @@ def zone_spec(profile: Profile, zone: Zone, zones: list[Zone], engines: OcrEngin
     assert zone.policy is not None
     by_id = {z.id: z for z in zones}
     speaker = zone.policy.speaker
-    name: NameSource | None = None
-    if speaker.mode == "zone" and speaker.zone_id in by_id:
-        source = by_id[speaker.zone_id]
-        name = NameSource(mask_spec(source.mask), rect_of(source))
-    elif speaker.mode == "color":
-        name = NameSource(mask_spec(MaskConfig(preset="color", colors_hsv=speaker.colors_hsv)))
+    mode, name = speaker_source(speaker, by_id)
     stab = profile.stabilization.merged(zone.stabilization)
     settled = StabilizationSettings(
         stable_ms=stab.stable_ms,
@@ -157,7 +159,7 @@ def zone_spec(profile: Profile, zone: Zone, zones: list[Zone], engines: OcrEngin
         id=zone.id,
         rect=rect_of(zone),
         mask=mask_spec(zone.mask),
-        speaker=SpeakerResolver(SpeakerMode(speaker.mode), profile.speaker_stoplist),
+        speaker=SpeakerResolver(mode, profile.speaker_stoplist),
         stabilization=plate_stabilization(settled) if zone.locate == "plates" else settled,
         repeat_cooldown_min=zone.policy.repeat_cooldown_min,
         name=name,
@@ -166,7 +168,38 @@ def zone_spec(profile: Profile, zone: Zone, zones: list[Zone], engines: OcrEngin
         words=words,
         plates=PlateSearch(engines.detector()) if zone.locate == "plates" else None,
         skip=SkipList(profile.skip_phrases) if profile.skip_phrases else None,
+        name_colours=tuple(speaker.colors_hsv),
     )
+
+
+def speaker_source(
+    speaker: SpeakerConfig, zones: dict[str, Zone]
+) -> tuple[SpeakerMode, NameSource | None]:
+    """Where the name is and its colour (TZ 4.5, 1.36) as the pipeline reads them: a name
+    before the text or above it found by its colour is a candidate of the name colour."""
+    colour = (
+        mask_spec(MaskConfig(preset="color", colors_hsv=speaker.colors_hsv))
+        if speaker.colors_hsv
+        else None
+    )
+    match speaker.mode:
+        case "prefix" if colour is not None:
+            return SpeakerMode.COLOR, NameSource(colour)
+        case "above" if colour is not None:
+            return SpeakerMode.COLOR, NameSource(colour, place="above")
+        case "above":  # a name above the text is told by its colour only: none set yet
+            return SpeakerMode.NONE, None
+        case "zone":
+            source = zones.get(speaker.zone_id or "")
+            if source is None:
+                return SpeakerMode.ZONE, None
+            return SpeakerMode.ZONE, NameSource(colour or mask_spec(source.mask), rect_of(source))
+        case "prefix":
+            return SpeakerMode.PREFIX, None
+        case "brackets":
+            return SpeakerMode.BRACKETS, None
+        case _:
+            return SpeakerMode.NONE, None
 
 
 PLATE_MAX_WAIT_MS = 600  # a plate is there: its text is read by then, settled or not

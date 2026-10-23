@@ -11,9 +11,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from subvoicer.core.models import Gender
 
-SCHEMA_VERSION = 9  # 2: ocr.fix_words, ocr.confusions (TZ 1.23); 3: one layout (TZ 1.26);
+SCHEMA_VERSION = 10  # 2: ocr.fix_words, ocr.confusions (TZ 1.23); 3: one layout (TZ 1.26);
 # 4: capture (TZ 1.28); 5: zone locate (TZ 1.29); 6: pause_in_editor (TZ 1.30); 7: speech (1.31);
-# 8: voice mode gender (1.32); 9: skip_phrases, speaker mode brackets (1.33)
+# 8: voice mode gender (1.32); 9: skip_phrases, speaker mode brackets (1.33);
+# 10: speaker mode = where the name is, colors_hsv = its colour for any mode (1.36)
 MAX_ZONES = 12  # per layout (TZ 4.2)
 
 Hsv = tuple[int, int, int]
@@ -23,7 +24,8 @@ Fraction = Annotated[float, Field(ge=0.0, le=1.0)]
 MaskPresetName = Literal["color", "bright_on_dark", "dark_on_bright", "adaptive"]
 PriorityName = Literal["high", "normal", "low"]
 VoiceModeName = Literal["speaker", "gender", "fixed", "narrator"]
-SpeakerModeName = Literal["prefix", "zone", "color", "brackets", "none"]
+# where the name is (TZ 4.5, 1.36): before the text, a row above it, in brackets, in a zone
+SpeakerModeName = Literal["prefix", "above", "brackets", "zone", "none"]
 TriggerName = Literal["auto", "hotkey", "off"]
 CharacterSource = Literal["auto", "import", "manual"]
 # the window (WGC), the screen cut to the window (DXGI), or the window with the screen fallback
@@ -74,7 +76,8 @@ class VoiceConfig(StrictModel):
 class SpeakerConfig(StrictModel):
     mode: SpeakerModeName = "none"
     zone_id: str | None = None  # mode "zone": the id of a zone of kind "speaker"
-    colors_hsv: list[HsvRange] = Field(default_factory=list)  # mode "color"
+    # the name's colour, for any mode but none: the name is only what is of it (TZ 1.36)
+    colors_hsv: list[HsvRange] = Field(default_factory=list)
 
     _hsv = field_validator("colors_hsv")(_check_hsv)
 
@@ -82,8 +85,6 @@ class SpeakerConfig(StrictModel):
     def _mode_fields(self) -> Self:
         if self.mode == "zone" and not self.zone_id:
             raise ValueError("Для говорящего zone нужен zone_id")
-        if self.mode == "color" and not self.colors_hsv:
-            raise ValueError("Для говорящего color нужен colors_hsv")
         return self
 
 

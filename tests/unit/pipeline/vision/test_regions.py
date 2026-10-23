@@ -25,3 +25,21 @@ def test_a_short_name_is_enlarged_for_ocr() -> None:
     assert enlarged(small).shape[:2] == (96, 126)
     big = np.zeros((120, 300, 3), np.uint8)
     assert enlarged(big) is big
+
+
+def test_the_name_on_its_own_row_above_the_line() -> None:
+    """TZ 1.36 «Над текстом»: the row right above; a HUD label of the colour further up is not
+    the name, and a tall name is taken whole even past the search band."""
+    from subvoicer.pipeline.vision.regions import name_above
+
+    image = np.zeros((200, 600, 3), np.uint8)
+    name = np.zeros((200, 600), np.uint8)
+    name[10:30, 300:500] = 255  # a HUD label far up
+    name[85:118, 150:260] = 255  # the name, 33 px tall, its bottom 12 px above the line
+    line = (150, 130, 550, 150)  # the first text row, 20 px tall
+    part = name_above(image, name, line)
+    assert part is not None and part.shape[:2] == (33 + 8, 110 + 8)
+    assert name_above(image, np.zeros_like(name), line) is None
+    far = np.zeros_like(name)
+    far[10:30, 150:260] = 255  # only the label: too far above the line
+    assert name_above(image, far, line) is None

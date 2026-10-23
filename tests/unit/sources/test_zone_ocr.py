@@ -619,3 +619,122 @@ def test_a_colour_zone_reads_only_lines_of_its_colour() -> None:
         clock.advance(FRAME_S)
         out += source.process(Frame(image, clock.now()))
     assert [u.text for u in out] == ["Видишь, какая-то польза от тебя."]
+
+
+# ---------------------------------------------------------------- TZ 1.36: the name colour
+
+RED = (((0, 100, 100), (10, 255, 255)),)
+
+
+class InTurn:
+    """Gives the next of its results on every call (text, name, text, name…)."""
+
+    def __init__(self, *results: tuple[OcrLine, ...]) -> None:
+        self.results = results
+        self.calls = 0
+
+    def recognize(self, _image: np.ndarray) -> OcrResult:
+        result = self.results[self.calls % len(self.results)]
+        self.calls += 1
+        return OcrResult(result)
+
+
+def run_zone(zone: ZoneSpec, image: np.ndarray, ocr: object) -> list[Utterance]:
+    clock = FakeClock(100.0)
+    runner = OcrRunner(ocr, OcrSettings(upscale=1.0))  # type: ignore[arg-type]
+    source = ZoneOcrSource([zone], runner, JunkFilter(short_words()), Deduplicator(), clock)
+    out: list[Utterance] = []
+    for _ in range(10):
+        clock.advance(FRAME_S)
+        out += source.process(Frame(image, clock.now()))
+    return out
+
+
+def test_a_name_of_its_colour_on_the_row_above() -> None:
+    """«Над текстом»: the red name on its own row over the line."""
+    image = np.full((H, 800, 4), 20, dtype=np.uint8)
+    image[10:28, 10:80, :3] = (0, 0, 255)  # the name, a row above
+    image[40:60, 10:780, :3] = 255  # the text
+    zone = ZoneSpec(
+        id="dialog",
+        rect=Rect(0.0, 0.0, 1.0, 1.0),
+        mask=MaskSpec(MaskPreset.BRIGHT_ON_DARK),
+        speaker=SpeakerResolver(SpeakerMode.COLOR, speaker_stoplist()),
+        name=NameSource(MaskSpec(MaskPreset.COLOR, colors_hsv=RED), place="above"),
+    )
+    ocr = ByOrderOcr("Панам", "Поехали отсюда.", (10, 40, 780, 60))
+    assert [(u.speaker, u.text) for u in run_zone(zone, image, ocr)] == [
+        ("Панам", "Поехали отсюда.")
+    ]
+
+
+def test_brackets_of_another_colour_are_text_not_a_name() -> None:
+    """«В скобках» with the name colour: a yellow «[ Открыть ]» hint is not a speaker."""
+    text = "[ Открыть ] Взять. [ Нора ] Ну и ну."
+    image = np.full((H, 800, 4), 20, dtype=np.uint8)
+    image[40:60, 0 : len(text) * 10, :3] = 255
+    first, second = text.index("[ Открыть ]"), text.index("[ Нора ]")
+    image[40:60, first * 10 : (first + 11) * 10, :3] = (40, 210, 240)  # yellow
+    image[40:60, second * 10 : (second + 8) * 10, :3] = (0, 0, 255)  # red, the name colour
+    zone = ZoneSpec(
+        id="dialog",
+        rect=Rect(0.0, 0.0, 1.0, 1.0),
+        mask=MaskSpec(MaskPreset.BRIGHT_ON_DARK),
+        speaker=SpeakerResolver(SpeakerMode.BRACKETS, speaker_stoplist()),
+        name_colours=RED,
+    )
+    ocr = InTurn((OcrLine(text, 0.95, (0, 40, len(text) * 10, 60)),))
+    assert [(u.speaker, u.text) for u in run_zone(zone, image, ocr)] == [
+        (None, "Открыть Взять."),
+        ("Нора", "Ну и ну."),
+    ]
+
+
+def test_a_name_row_of_the_name_colour_stays_in_a_colour_zone() -> None:
+    """The text is cyan by colour, «[ П-3 ]» over it is red: the row is the name, not junk of
+    another colour — a red label without brackets still goes."""
+    cyan = ((80, 90, 170), (100, 255, 255))
+    image = np.full((H, 800, 4), 25, dtype=np.uint8)
+    image[5:15, 300:500, :3] = (0, 0, 255)  # a red HUD label
+    image[22:36, 10:100, :3] = (0, 0, 255)  # «[ П-3 ]»
+    image[45:65, 10:780, :3] = (230, 210, 40)  # the cyan line
+    zone = ZoneSpec(
+        id="dialog",
+        rect=Rect(0.0, 0.0, 1.0, 1.0),
+        mask=MaskSpec(MaskPreset.COLOR, colors_hsv=(cyan,)),
+        speaker=SpeakerResolver(SpeakerMode.BRACKETS, speaker_stoplist()),
+        name_colours=RED,
+    )
+    ocr = InTurn(
+        (
+            OcrLine("ОМЕГА-БЛОКАТОРЫ", 0.95, (300, 3, 500, 17)),
+            OcrLine("[ П-3 ]", 0.95, (10, 20, 100, 38)),
+            OcrLine("Да-да, здравствуйте.", 0.95, (10, 45, 780, 65)),
+        )
+    )
+    assert [(u.speaker, u.text) for u in run_zone(zone, image, ocr)] == [
+        ("П-3", "Да-да, здравствуйте.")
+    ]
+
+
+def test_a_name_zone_with_the_name_colour_reads_only_it() -> None:
+    """«Зона» with the name colour: a yellow «15M» in the name zone is not part of the name."""
+    image = np.full((H, W, 4), 20, dtype=np.uint8)
+    image[4:16, 10:60, :3] = (0, 0, 255)  # the name, red
+    image[4:16, 80:110, :3] = (40, 210, 240)  # something yellow in the name zone
+    image[40:60, 10:390, :3] = 255  # the text
+    zone = ZoneSpec(
+        id="dialog",
+        rect=Rect(0.0, 0.4, 1.0, 1.0),
+        mask=MaskSpec(MaskPreset.BRIGHT_ON_DARK),
+        speaker=SpeakerResolver(SpeakerMode.ZONE, speaker_stoplist()),
+        name=NameSource(MaskSpec(MaskPreset.COLOR, colors_hsv=RED), Rect(0.0, 0.0, 0.3, 0.25)),
+    )
+    ocr = InTurn(
+        (OcrLine("Ты вовремя.", 0.97, (10, 0, 390, 20)),),
+        (
+            OcrLine("Джуди", 0.97, (30, 12, 180, 48)),
+            OcrLine("15M", 0.97, (240, 12, 330, 48)),
+        ),
+    )
+    assert [(u.speaker, u.text) for u in run_zone(zone, image, ocr)] == [("Джуди", "Ты вовремя.")]

@@ -318,3 +318,33 @@ def test_zone_lookup_for_hotkey_reading(rig: Rig) -> None:
     found = rig.router.zone("objective")
     assert found is not None and found[1].id == "objective" and len(found[2]) == 2
     assert rig.router.zone("nope") is None
+
+
+def test_where_the_name_is_and_its_colour_reach_the_pipeline() -> None:
+    """TZ 1.36: «Кто говорит» + «Цвет имени»."""
+    from subvoicer.app.game_runner import speaker_source
+    from subvoicer.config.profile import SpeakerConfig, Zone
+    from subvoicer.pipeline.speaker.resolver import SpeakerMode
+    from subvoicer.pipeline.vision.masks import MaskPreset
+
+    red = [((0, 75, 169), (12, 235, 255))]
+    names = Zone.model_validate(
+        {"id": "names", "kind": "speaker", "rect": [0, 0, 0.3, 0.1], "mask": {"preset": "adaptive"}}
+    )
+    zones = {"names": names}
+
+    def source(**fields: object) -> tuple[SpeakerMode, object]:
+        return speaker_source(SpeakerConfig.model_validate(fields), zones)
+
+    assert source(mode="prefix") == (SpeakerMode.PREFIX, None)
+    mode, name = source(mode="prefix", colors_hsv=red)
+    assert mode is SpeakerMode.COLOR and name.place == "before"  # type: ignore[attr-defined]
+    mode, name = source(mode="above", colors_hsv=red)
+    assert mode is SpeakerMode.COLOR and name.place == "above"  # type: ignore[attr-defined]
+    assert source(mode="above") == (SpeakerMode.NONE, None)  # no colour yet: no name
+    assert source(mode="brackets", colors_hsv=red) == (SpeakerMode.BRACKETS, None)
+    mode, name = source(mode="zone", zone_id="names")
+    assert mode is SpeakerMode.ZONE and name.mask.preset is MaskPreset.ADAPTIVE  # type: ignore[attr-defined]
+    mode, name = source(mode="zone", zone_id="names", colors_hsv=red)
+    assert name.mask.preset is MaskPreset.COLOR and name.rect is not None  # type: ignore[attr-defined]
+    assert source(mode="none", colors_hsv=red) == (SpeakerMode.NONE, None)

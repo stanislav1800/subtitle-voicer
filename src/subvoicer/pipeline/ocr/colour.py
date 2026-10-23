@@ -4,7 +4,7 @@ option or a yellow «15M» under a cyan subtitle in Cyberpunk 2077."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 import cv2
 import numpy as np
@@ -64,16 +64,31 @@ def rows_of(lines: Sequence[OcrLine]) -> list[list[OcrLine]]:
 
 
 def colour_lines(
-    lines: Sequence[OcrLine], image: Image, ranges: Sequence[HsvRange]
+    lines: Sequence[OcrLine],
+    image: Image,
+    ranges: Sequence[HsvRange],
+    names: Sequence[HsvRange] = (),
+    named: Callable[[str], bool] | None = None,
+    *,
+    by_rows: bool = True,
 ) -> tuple[list[OcrLine], list[OcrLine]]:
     """``lines`` (bboxes in ``image`` pixels, reading order) split into the kept and the
-    dropped ones, a row at a time."""
+    dropped ones, a row at a time. A row of the name colour ``names`` that ``named`` takes for
+    a name is kept too: it is the speaker's name («[ П-3 ]» over the line, TZ 1.36), while a
+    HUD label of that colour is not. ``by_rows`` False judges every piece on its own: a name
+    and something else beside it in a name zone."""
     if not judged(ranges):
         return list(lines), []
     dropped: set[int] = set()
-    for row in rows_of(lines):
-        share = colour_share(image, ranges, [line.bbox for line in row])
-        if share is not None and share < MIN_SHARE:
+    for row in rows_of(lines) if by_rows else [[line] for line in lines]:
+        boxes = [line.bbox for line in row]
+        share = colour_share(image, ranges, boxes)
+        if share is None or share >= MIN_SHARE:
+            continue
+        text = " ".join(line.text for line in row)
+        is_name = named is not None and named(text) and judged(names)
+        name = colour_share(image, names, boxes) if is_name else None
+        if name is None or name < MIN_SHARE:
             dropped |= {id(line) for line in row}
     kept = [line for line in lines if id(line) not in dropped]
     return kept, [line for line in lines if id(line) in dropped]

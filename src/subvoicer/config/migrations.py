@@ -74,6 +74,16 @@ def _v8_to_v9(data: Data) -> Data:
     return data
 
 
+def _v9_to_v10(data: Data) -> Data:
+    """TZ 1.36: the speaker mode tells where the name is, its colour is a field of its own —
+    «по цвету» was a name before the text found by its colour."""
+    for zone in data.get("layout", {}).get("zones", []):
+        speaker = (zone.get("policy") or {}).get("speaker")
+        if isinstance(speaker, dict) and speaker.get("mode") == "color":
+            speaker["mode"] = "prefix"
+    return data
+
+
 # from version N to N+1; every entry has a unit test on an example of the old file
 MIGRATIONS: dict[int, Migration] = {
     1: _v1_to_v2,
@@ -84,6 +94,7 @@ MIGRATIONS: dict[int, Migration] = {
     6: _v6_to_v7,
     7: _v7_to_v8,
     8: _v8_to_v9,
+    9: _v9_to_v10,
 }
 
 

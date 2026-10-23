@@ -11,9 +11,8 @@ import itertools
 import logging
 import time
 from collections.abc import Sequence
-from dataclasses import dataclass, field
-
-import numpy as np
+from dataclasses import dataclass, field, replace
+from typing import Literal
 
 from subvoicer.core.models import Frame, OcrLine, Rect, Utterance, UtteranceKind
 from subvoicer.core.ports import Clock, TextDetector
@@ -25,17 +24,22 @@ from subvoicer.pipeline.dedup import (
     grown_from,
     on_screen,
 )
-from subvoicer.pipeline.ocr.colour import colour_lines, rows_of
+from subvoicer.pipeline.ocr.colour import MIN_SHARE, colour_lines, colour_share, rows_of
 from subvoicer.pipeline.ocr.inputs import OcrInput
 from subvoicer.pipeline.ocr.junk_filter import JunkFilter
 from subvoicer.pipeline.ocr.runner import OcrOutcome, OcrRunner, mean_confidence
 from subvoicer.pipeline.ocr.words import WordFixer
-from subvoicer.pipeline.speaker.resolver import SpeakerMode, SpeakerResolver, SpeakerResult
+from subvoicer.pipeline.speaker.resolver import (
+    BRACKET_NAME,
+    SpeakerMode,
+    SpeakerResolver,
+    SpeakerResult,
+)
 from subvoicer.pipeline.text.latin import twins_to_cyrillic
 from subvoicer.pipeline.text.skip import SkipList
 from subvoicer.pipeline.vision.change import mask_empty
 from subvoicer.pipeline.vision.crop import crop
-from subvoicer.pipeline.vision.masks import Image, MaskPreset, MaskSpec, build_mask
+from subvoicer.pipeline.vision.masks import HsvRange, Image, MaskPreset, MaskSpec, build_mask
 from subvoicer.pipeline.vision.plates import (
     Box,
     Plate,
@@ -48,7 +52,9 @@ from subvoicer.pipeline.vision.plates import (
 from subvoicer.pipeline.vision.regions import (
     cut_out,
     enlarged,
-    name_beside_text,
+    first_line,
+    name_above,
+    name_before,
     paint_out,
     without,
 )
@@ -71,11 +77,13 @@ def drop_last_word(text: str) -> str:
 
 @dataclass(frozen=True)
 class NameSource:
-    """Where the speaker candidate is read: a speaker zone (``rect`` + its mask) or, with
-    ``rect`` None, the pixels of the name colour inside the text zone."""
+    """Where the speaker candidate is read: a speaker zone (``rect`` + its mask; a colour
+    mask reads only that colour there) or, with ``rect`` None, the pixels of the name colour
+    inside the text zone, ``place`` — before the first text row or on a row above it."""
 
     mask: MaskSpec
     rect: Rect | None = None
+    place: Literal["before", "above"] = "before"
 
 
 @dataclass(frozen=True)
@@ -108,6 +116,9 @@ class ZoneSpec:
     words: WordFixer | None = None  # fixing OCR words by the dictionary (TZ 1.23)
     plates: PlateSearch | None = None  # look for subtitle plates in rect (TZ 4.2.2)
     skip: SkipList | None = None  # «Не озвучивать» of the game (TZ 4.5, 1.33)
+    # the name's colour (TZ 1.36): its rows are not dropped as of another colour, a name in
+    # brackets of another colour is not a name
+    name_colours: tuple[HsvRange, ...] = ()
 
 
 @dataclass
@@ -194,7 +205,7 @@ def in_colour(
     """A zone with the text found by colour (TZ 4.3, 1.35): lines mostly of another colour
     are not its text; the text and the confidence of the lines left."""
     lines, _ = in_colour_lines(spec, outcome, image)
-    if len(lines) == len(outcome.best.lines):
+    if [line.text for line in lines] == [line.text for line in outcome.best.lines]:
         return outcome.text, outcome.mean_confidence
     return separator.join(line.text for line in lines), mean_confidence(lines)
 
@@ -206,9 +217,18 @@ def in_colour_lines(
     first row."""
     lines = list(outcome.best.lines)
     if spec.mask.preset is MaskPreset.COLOR:
-        lines, dropped = colour_lines(lines, image, spec.mask.colors_hsv)
+        brackets = spec.speaker.mode is SpeakerMode.BRACKETS  # other modes paint names out
+        lines, dropped = colour_lines(
+            lines,
+            image,
+            spec.mask.colors_hsv,
+            spec.name_colours if brackets else (),
+            (lambda text: BRACKET_NAME.search(text) is not None) if brackets else None,
+        )
         if dropped:
             log.debug("Зона %s: не того цвета: %r", spec.id, [line.text for line in dropped])
+    if spec.speaker.mode is SpeakerMode.BRACKETS and spec.name_colours:
+        lines = [_brackets_in_colour(spec, line, image) for line in lines]
     if not lines:
         return lines, None
     row = rows_of(lines)[0]
@@ -219,6 +239,33 @@ def in_colour_lines(
         max(line.bbox[3] for line in row),
     )
     return lines, box
+
+
+def _brackets_in_colour(spec: ZoneSpec, line: OcrLine, image: Image) -> OcrLine:
+    """«[ Имя ]» not of the name colour is text, not a name (TZ 1.36): its brackets go. The
+    part of the line box it takes is told by its place among the line's characters."""
+    text = line.text
+    x1, y1, x2, y2 = line.bbox
+    per_char = (x2 - x1) / max(1, len(text))
+    cut: list[tuple[int, int]] = []
+    for match in BRACKET_NAME.finditer(text):
+        box = (
+            int(x1 + match.start() * per_char),
+            y1,
+            int(x1 + match.end() * per_char),
+            y2,
+        )
+        share = colour_share(image, spec.name_colours, [box])
+        if share is not None and share < MIN_SHARE:
+            cut.append(match.span())
+    if not cut:
+        return line
+    log.debug("Зона %s: скобки не цвета имени: %r", spec.id, [text[a:b] for a, b in cut])
+    for start, end in reversed(cut):
+        inner = BRACKET_NAME.match(text, start)
+        assert inner is not None
+        text = text[:start] + inner.group(1) + text[end:]
+    return replace(line, text=text)
 
 
 def skipped(spec: ZoneSpec, text: str) -> bool:
@@ -578,7 +625,7 @@ class ZoneOcrSource:
 
     @staticmethod
     def _read_name(zone: _ZoneState, runner: OcrRunner) -> str | None:
-        """OCR of the speaker zone or of the name-colour part of the zone (TZ 4.5)."""
+        """OCR of the speaker zone or of the name-colour part of the zone (TZ 4.5, 1.36)."""
         spec, name = zone.spec, zone.spec.name
         if name is None or zone.frame is None or zone.crop is None:
             return None
@@ -590,27 +637,42 @@ class ZoneOcrSource:
             image = enlarged(image)
             mask = build_mask(image, name.mask)
         else:
-            if zone.name_mask is None:
-                return None
-            part = None
-            if zone.first_row is not None:
-                # the first row OCR read (other colours left out): the name is left of it on
-                # that row — the text mask's first rows were thrown off by specks of the text
-                # colour above the subtitle, and the whole zone's red took a red HUD label
-                # with it («ОМЕГА-БЛОКАТОРЫ ДЖОННИ», 2026-10-23); nothing there — no name
-                x1, y1, x2, y2 = zone.first_row
-                row = np.zeros(zone.name_mask.shape[:2], dtype=np.uint8)
-                row[max(0, y1) : y2, max(0, x1) : x2] = 255
-                part = name_beside_text(zone.crop, zone.name_mask, row)
-            else:
-                if zone.mask is not None:  # the text mask, the name taken out of it
-                    part = name_beside_text(zone.crop, zone.name_mask, zone.mask)
-                if part is None:
-                    part = cut_out(zone.crop, zone.name_mask)
+            part = ZoneOcrSource._name_part(zone, name.place)
             if part is None:
                 return None
             part = enlarged(part)
             image, mask = part, build_mask(part, name.mask)
         outcome = runner.run(image, mask, OcrInput.RAW)
-        log.debug("Зона %s: имя %r (%.2f)", spec.id, outcome.text, outcome.mean_confidence)
-        return outcome.text or None
+        text = outcome.text
+        if name.mask.preset is MaskPreset.COLOR:
+            # only the name colour is the name: something else in a name zone is not (1.36)
+            kept, dropped = colour_lines(
+                outcome.best.lines, image, name.mask.colors_hsv, by_rows=False
+            )
+            if dropped:
+                text = " ".join(line.text for line in kept)
+                log.debug("Зона %s: в имени не того цвета: %r", spec.id, [d.text for d in dropped])
+        log.debug("Зона %s: имя %r (%.2f)", spec.id, text, outcome.mean_confidence)
+        return text or None
+
+    @staticmethod
+    def _name_part(zone: _ZoneState, place: str) -> Image | None:
+        """The name-colour pixels before the first text row or on the row above it.
+
+        The first row is the one OCR read (other colours left out): specks of the text colour
+        above the subtitle threw off the text mask's first line, and the whole zone's red was
+        then taken with a red HUD label («ОМЕГА-БЛОКАТОРЫ ДЖОННИ», 2026-10-23). Without OCR
+        rows (a plates zone) the text mask's first line is used."""
+        assert zone.crop is not None
+        if zone.name_mask is None:
+            return None
+        line = zone.first_row
+        if line is None and zone.mask is not None:
+            line = first_line(zone.mask)
+        if place == "above":
+            return name_above(zone.crop, zone.name_mask, line) if line is not None else None
+        if line is not None:
+            part = name_before(zone.crop, zone.name_mask, line)
+            if part is not None or zone.first_row is not None:
+                return part  # nothing of the name colour before the row read: no name
+        return cut_out(zone.crop, zone.name_mask)

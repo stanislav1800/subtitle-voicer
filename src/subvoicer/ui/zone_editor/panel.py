@@ -65,20 +65,21 @@ VOICE_HINT = {
     "narrator": "Всё — голосом рассказчика профиля",
     "fixed": "Всё — одним выбранным голосом",
 }
+# where the name is (TZ 4.5, 1.36); its colour is a field of its own below
 SPEAKER = (
-    ("color", "По цвету"),
     ("prefix", "Перед текстом"),
-    ("brackets", "В скобках"),  # «[ П-3 ]» over the line, Atomic Heart (TZ 1.33)
+    ("above", "Над текстом"),
+    ("brackets", "В скобках"),  # «[ П-3 ]», Atomic Heart (TZ 1.33)
     ("zone", "Зона"),
     ("none", "Нет"),
 )
 SPEAKER_HINT = {
-    "color": "Имя другого цвета, чем текст: укажите его цвет пипеткой",
-    "prefix": "«Имя: текст» — имя перед двоеточием",
-    "brackets": "«[ Имя ]» строкой над репликой или перед ней; каждое имя в скобках — "
-    "новая реплика",
-    "zone": "Имя всегда в одном месте — в отдельной зоне «Имя говорящего». Не подходит, "
-    "если реплики сдвигаются",
+    "prefix": "«Имя: текст». С цветом имени — имя этого цвета слева от строки, двоеточие не нужно",
+    "above": "Имя отдельной строкой над репликой — по цвету имени",
+    "brackets": "«[ Имя ]» над репликой или перед ней; каждое имя в скобках — новая реплика. "
+    "С цветом имени — только скобки этого цвета",
+    "zone": "Имя всегда в одном месте — в зоне «Имя говорящего». С цветом имени читается "
+    "только он. Не подходит, если реплики сдвигаются",
     "none": "Имени нет: голос по полу из текста или рассказчик",
 }
 COOLDOWN = ((0.0, "нет"), (2.0, "2 мин"), (10.0, "10 мин"))
@@ -272,12 +273,33 @@ class ZonePanel(QScrollArea):
             self._props.addWidget(choose)
         self._props.addWidget(section("Кто говорит"))
         speaker = policy.get("speaker", {"mode": "none"})
-        who = Segmented(SPEAKER, speaker.get("mode", "none"), columns=3)
+        mode = speaker.get("mode", "none")
+        who = Segmented(SPEAKER, mode, columns=2)
         who.changed.connect(self._set_speaker_mode)
         self._props.addWidget(who)
-        self._props.addWidget(
-            label(SPEAKER_HINT.get(speaker.get("mode", "none"), ""), "hint", wrap=True)
-        )
+        self._props.addWidget(label(SPEAKER_HINT.get(mode, ""), "hint", wrap=True))
+        if mode != "none":  # the name's colour, for any place of the name (TZ 1.36)
+            colours = speaker.get("colors_hsv", [])
+            line = QHBoxLayout()
+            line.addWidget(label("Цвет имени" if colours else "Цвет имени — не задан"), 1)
+            line.addWidget(swatch(colours))
+            pick_name = QPushButton("  Пипетка")
+            pick_name.setIcon(theme.icon("pipette"))
+            pick_name.setToolTip("Щёлкните по букве имени на кадре")
+            pick_name.clicked.connect(lambda: self.pipette.emit("name"))
+            line.addWidget(pick_name)
+            if colours:
+                clear = icon_button("trash-2", "Сбросить цвет имени", self._clear_name_colour)
+                line.addWidget(clear)
+            self._props.addLayout(line)
+            if mode == "above" and not colours:
+                self._props.addWidget(
+                    label(
+                        "Укажите цвет имени пипеткой — без него имя над текстом не найти",
+                        "caption",
+                        wrap=True,
+                    )
+                )
         if speaker.get("mode") == "zone":
             names = [z for z in self._zones if z.get("kind") == "speaker"]
             if names:
@@ -296,15 +318,6 @@ class ZonePanel(QScrollArea):
                 self._props.addWidget(
                     label("Добавьте зону «Имя говорящего» из шаблона.", "hint", wrap=True)
                 )
-        if speaker.get("mode") == "color":
-            line = QHBoxLayout()
-            line.addWidget(label("Цвет имени"), 1)
-            line.addWidget(swatch(speaker.get("colors_hsv", [])))
-            pick_name = QPushButton("  Пипетка")
-            pick_name.setIcon(theme.icon("pipette"))
-            pick_name.clicked.connect(lambda: self.pipette.emit("name"))
-            line.addWidget(pick_name)
-            self._props.addLayout(line)
         if trigger != "hotkey":
             self._props.addWidget(section("Не повторять"))
             cooldown = Segmented(
@@ -429,14 +442,18 @@ class ZonePanel(QScrollArea):
         self._show(self._zone)
 
     def _set_speaker_mode(self, mode: str) -> None:
-        speaker: dict[str, Any] = {"mode": mode}
+        """The name's colour stays with any place of the name (TZ 1.36)."""
+        current = (self._zone or {}).get("policy", {}).get("speaker", {})
+        speaker: dict[str, Any] = {"mode": mode, "colors_hsv": current.get("colors_hsv", [])}
         if mode == "zone":
             names = [z["id"] for z in self._zones if z.get("kind") == "speaker"]
             speaker["zone_id"] = names[0] if names else None
-        if mode == "color":
-            current = (self._zone or {}).get("policy", {}).get("speaker", {})
-            speaker["colors_hsv"] = current.get("colors_hsv", [])
         self._update_policy(speaker=speaker)
+        self._show(self._zone)
+
+    def _clear_name_colour(self) -> None:
+        current = (self._zone or {}).get("policy", {}).get("speaker", {})
+        self._update_policy(speaker={**current, "colors_hsv": []})
         self._show(self._zone)
 
     def _set_preset(self, preset: str) -> None:

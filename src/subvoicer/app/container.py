@@ -7,10 +7,11 @@ import logging
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, get_args
 
 from subvoicer.app.runtime import MonotonicClock, Session
 from subvoicer.config.paths import AppPaths
+from subvoicer.config.profile import SpeakerModeName
 from subvoicer.config.resources import (
     character_voices,
     gender_exceptions,
@@ -51,7 +52,7 @@ Hsv = tuple[int, int, int]
 
 MASK_PRESETS = tuple(p.value for p in MaskPreset)
 SPEAKER_MODES = (SpeakerMode.PREFIX.value, SpeakerMode.NONE.value)  # watch: one zone
-SPEAKER_MODES_ALL = tuple(m.value for m in SpeakerMode)
+SPEAKER_MODES_ALL = get_args(SpeakerModeName)  # of a profile zone (TZ 1.36)
 VOICE_MODES = tuple(m.value for m in VoiceMode)
 OVERLAP_MODES = tuple(m.value for m in OverlapMode)
 PRIORITIES = (Priority.HIGH.value, Priority.NORMAL.value, Priority.LOW.value)

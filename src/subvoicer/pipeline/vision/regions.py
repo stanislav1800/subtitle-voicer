@@ -1,4 +1,4 @@
-"""Splitting a zone into the speaker name and the text by colour (TZ 4.5, mode ``color``)."""
+"""Splitting a zone into the speaker name and the text by the name colour (TZ 4.5, 1.36)."""
 
 from __future__ import annotations
 
@@ -58,12 +58,11 @@ NAME_REACH = 14  # a name ends within this many text-line heights left of the te
 NAME_MIN_HEIGHT = 96  # a smaller name cut-out is enlarged: OCR misses short ones («Ви:»)
 
 
-def name_beside_text(image: Image, name_mask: Image, text_mask: Image) -> Image | None:
-    """The name in front of the first text line: name-colour pixels on that line's rows,
-    left of where the text starts. Pixels of the name colour elsewhere in the zone (neon of
-    the scene in Cyberpunk) stretched the cut-out over the background and the text, and the
-    name came out empty or with words of the line («Пациентка: Не зн»). None — no text, or
-    nothing of the name colour before it."""
+Box = tuple[int, int, int, int]  # x1, y1, x2, y2
+
+
+def first_line(text_mask: Image) -> Box | None:
+    """The box of the first text line of a mask: its rows with no gap, from where it starts."""
     rows = np.flatnonzero(text_mask.any(axis=1))
     if len(rows) == 0:
         return None
@@ -72,10 +71,55 @@ def name_beside_text(image: Image, name_mask: Image, text_mask: Image) -> Image 
         if row - bottom > 3:
             break
         bottom = int(row)
-    height = bottom - top + 1
-    start = int(np.flatnonzero(text_mask[top : bottom + 1].any(axis=0))[0])
-    y1, y2 = max(0, top - height // 3), min(image.shape[0], bottom + 1 + height // 3)
+    cols = np.flatnonzero(text_mask[top : bottom + 1].any(axis=0))
+    return int(cols[0]), top, int(cols[-1]) + 1, bottom + 1
+
+
+def name_beside_text(image: Image, name_mask: Image, text_mask: Image) -> Image | None:
+    """``name_before`` the first text line of a mask."""
+    line = first_line(text_mask)
+    return name_before(image, name_mask, line) if line is not None else None
+
+
+def name_before(image: Image, name_mask: Image, line: Box) -> Image | None:
+    """The name in front of a text line: name-colour pixels on that line's rows, left of
+    where the text starts. Pixels of the name colour elsewhere in the zone (neon of the scene,
+    a red HUD label in Cyberpunk) stretched the cut-out over the background and the text, and
+    the name came out empty or with words of the line («Пациентка: Не зн»). None — nothing of
+    the name colour before it."""
+    start, top, _end, bottom = line
+    height = max(1, bottom - top)
+    y1, y2 = max(0, top - height // 3), min(image.shape[0], bottom + height // 3)
     x1, x2 = max(0, start - NAME_REACH * height), start + height // 2
+    return _part(image, name_mask, y1, y2, x1, x2)
+
+
+def name_above(image: Image, name_mask: Image, line: Box) -> Image | None:
+    """The name on its own row right above a text line (TZ 4.5, 1.36): name-colour pixels
+    within 1.5 line heights above it, over the line's width and a little more, then the whole
+    of that row (a tall name is not cut at the top). A HUD label of the same colour further up,
+    past a gap, is not the name."""
+    start, top, end, bottom = line
+    height = max(1, bottom - top)
+    y1, y2 = max(0, top - height * 3 // 2), max(0, top - 1)
+    x1, x2 = max(0, start - 2 * height), min(image.shape[1], end + 2 * height)
+    if y2 <= y1 or x2 <= x1:
+        return None
+    band = name_mask[:y2, x1:x2]
+    rows = np.flatnonzero(band[y1:].any(axis=1))
+    if len(rows) == 0:
+        return None
+    lowest = y1 + int(rows[-1])
+    filled = band.any(axis=1)
+    highest = lowest
+    while highest > 0 and (filled[highest - 1] or filled[max(0, highest - 3) : highest].any()):
+        highest -= 1  # up the name's row, over gaps of up to 3 rows inside the letters
+    return _part(image, name_mask, highest, lowest + 1, x1, x2)
+
+
+def _part(image: Image, name_mask: Image, y1: int, y2: int, x1: int, x2: int) -> Image | None:
+    if y2 <= y1 or x2 <= x1:
+        return None
     points = cv2.findNonZero(name_mask[y1:y2, x1:x2])
     if points is None:
         return None

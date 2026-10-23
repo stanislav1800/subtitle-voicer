@@ -239,7 +239,9 @@ class ZoneEditor(QWidget):
             return
         ranges = [[list(lo), list(hi)] for lo, hi in zone_tools.colors_around(self._frame, x, y)]
         if self._pipette_target == "name" and zone.get("policy"):
-            speaker = {**zone["policy"]["speaker"], "mode": "color", "colors_hsv": ranges}
+            speaker = {**zone["policy"]["speaker"], "colors_hsv": ranges}  # TZ 1.36
+            if speaker.get("mode", "none") == "none":
+                speaker["mode"] = "prefix"  # a colour picked: the name is before the text
             zone = {**zone, "policy": {**zone["policy"], "speaker": speaker}}
         else:
             zone = {**zone, "mask": {**zone["mask"], "preset": "color", "colors_hsv": ranges}}
