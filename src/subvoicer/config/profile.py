@@ -11,9 +11,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from subvoicer.core.models import Gender
 
-SCHEMA_VERSION = 8  # 2: ocr.fix_words, ocr.confusions (TZ 1.23); 3: one layout (TZ 1.26);
+SCHEMA_VERSION = 9  # 2: ocr.fix_words, ocr.confusions (TZ 1.23); 3: one layout (TZ 1.26);
 # 4: capture (TZ 1.28); 5: zone locate (TZ 1.29); 6: pause_in_editor (TZ 1.30); 7: speech (1.31);
-# 8: voice mode gender (1.32)
+# 8: voice mode gender (1.32); 9: skip_phrases, speaker mode brackets (1.33)
 MAX_ZONES = 12  # per layout (TZ 4.2)
 
 Hsv = tuple[int, int, int]
@@ -243,6 +243,7 @@ class Profile(StrictModel):
     narrator_voice: str
     default_voices: DefaultVoices
     speaker_stoplist: list[str] = Field(default_factory=list)
+    skip_phrases: list[str] = Field(default_factory=list)  # «Не озвучивать» (TZ 4.5, 1.33)
     characters: list[Character] = Field(default_factory=list)
     pronunciation: list[PronunciationRule] = Field(default_factory=list)
     ocr: OcrConfig = Field(default_factory=OcrConfig)

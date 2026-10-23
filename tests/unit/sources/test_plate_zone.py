@@ -187,3 +187,19 @@ def test_plates_for_the_overlay_are_in_frame_fractions() -> None:
     ((x1, y1, x2, y2),) = s.source.plates()["subtitles_auto"]
     assert abs(x1 - 340 / W) < 0.01 and abs(y2 - 322 / H) < 0.01
     assert abs(x2 - 940 / W) < 0.01 and abs(y1 - 262 / H) < 0.01
+
+
+def test_a_hint_plate_of_the_skip_list_is_dropped_the_line_beside_it_is_voiced() -> None:
+    """TZ 1.33: «Не озвучивать» works plate by plate."""
+    from dataclasses import replace
+
+    from subvoicer.pipeline.text.skip import SkipList
+
+    s = Screen()
+    s.zone = replace(s.zone, skip=SkipList(["Влезть"]))
+    s.source = ZoneOcrSource(
+        [s.zone], OcrRunner(s), JunkFilter(short_words()), Deduplicator(), s.clock
+    )
+    s.plates = {(560, 40, 720, 100): "Влезть", (340, 262, 940, 322): AD}
+    s.run(3)
+    assert [u.text for u in s.out] == [AD]

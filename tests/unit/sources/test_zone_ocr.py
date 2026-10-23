@@ -11,6 +11,7 @@ from subvoicer.pipeline.dedup import Deduplicator
 from subvoicer.pipeline.ocr.junk_filter import JunkFilter
 from subvoicer.pipeline.ocr.runner import OcrRunner
 from subvoicer.pipeline.speaker.resolver import SpeakerMode, SpeakerResolver
+from subvoicer.pipeline.text.skip import SkipList
 from subvoicer.pipeline.vision.masks import MaskPreset, MaskSpec
 from subvoicer.sources.zone_ocr import NameSource, ZoneOcrSource, ZoneSpec, drop_last_word
 from tests.fakes.clock import FakeClock
@@ -34,7 +35,9 @@ class ScriptedOcr:
 
 
 class Screen:
-    def __init__(self, speaker: SpeakerMode = SpeakerMode.NONE) -> None:
+    def __init__(
+        self, speaker: SpeakerMode = SpeakerMode.NONE, skip: SkipList | None = None
+    ) -> None:
         self.clock = FakeClock(100.0)
         self.ocr = ScriptedOcr()
         zone = ZoneSpec(
@@ -42,6 +45,7 @@ class Screen:
             rect=Rect(0.0, 0.0, 1.0, 1.0),
             mask=MaskSpec(MaskPreset.BRIGHT_ON_DARK),
             speaker=SpeakerResolver(speaker, speaker_stoplist()),
+            skip=skip,
         )
         self.source = ZoneOcrSource(
             [zone], OcrRunner(self.ocr), JunkFilter(short_words()), Deduplicator(), self.clock
@@ -89,6 +93,16 @@ def test_a_short_line_read_in_latin_twins_is_voiced() -> None:
     s.show("HeT")
     s.run(2)
     assert [u.text for u in s.out] == ["Нет"]
+
+
+def test_hints_of_the_skip_list_are_not_voiced() -> None:
+    """TZ 1.33: «Не озвучивать» — an on-screen hint in a dark scene, the next line is voiced."""
+    s = Screen(SpeakerMode.PREFIX, SkipList(["[Е] Взять"]))
+    s.show("[E] Взять патроны")
+    s.run(2)
+    s.show("Джуди: Взять их всех живыми.")
+    s.run(2)
+    assert [(u.speaker, u.text) for u in s.out] == [("Джуди", "Взять их всех живыми.")]
 
 
 def test_typewriter_text_is_one_line() -> None:

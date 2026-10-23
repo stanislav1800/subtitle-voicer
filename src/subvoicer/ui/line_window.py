@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from PySide6.QtGui import QFont, QFontMetrics
 from PySide6.QtWidgets import (
     QDialog,
     QFrame,
@@ -16,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from subvoicer.app.facade import AppFacade
+from subvoicer.app.profile_commands import with_skip_phrase
 from subvoicer.config.profile import Profile, PronunciationRule
 from subvoicer.config.profile_store import format_error
 from subvoicer.core.models import HistoryEntry
@@ -51,6 +53,18 @@ def suggested_entry(word: str, all_forms: bool) -> tuple[str, str]:
     return word, word
 
 
+def fit_checked(button: QPushButton) -> None:
+    """A checked button is drawn bold (theme): wide enough for that, or its text is cut."""
+    button.ensurePolished()
+    bold = QFont(button.font())
+    bold.setWeight(QFont.Weight.DemiBold)
+    text = button.text()
+    extra = QFontMetrics(bold).horizontalAdvance(text) - button.fontMetrics().horizontalAdvance(
+        text
+    )
+    button.setMinimumWidth(button.sizeHint().width() + max(0, extra))
+
+
 class LineWindow(QDialog):
     def __init__(self, facade: AppFacade, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -71,7 +85,8 @@ class LineWindow(QDialog):
         self._text = label("", "", wrap=True)
         self._text.setStyleSheet("font-size: 17px;")
         layout.addWidget(self._text)
-        buttons = QHBoxLayout()
+        buttons_box = QWidget()
+        buttons = FlowLayout(buttons_box)  # three buttons do not fit a narrow window in a row
         repeat = QPushButton("  Повторить")
         repeat.setIcon(theme.icon("play", theme.ACCENT))
         repeat.clicked.connect(self._repeat)
@@ -80,8 +95,42 @@ class LineWindow(QDialog):
         self._fix_button.setCheckable(True)
         self._fix_button.toggled.connect(self._toggle_fix)
         buttons.addWidget(self._fix_button)
-        buttons.addStretch(1)
-        layout.addLayout(buttons)
+        self._skip_button = QPushButton("Не озвучивать такое")
+        self._skip_button.setCheckable(True)
+        self._skip_button.setToolTip("Подсказка на экране, а не реплика: больше её не читать")
+        self._skip_button.toggled.connect(self._toggle_skip)
+        buttons.addWidget(self._skip_button)
+        for checkable in (self._fix_button, self._skip_button):
+            fit_checked(checkable)
+        layout.addWidget(buttons_box)
+
+        # «Не озвучивать такое» (TZ 4.13.1, 1.33)
+        self._skip = QFrame()
+        self._skip.setObjectName("card")
+        skip = QVBoxLayout(self._skip)
+        skip.setContentsMargins(18, 16, 18, 16)
+        skip.setSpacing(12)
+        skip.addWidget(
+            label(
+                "Реплики, которые начинаются с этой фразы, в этой игре не озвучиваются. "
+                "Сотрите лишний хвост, чтобы закрыть все похожие: «[Е]\u00a0Взять патроны» → "
+                "«[Е]\u00a0Взять».",
+                "caption",
+                wrap=True,
+            )
+        )
+        self._skip_phrase = QLineEdit()
+        self._skip_phrase.setAccessibleName("Фраза «Не озвучивать»")
+        skip.addWidget(self._skip_phrase)
+        self._skip_message = label("", "hint", wrap=True)
+        skip.addWidget(self._skip_message)
+        skip_actions = QHBoxLayout()
+        skip_actions.addStretch(1)
+        self._skip_save = primary("Добавить", self._save_skip)
+        skip_actions.addWidget(self._skip_save)
+        skip.addLayout(skip_actions)
+        layout.addWidget(self._skip)
+        self._skip.hide()
 
         self._fix = QFrame()
         self._fix.setObjectName("card")
@@ -151,6 +200,10 @@ class LineWindow(QDialog):
         profile_title = self._profile_title()
         self._save.setText(f"Сохранить в {profile_title}" if profile_title else "Сохранить")
         self._save.setEnabled(profile_title is not None)
+        self._skip_phrase.setText(entry.text)
+        self._skip_message.setText("" if profile_title else "Нет активной игры — некуда добавить.")
+        self._skip_save.setText(f"Добавить в {profile_title}" if profile_title else "Добавить")
+        self._skip_save.setEnabled(profile_title is not None)
         self.show()
         self.raise_()
         self.activateWindow()
@@ -158,6 +211,34 @@ class LineWindow(QDialog):
     def _toggle_fix(self, on: bool) -> None:
         self._fix.setVisible(on)
         self.adjustSize()
+
+    def _toggle_skip(self, on: bool) -> None:
+        self._skip.setVisible(on)
+        if on:
+            self._skip_phrase.setFocus()
+        self.adjustSize()
+
+    def _save_skip(self) -> None:
+        phrase, path = self._skip_phrase.text().strip(), self._profile_path()
+        if not phrase or path is None:
+            return
+        added: list[bool] = []
+
+        def change(profile: Profile) -> Profile | None:
+            changed = with_skip_phrase(profile, phrase)
+            added.append(changed is not None)
+            return changed
+
+        try:
+            self._facade.update_profile(path, change)
+        except (OSError, ValueError) as exc:
+            self._skip_message.setText(f"Не сохранено: {format_error(exc)}")
+            return
+        self._skip_message.setText(
+            f"Добавлено: «{phrase}». Действует со следующей реплики."
+            if any(added)
+            else f"«{phrase}» уже в списке «Не озвучивать»."
+        )
 
     def _pick(self, word: str, button: QPushButton) -> None:
         for index in range(self._words.count()):

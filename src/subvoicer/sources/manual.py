@@ -16,7 +16,7 @@ from subvoicer.pipeline.ocr.junk_filter import JunkFilter
 from subvoicer.pipeline.ocr.runner import OcrRunner
 from subvoicer.pipeline.speaker.resolver import SpeakerMode, SpeakerResolver
 from subvoicer.pipeline.vision.masks import Image, MaskPreset, MaskSpec
-from subvoicer.sources.zone_ocr import ZoneSpec, read_once
+from subvoicer.sources.zone_ocr import ZoneSpec, read_once, skipped
 
 log = logging.getLogger(__name__)
 
@@ -71,5 +71,5 @@ class ManualReader:
                 id=next(self._ids),
             )
             for line in reading.lines
-            if line.text.strip()
+            if line.text.strip() and not skipped(spec, line.text)
         ]

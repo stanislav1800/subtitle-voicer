@@ -17,6 +17,7 @@ from subvoicer.pipeline.speaker.characters import (
     merge_characters,
 )
 from subvoicer.pipeline.speech.voices import default_voices
+from subvoicer.pipeline.text.skip import skip_key
 
 TTS_CATALOG = "silero_v5"
 
@@ -170,3 +171,11 @@ def merge_characters_in(store: ProfileStore, ref: str, source: str, target: str)
         return profile.model_copy(update={"characters": merged})
 
     return store.update(stored.path, change)
+
+
+def with_skip_phrase(profile: Profile, phrase: str) -> Profile | None:
+    """The profile with ``phrase`` in «Не озвучивать» (TZ 1.33); None if it is there already."""
+    phrase = phrase.strip()
+    if not skip_key(phrase) or any(skip_key(p) == skip_key(phrase) for p in profile.skip_phrases):
+        return None
+    return profile.model_copy(update={"skip_phrases": [*profile.skip_phrases, phrase]})

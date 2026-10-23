@@ -29,6 +29,7 @@ from subvoicer.pipeline.ocr.runner import OcrOutcome, OcrRunner
 from subvoicer.pipeline.ocr.words import WordFixer
 from subvoicer.pipeline.speaker.resolver import SpeakerMode, SpeakerResolver, SpeakerResult
 from subvoicer.pipeline.text.latin import twins_to_cyrillic
+from subvoicer.pipeline.text.skip import SkipList
 from subvoicer.pipeline.vision.change import mask_empty
 from subvoicer.pipeline.vision.crop import crop
 from subvoicer.pipeline.vision.masks import Image, MaskSpec, build_mask
@@ -103,6 +104,7 @@ class ZoneSpec:
     junk: JunkFilter | None = None  # per-zone min_confidence; else the source's
     words: WordFixer | None = None  # fixing OCR words by the dictionary (TZ 1.23)
     plates: PlateSearch | None = None  # look for subtitle plates in rect (TZ 4.2.2)
+    skip: SkipList | None = None  # «Не озвучивать» of the game (TZ 4.5, 1.33)
 
 
 @dataclass
@@ -179,6 +181,16 @@ def fixed_words(spec: ZoneSpec, text: str) -> str:
     twins first become Cyrillic, or a short «HeT» was dropped as not Cyrillic."""
     text = twins_to_cyrillic(text)
     return spec.words.fix(text) if spec.words is not None else text
+
+
+def skipped(spec: ZoneSpec, text: str) -> bool:
+    """A text of the game's «Не озвучивать» list (TZ 1.33), with a DEBUG line why."""
+    phrase = spec.skip.match(text) if spec.skip else None
+    if phrase is not None:
+        log.debug(
+            "Зона %s: не озвучиваю — в списке «Не озвучивать» (%s): %r", spec.id, phrase, text
+        )
+    return phrase is not None
 
 
 def read_once(spec: ZoneSpec, frame: Image, runner: OcrRunner, separator: str = " ") -> ZoneReading:
@@ -355,6 +367,14 @@ class ZoneOcrSource:
             confidence,
             plate_texts or text,
         )
+        # on-screen hints of the game's «Не озвучивать» list; a plates zone: plate by plate
+        if plate_texts:
+            plate_texts = [t for t in plate_texts if not skipped(spec, t)]
+            if not plate_texts:
+                return []
+            text = " ".join(plate_texts)
+        elif skipped(spec, text):
+            return []
         if decision.still_typing:
             # read before typing ended: the last word is likely cut, it comes with the rest
             text = drop_last_word(text)
@@ -466,7 +486,7 @@ class ZoneOcrSource:
             lines[0] = (UtteranceKind.CONTINUATION, zone.speaker, lines[0][2])
         utterances = []
         for kind, speaker_name, text in lines:
-            if not text:
+            if not text or skipped(spec, text):
                 continue
             zone.speaker = speaker_name
             zone.voiced, zone.voiced_at = text, now

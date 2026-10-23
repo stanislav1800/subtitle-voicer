@@ -248,20 +248,27 @@ class EntryDialog(Form):
 
 
 class StoplistDialog(Form):
+    TITLE = "Не считать именами"
+    CAPTION = "Слова перед двоеточием, которые не имя говорящего («Совет: …»). По одному в строке."
+
     def __init__(self, parent: QWidget | None, words: Sequence[str]) -> None:
-        super().__init__("Не считать именами", parent)
-        self.layout_.insertWidget(
-            1,
-            label(
-                "Слова перед двоеточием, которые не имя говорящего («Совет: …»). "
-                "По одному в строке.",
-                "caption",
-                wrap=True,
-            ),
-        )
+        super().__init__(self.TITLE, parent)
+        self.layout_.insertWidget(1, label(self.CAPTION, "caption", wrap=True))
         self.text = QPlainTextEdit("\n".join(words))
         self.text.setMinimumHeight(220)
         self.form.addRow(self.text)
 
     def words(self) -> list[str]:
         return [w.strip() for w in self.text.toPlainText().splitlines() if w.strip()]
+
+
+class SkipDialog(StoplistDialog):
+    """«Не озвучивать» of a game (TZ 4.5, 1.33)."""
+
+    TITLE = "Не озвучивать"
+    CAPTION = (
+        "Подсказки и надписи игры, которые не надо читать. Реплика, которая начинается с такой "
+        "фразы, не озвучивается: «[Е]\u00a0Взять» — и «[Е]\u00a0Взять патроны», и «[Е]\u00a0Взять "
+        "аптечку». "
+        "Регистр и знаки не важны. По одной в строке."
+    )

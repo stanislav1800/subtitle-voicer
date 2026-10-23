@@ -38,6 +38,7 @@ from subvoicer.ui.settings.dialogs import (
     EntryDialog,
     ImportDialog,
     MergeDialog,
+    SkipDialog,
     StoplistDialog,
     gender_text,
     voice_items,
@@ -371,6 +372,7 @@ class ProfilesPage(Page):
         self._detail.addWidget(self._speech(path, profile))
         self._detail.addWidget(self._characters(path, profile))
         self._detail.addWidget(self._stoplist(path, profile))
+        self._detail.addWidget(self._skip_list(path, profile))
         self._fill_dictionary(path, profile)
         self.fit_height()
         if same:
@@ -667,6 +669,26 @@ class ProfilesPage(Page):
         line.addWidget(change)
         return frame
 
+    def _skip_list(self, path: Path, profile: Profile) -> QWidget:
+        """«Не озвучивать» (TZ 4.5, 1.33): hints and labels of the game that are not read."""
+        frame = QFrame()
+        line = QHBoxLayout(frame)
+        line.setContentsMargins(4, 0, 4, 0)
+        phrases = profile.skip_phrases
+        shown = "; ".join(f"«{p}»" for p in phrases[:4]) + ("…" if len(phrases) > 4 else "")
+        text = f"Не озвучивать: {shown}" if phrases else "Не озвучивать: ничего"
+        caption = label(text, "caption", wrap=True)
+        caption.setToolTip(
+            "Подсказки на экране, которые не надо читать. Добавить можно и из окна реплики: "
+            "трей → «Последние реплики» → «Не озвучивать такое»."
+        )
+        line.addWidget(caption, 1)
+        change = QPushButton("Изменить")
+        change.setAccessibleName("Изменить «Не озвучивать»")
+        change.clicked.connect(lambda: self._edit_skip_list(path, profile))
+        line.addWidget(change)
+        return frame
+
     def _fill_dictionary(self, path: Path, profile: Profile) -> None:
         body = self._dictionary.body
         clear_layout(body)
@@ -800,6 +822,12 @@ class ProfilesPage(Page):
         if dialog.exec():
             words = dialog.words()
             self._change(path, lambda p: p.model_copy(update={"speaker_stoplist": words}))
+
+    def _edit_skip_list(self, path: Path, profile: Profile) -> None:
+        dialog = SkipDialog(self, profile.skip_phrases)
+        if dialog.exec():
+            phrases = dialog.words()
+            self._change(path, lambda p: p.model_copy(update={"skip_phrases": phrases}))
 
     def _listen_entry(self, entry: PronunciationRule, phrase: str) -> None:
         if self._selected is None:

@@ -67,6 +67,13 @@ def _v7_to_v8(data: Data) -> Data:
     return data
 
 
+def _v8_to_v9(data: Data) -> Data:
+    """TZ 1.33: the game's «Не озвучивать» list, empty; the speaker mode brackets is new
+    to older apps."""
+    data.setdefault("skip_phrases", [])
+    return data
+
+
 # from version N to N+1; every entry has a unit test on an example of the old file
 MIGRATIONS: dict[int, Migration] = {
     1: _v1_to_v2,
@@ -76,6 +83,7 @@ MIGRATIONS: dict[int, Migration] = {
     5: _v5_to_v6,
     6: _v6_to_v7,
     7: _v7_to_v8,
+    8: _v8_to_v9,
 }
 
 

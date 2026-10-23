@@ -245,8 +245,16 @@ def test_v6_profile_speaks_as_the_general_settings_say() -> None:
 def test_v7_profile_is_read_as_it_is_and_may_speak_by_gender() -> None:
     """TZ 1.32: version 7 -> 8 changes nothing; the new voice mode gender is accepted."""
     old = profile_data(schema_version=7, speech={})
-    new = migrate(old)
+    new = migrate(old, current=8)
     assert new["schema_version"] == 8 and new["layout"] == old["layout"]
     zone = {**dialog_zone(voice={"mode": "gender"})}
     profile = Profile.model_validate(profile_data(layout={"zones": [zone]}))
     assert profile.layout.zones[0].policy.voice.mode == "gender"  # type: ignore[union-attr]
+
+
+def test_v8_profile_gets_an_empty_skip_list_and_may_read_names_in_brackets() -> None:
+    """TZ 1.33: version 8 -> 9 — «Не озвучивать» is empty; speaker mode brackets."""
+    new = migrate(profile_data(schema_version=8, speech={}))
+    assert new["schema_version"] == 9 and new["skip_phrases"] == []
+    kept = migrate(profile_data(schema_version=8, speech={}, skip_phrases=["Влезть"]))
+    assert Profile.model_validate(kept).skip_phrases == ["Влезть"]

@@ -50,6 +50,7 @@ from subvoicer.pipeline.speech.scheduler import OverlapMode
 from subvoicer.pipeline.speech.voices import VoiceDefaults, VoiceMode, VoicePicker
 from subvoicer.pipeline.text.preparer import TextPreparer
 from subvoicer.pipeline.text.pronunciation import PronunciationDict, PronunciationEntry
+from subvoicer.pipeline.text.skip import SkipList
 from subvoicer.pipeline.vision.masks import MaskPreset, MaskSpec
 from subvoicer.pipeline.vision.stability import StabilizationSettings
 from subvoicer.services.capture_service import CaptureService
@@ -162,6 +163,7 @@ def zone_spec(profile: Profile, zone: Zone, zones: list[Zone], engines: OcrEngin
         junk=JunkFilter(short_words(), min_confidence=ocr.min_confidence),
         words=word_fixer(profile, ocr, engines),
         plates=PlateSearch(engines.detector()) if zone.locate == "plates" else None,
+        skip=SkipList(profile.skip_phrases) if profile.skip_phrases else None,
     )
 
 
