@@ -83,6 +83,14 @@ def test_line_is_printed_once_and_unchanged_subtitle_is_not_recognised_again() -
     assert s.ocr.calls == 1
 
 
+def test_a_short_line_read_in_latin_twins_is_voiced() -> None:
+    """«Нет» read as «HeT» was dropped by the junk filter as not Cyrillic."""
+    s = Screen()
+    s.show("HeT")
+    s.run(2)
+    assert [u.text for u in s.out] == ["Нет"]
+
+
 def test_typewriter_text_is_one_line() -> None:
     s = Screen()
     line = "Не нравится мне это место, давай уйдём."

@@ -28,6 +28,7 @@ from subvoicer.pipeline.ocr.junk_filter import JunkFilter
 from subvoicer.pipeline.ocr.runner import OcrOutcome, OcrRunner
 from subvoicer.pipeline.ocr.words import WordFixer
 from subvoicer.pipeline.speaker.resolver import SpeakerMode, SpeakerResolver, SpeakerResult
+from subvoicer.pipeline.text.latin import twins_to_cyrillic
 from subvoicer.pipeline.vision.change import mask_empty
 from subvoicer.pipeline.vision.crop import crop
 from subvoicer.pipeline.vision.masks import Image, MaskSpec, build_mask
@@ -174,7 +175,9 @@ def _covers(known: Box, box: Box) -> bool:
 
 
 def fixed_words(spec: ZoneSpec, text: str) -> str:
-    """TZ 1.23: OCR words fixed by the dictionary, before the junk filter and dedup."""
+    """TZ 1.23: OCR words fixed by the dictionary, before the junk filter and dedup; Latin
+    twins first become Cyrillic, or a short «HeT» was dropped as not Cyrillic."""
+    text = twins_to_cyrillic(text)
     return spec.words.fix(text) if spec.words is not None else text
 
 

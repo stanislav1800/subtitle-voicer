@@ -61,3 +61,39 @@ class LatinReader:
 def _mostly_cyrillic(text: str) -> bool:
     letters = [ch for ch in text if ch.isalpha()]
     return bool(letters) and len(_HAS_CYRILLIC.findall(text)) * 2 > len(letters)
+
+
+# Latin letters OCR gives for Cyrillic ones of a game font (italic «r» for «г», «u» for «и»)
+TWINS = "ABCEHKMOPTXYaceopxyru"
+TWIN_HOMOGLYPHS = str.maketrans(TWINS, "АВСЕНКМОРТХУасеорхуги")
+_ANY_LETTER = re.compile(r"[^\W\d_]+")
+
+
+def twins_to_cyrillic(text: str) -> str:
+    """Russian read with Latin twins, before the junk filter: a word mixing the scripts
+    («Tак»), or a whole line of twins only — «HeT», «Xa-xa-xa!», «Y-y! Ara!» were dropped as
+    not Cyrillic, so short lines went unvoiced. A line with any other Latin letter («REMEDY»,
+    «Children of…») stays as it is."""
+    latin = [ch for ch in text if "A" <= ch <= "z" and ch.isalpha()]
+    if not latin:
+        return text
+    if not _HAS_CYRILLIC.search(text) and all(ch in TWINS for ch in latin):
+        return _ANY_LETTER.sub(_word_case, text.translate(TWIN_HOMOGLYPHS))
+
+    def fix(match: re.Match[str]) -> str:
+        word = match.group(0)
+        mixed = _HAS_CYRILLIC.search(word) and any("A" <= ch <= "z" for ch in word)
+        if mixed and all(ch in TWINS for ch in word if "A" <= ch <= "z"):
+            return _word_case(word.translate(TWIN_HOMOGLYPHS))
+        return word
+
+    return _ANY_LETTER.sub(fix, text)
+
+
+def _word_case(word: str | re.Match[str]) -> str:
+    """«НеТ» -> «Нет»: a capital twin inside a lower-case word is a small letter (the small
+    Cyrillic «т» of many fonts looks like «T»)."""
+    text = word if isinstance(word, str) else word.group(0)
+    if len(text) > 1 and any(ch.islower() for ch in text[1:]):
+        return text[0] + text[1:].lower()
+    return text

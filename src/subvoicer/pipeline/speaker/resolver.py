@@ -9,6 +9,7 @@ from enum import StrEnum
 
 from subvoicer.pipeline.speaker.extract import DEFAULT_PREFIX_PATTERN, extract_prefix
 from subvoicer.pipeline.speaker.validate import NameValidator
+from subvoicer.pipeline.text.latin import TWIN_HOMOGLYPHS, TWINS
 
 # "…кто? Джеки: Вылезай." — a name after the end of a sentence starts another speaker's line
 INNER_NAME = re.compile(r"(?<=[.!?…»\"])\s+([^\s:.!?…][^:.!?…]{0,29}):\s+")
@@ -16,8 +17,6 @@ INNER_NAME = re.compile(r"(?<=[.!?…»\"])\s+([^\s:.!?…][^:.!?…]{0,29}):\s+
 TRAILING_NAME = re.compile(r"(?<=[.!?…»\"])\s+([^\s:.!?…][^:.!?…]{0,29}):\s*$")
 
 
-# OCR reads Cyrillic name letters as Latin twins («Bu» for «Ви» in Cyberpunk's italic font)
-NAME_HOMOGLYPHS = str.maketrans("ABCEHKMOPTXaceopxyu", "АВСЕНКМОРТХасеорхуи")
 _LATIN = re.compile(r"[A-Za-z]")
 _EDGES = " 	:;,.-–—=_|'\"«»"
 
@@ -33,13 +32,13 @@ def clean_name(candidate: str) -> str:
         mixed = 0 < latin < len(word)  # «Bи»
         short_twins = latin == len(word) <= 3 and _all_twins(word)  # «Bu»; «Jack» stays
         if mixed or short_twins:
-            word = word.translate(NAME_HOMOGLYPHS)
+            word = word.translate(TWIN_HOMOGLYPHS)  # «Bu» for «Ви» in Cyberpunk's italic
         words.append(word)
     return " ".join(words)
 
 
 def _all_twins(word: str) -> bool:
-    return all(ch in "ABCEHKMOPTXaceopxyu" for ch in word)
+    return all(ch in TWINS for ch in word)
 
 
 class SpeakerMode(StrEnum):
