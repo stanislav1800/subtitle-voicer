@@ -340,7 +340,8 @@ class ZoneOcrSource:
             return [], None, 0.0
         weights = [max(1, len(t)) for t in texts]
         confidence = sum(o.mean_confidence * w for o, w in zip(outcomes, weights, strict=True))
-        return texts, outcomes[0], confidence / sum(weights)
+        # a name in brackets over its line may be a plate of its own (TZ 1.33)
+        return spec.speaker.glue_names(texts), outcomes[0], confidence / sum(weights)
 
     def _recognize(self, zone: _ZoneState, decision: RunOcr) -> list[Utterance]:
         spec, stabilizer = zone.spec, zone.stabilizer

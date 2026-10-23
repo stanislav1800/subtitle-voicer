@@ -203,3 +203,17 @@ def test_a_hint_plate_of_the_skip_list_is_dropped_the_line_beside_it_is_voiced()
     s.plates = {(560, 40, 720, 100): "Влезть", (340, 262, 940, 322): AD}
     s.run(3)
     assert [u.text for u in s.out] == [AD]
+
+
+def test_a_name_plate_in_brackets_belongs_to_the_plate_below() -> None:
+    """TZ 1.33: «[ П-3 ]» over its line is found as a plate of its own."""
+    from dataclasses import replace
+
+    s = Screen()
+    s.zone = replace(s.zone, speaker=SpeakerResolver(SpeakerMode.BRACKETS, speaker_stoplist()))
+    s.source = ZoneOcrSource(
+        [s.zone], OcrRunner(s), JunkFilter(short_words()), Deduplicator(), s.clock
+    )
+    s.plates = {(560, 200, 660, 250): "[ П-3 ]", (340, 262, 940, 322): AD}
+    s.run(3)
+    assert [(u.speaker, u.text) for u in s.out] == [("П-3", AD)]

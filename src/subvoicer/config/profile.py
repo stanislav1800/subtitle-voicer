@@ -23,7 +23,7 @@ Fraction = Annotated[float, Field(ge=0.0, le=1.0)]
 MaskPresetName = Literal["color", "bright_on_dark", "dark_on_bright", "adaptive"]
 PriorityName = Literal["high", "normal", "low"]
 VoiceModeName = Literal["speaker", "gender", "fixed", "narrator"]
-SpeakerModeName = Literal["prefix", "zone", "color", "none"]
+SpeakerModeName = Literal["prefix", "zone", "color", "brackets", "none"]
 TriggerName = Literal["auto", "hotkey", "off"]
 CharacterSource = Literal["auto", "import", "manual"]
 # the window (WGC), the screen cut to the window (DXGI), or the window with the screen fallback

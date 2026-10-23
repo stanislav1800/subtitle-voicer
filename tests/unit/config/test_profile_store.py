@@ -258,3 +258,6 @@ def test_v8_profile_gets_an_empty_skip_list_and_may_read_names_in_brackets() -> 
     assert new["schema_version"] == 9 and new["skip_phrases"] == []
     kept = migrate(profile_data(schema_version=8, speech={}, skip_phrases=["Влезть"]))
     assert Profile.model_validate(kept).skip_phrases == ["Влезть"]
+    zone = {**dialog_zone(speaker={"mode": "brackets"})}
+    profile = Profile.model_validate(profile_data(layout={"zones": [zone]}))
+    assert profile.layout.zones[0].policy.speaker.mode == "brackets"  # type: ignore[union-attr]

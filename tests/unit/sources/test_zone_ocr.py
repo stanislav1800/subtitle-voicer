@@ -417,6 +417,21 @@ def test_stacked_subtitles_voice_each_line_once() -> None:
     assert all(u.kind is UtteranceKind.NEW for u in s.out)  # names start new lines (TZ 1.22)
 
 
+def test_stacked_names_in_brackets_voice_each_line_once() -> None:
+    """TZ 1.33, Atomic Heart: «[ Имя ]» over each line; a new line comes below, the old one
+    moves up."""
+    first = "[ ПРЕДСТАВИТЕЛЬ ПРЕДПРИЯТИЯ ] Приветствую на предприятии."
+    second = "[ П-3 ] Да-да, здравствуйте."
+    s = Screen(SpeakerMode.BRACKETS)
+    for text in (first, f"{first} {second}", second):
+        s.show(text)
+        s.run(2)
+    assert [(u.speaker, u.text) for u in s.out] == [
+        ("Представитель предприятия", "Приветствую на предприятии."),
+        ("П-3", "Да-да, здравствуйте."),
+    ]
+
+
 def test_cut_top_and_revealed_line_are_not_voiced_again() -> None:
     """The long upper line is cut by the zone edge while another is below, then seen whole."""
     long_line = (

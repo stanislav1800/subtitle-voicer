@@ -68,9 +68,19 @@ VOICE_HINT = {
 SPEAKER = (
     ("color", "По цвету"),
     ("prefix", "Перед текстом"),
+    ("brackets", "В скобках"),  # «[ П-3 ]» over the line, Atomic Heart (TZ 1.33)
     ("zone", "Зона"),
     ("none", "Нет"),
 )
+SPEAKER_HINT = {
+    "color": "Имя другого цвета, чем текст: укажите его цвет пипеткой",
+    "prefix": "«Имя: текст» — имя перед двоеточием",
+    "brackets": "«[ Имя ]» строкой над репликой или перед ней; каждое имя в скобках — "
+    "новая реплика",
+    "zone": "Имя всегда в одном месте — в отдельной зоне «Имя говорящего». Не подходит, "
+    "если реплики сдвигаются",
+    "none": "Имени нет: голос по полу из текста или рассказчик",
+}
 COOLDOWN = ((0.0, "нет"), (2.0, "2 мин"), (10.0, "10 мин"))
 PRESET = (
     ("color", "По цвету"),
@@ -262,9 +272,12 @@ class ZonePanel(QScrollArea):
             self._props.addWidget(choose)
         self._props.addWidget(section("Кто говорит"))
         speaker = policy.get("speaker", {"mode": "none"})
-        who = Segmented(SPEAKER, speaker.get("mode", "none"))
+        who = Segmented(SPEAKER, speaker.get("mode", "none"), columns=3)
         who.changed.connect(self._set_speaker_mode)
         self._props.addWidget(who)
+        self._props.addWidget(
+            label(SPEAKER_HINT.get(speaker.get("mode", "none"), ""), "hint", wrap=True)
+        )
         if speaker.get("mode") == "zone":
             names = [z for z in self._zones if z.get("kind") == "speaker"]
             if names:

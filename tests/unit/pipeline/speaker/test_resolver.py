@@ -129,3 +129,47 @@ def test_continuation_split() -> None:
 def test_a_name_read_by_colour_is_cleaned(read: str, name: str) -> None:
     resolver = SpeakerResolver(SpeakerMode.COLOR, [])
     assert resolver.resolve("Привет.", read) == SpeakerResult(name, "Привет.")
+
+
+# ---------------------------------------------------------------- brackets (TZ 1.33)
+
+
+@pytest.fixture
+def brackets() -> SpeakerResolver:
+    return SpeakerResolver(SpeakerMode.BRACKETS, speaker_stoplist())
+
+
+def test_names_in_brackets_start_lines(brackets: SpeakerResolver) -> None:
+    """Atomic Heart: «[ Имя ]» over each line, two lines one under another."""
+    text = "[ ПРЕДСТАВИТЕЛЬ ПРЕДПРИЯТИЯ ] Приветствую на предприятии. [ П-3 ] Да-да, здравствуйте."
+    assert brackets.resolve_all(text) == [
+        SpeakerResult("Представитель предприятия", "Приветствую на предприятии."),
+        SpeakerResult("П-3", "Да-да, здравствуйте."),
+    ]
+    assert brackets.resolve("[Нора] Ну и ну.") == SpeakerResult("Нора", "Ну и ну.")
+    assert brackets.resolve("|Нора| Ну и ну.").name == "Нора"  # OCR's bracket of a thin font
+
+
+def test_a_line_before_the_first_name_has_none(brackets: SpeakerResolver) -> None:
+    assert brackets.split_inner("…продолжение. [ Нора ] Ну и ну.") == [
+        (None, "…продолжение."),
+        ("Нора", "Ну и ну."),
+    ]
+    assert brackets.resolve("Просто текст.") == SpeakerResult(None, "Просто текст.")
+
+
+def test_brackets_that_are_not_a_name_stay_in_the_text(brackets: SpeakerResolver) -> None:
+    for text in ("Он сказал [неразборчиво] и ушёл.", "[ Совет ] Нажмите Q.", "[ ] Пусто."):
+        assert brackets.resolve_all(text) == [SpeakerResult(None, text)]
+
+
+def test_a_bare_name_in_brackets_waits_for_its_text(brackets: SpeakerResolver) -> None:
+    assert brackets.without_trailing_name("Пойдём. [ П-3 ]") == "Пойдём."
+    assert brackets.without_trailing_name("[ П-3 ]") == ""
+    assert brackets.glue_names(["[ П-3 ]", "Пойдём.", "[ Нора ]"]) == ["[ П-3 ] Пойдём."]
+    assert brackets.glue_names(["Без имени.", "Ещё."]) == ["Без имени.", "Ещё."]
+
+
+def test_digits_are_a_name_only_in_brackets() -> None:
+    validator = NameValidator([])
+    assert not validator.is_name("П-3") and validator.is_name("П-3", digits=True)
