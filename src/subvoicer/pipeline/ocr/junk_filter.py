@@ -8,6 +8,10 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 _PUNCTUATION_RE = re.compile(r"[\W_]+", re.UNICODE)
+_RUSSIAN_WORD = re.compile(r"[А-Яа-яЁё]{3,}")
+# TZ 1.39: a Russian line with a long English name («Это песня Never Fade Away.») has fewer
+# Cyrillic letters than 60%, yet it is Russian: two Russian words of 3+ letters keep it
+MIN_RUSSIAN_WORDS = 2
 
 
 class JunkReason(StrEnum):
@@ -42,7 +46,7 @@ class JunkFilter:
     def check(self, text: str, mean_confidence: float) -> JunkVerdict:
         if mean_confidence < self._min_confidence:
             return JunkVerdict(JunkReason.LOW_CONFIDENCE)
-        if cyrillic_ratio(text) < self._min_cyrillic_ratio:
+        if cyrillic_ratio(text) < self._min_cyrillic_ratio and not russian_words(text):
             return JunkVerdict(JunkReason.NOT_CYRILLIC)
         bare = _bare(text)
         if len(bare.replace(" ", "")) < self._min_length and bare not in self._short_words:
@@ -56,6 +60,11 @@ def cyrillic_ratio(text: str) -> float:
     if not letters:
         return 0.0
     return sum(1 for ch in letters if "Ѐ" <= ch <= "ӿ") / len(letters)
+
+
+def russian_words(text: str) -> bool:
+    """At least ``MIN_RUSSIAN_WORDS`` Russian words of 3+ letters in ``text``."""
+    return len(_RUSSIAN_WORD.findall(text)) >= MIN_RUSSIAN_WORDS
 
 
 def _bare(text: str) -> str:

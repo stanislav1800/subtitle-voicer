@@ -66,3 +66,12 @@ def test_short_words_resource_matches_tz() -> None:
         "мы",
     }
     assert set(short_words()) == expected
+
+
+def test_a_russian_line_with_a_long_english_name_is_kept() -> None:
+    """TZ 1.39: English letters outnumber the Russian ones, two Russian words are there."""
+    junk = JunkFilter([])
+    assert junk.check("Это песня Never Fade Away.", 0.95).ok
+    assert junk.check("Позвони в Militech Corporation, срочно.", 0.95).ok
+    for english in ("Wake up, Samurai. We have a city to burn.", "LIMITED ACTION", "Ok, да"):
+        assert junk.check(english, 0.95).reason is JunkReason.NOT_CYRILLIC
