@@ -43,6 +43,7 @@ def book() -> CharacterBook:
         ("Бу", 1),  # look-alike letters of a small italic name (Cyberpunk letsplay)
         ("Ву", 1),
         ("БИ", 1),
+        ("By", 1),  # Latin twins
         ("ДжудиАльварес", 0),  # a space lost
         ("Панан", 2),
         ("Панама", 2),
@@ -51,6 +52,12 @@ def book() -> CharacterBook:
 def test_find(name: str, found: int | None) -> None:
     characters = [JUDY, Character(name="Ви"), Character(name="Панам")]
     assert find_character(characters, name) == found
+
+
+def test_latin_twins_of_a_short_name() -> None:
+    """Cyberpunk letsplay: «TOm» for «ТОМ» made a second character with its own voice."""
+    assert find_character([Character(name="ТОМ")], "TOm") == 0
+    assert find_character([Character(name="Том")], "Tim") is None
 
 
 def test_closest_wins() -> None:

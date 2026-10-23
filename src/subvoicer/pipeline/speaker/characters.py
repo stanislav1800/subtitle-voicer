@@ -31,12 +31,13 @@ def allowed_errors(name: str) -> int:
 
 # letters OCR confuses in a small italic name: «Ви» is read «Bu», «By», «Бу», «БИ» (Cyberpunk
 # letsplay, 2026-10-23) — a short name allows no letter errors (TZ 1.16), these are not errors
-LOOKALIKES = str.maketrans("бйу", "вии")
+# and Latin twins, in lower case after ``normalize``: «TOm» is «ТОМ»
+LOOKALIKES = str.maketrans("бйуaceopxykmthbu", "вииасеорхикмтнви")
 
 
 def lookalike(name: str) -> str:
     """The normalised name without spaces and with look-alike letters made one:
-    «Бу» -> «ви», «Мистер Хэндс» -> «мистерхэндс»."""
+    «Бу» -> «ви», «TOm» -> «том», «Мистер Хэндс» -> «мистерхэндс»."""
     return normalize(name).replace(" ", "").translate(LOOKALIKES)
 
 
