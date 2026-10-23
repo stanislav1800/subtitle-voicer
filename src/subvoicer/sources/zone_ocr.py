@@ -29,6 +29,7 @@ from subvoicer.pipeline.ocr.runner import OcrOutcome, OcrRunner
 from subvoicer.pipeline.ocr.words import WordFixer
 from subvoicer.pipeline.speaker.resolver import SpeakerMode, SpeakerResolver, SpeakerResult
 from subvoicer.pipeline.text.latin import twins_to_cyrillic
+from subvoicer.pipeline.text.markers import without_distance
 from subvoicer.pipeline.text.skip import SkipList
 from subvoicer.pipeline.vision.change import mask_empty
 from subvoicer.pipeline.vision.crop import crop
@@ -178,8 +179,9 @@ def _covers(known: Box, box: Box) -> bool:
 
 def fixed_words(spec: ZoneSpec, text: str) -> str:
     """TZ 1.23: OCR words fixed by the dictionary, before the junk filter and dedup; Latin
-    twins first become Cyrillic, or a short «HeT» was dropped as not Cyrillic."""
-    text = twins_to_cyrillic(text)
+    twins first become Cyrillic, or a short «HeT» was dropped as not Cyrillic; a quest
+    marker's distance read with the line («Поможешь? 30M») goes."""
+    text = without_distance(twins_to_cyrillic(text))
     return spec.words.fix(text) if spec.words is not None else text
 
 

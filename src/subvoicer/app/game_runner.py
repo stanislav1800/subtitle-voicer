@@ -151,6 +151,8 @@ def zone_spec(profile: Profile, zone: Zone, zones: list[Zone], engines: OcrEngin
         empty_ratio=stab.empty_ratio,
     )
     ocr = profile.ocr.merged(zone.ocr)
+    words = word_fixer(profile, ocr, engines)
+    judge = words.known_share if words is not None else None
     return ZoneSpec(
         id=zone.id,
         rect=rect_of(zone),
@@ -159,9 +161,9 @@ def zone_spec(profile: Profile, zone: Zone, zones: list[Zone], engines: OcrEngin
         stabilization=plate_stabilization(settled) if zone.locate == "plates" else settled,
         repeat_cooldown_min=zone.policy.repeat_cooldown_min,
         name=name,
-        runner=OcrRunner(engines.get(ocr.engine), OcrSettings(upscale=ocr.upscale)),
+        runner=OcrRunner(engines.get(ocr.engine), OcrSettings(upscale=ocr.upscale), judge),
         junk=JunkFilter(short_words(), min_confidence=ocr.min_confidence),
-        words=word_fixer(profile, ocr, engines),
+        words=words,
         plates=PlateSearch(engines.detector()) if zone.locate == "plates" else None,
         skip=SkipList(profile.skip_phrases) if profile.skip_phrases else None,
     )

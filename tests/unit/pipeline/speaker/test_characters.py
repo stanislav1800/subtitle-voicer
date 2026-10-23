@@ -40,6 +40,10 @@ def book() -> CharacterBook:
         ("Джун", None),  # two letters off
         ("Вн", None),  # short names: exact only
         ("Ви", 1),
+        ("Бу", 1),  # look-alike letters of a small italic name (Cyberpunk letsplay)
+        ("Ву", 1),
+        ("БИ", 1),
+        ("ДжудиАльварес", 0),  # a space lost
         ("Панан", 2),
         ("Панама", 2),
     ],

@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 from subvoicer.core.models import OcrLine, OcrResult
 from subvoicer.core.ports import OcrEngine
 from subvoicer.pipeline.ocr.inputs import Image, OcrInput, build_input
 
+JUDGE_SLACK = 0.05  # a word more or less known is not «worse words»
 SAME_ROW_OVERLAP = 0.5  # boxes overlapping vertically by half of the lower one are one row
 
 
@@ -42,9 +43,17 @@ class OcrOutcome:
 
 
 class OcrRunner:
-    def __init__(self, engine: OcrEngine, settings: OcrSettings | None = None) -> None:
+    def __init__(
+        self,
+        engine: OcrEngine,
+        settings: OcrSettings | None = None,
+        judge: Callable[[str], float] | None = None,
+    ) -> None:
+        """``judge``: how much a text looks like real words, 0..1 (``WordFixer.known_share``);
+        a fallback input then wins only if its words are not worse (``better``)."""
         self._engine = engine
         self._settings = settings or OcrSettings()
+        self._judge = judge
 
     def attempt(self, crop: Image, mask: Image, kind: OcrInput) -> OcrAttempt:
         """Run OCR once on one input variant."""
@@ -76,9 +85,27 @@ class OcrRunner:
             for kind in OcrInput:
                 if kind is not default:
                     attempts.append(self.attempt(crop, mask, kind))
-        best = max(attempts, key=lambda a: a.mean_confidence)  # first wins on ties
+        best = attempts[0]
+        for other in attempts[1:]:
+            if self.better(other, best):
+                best = other
         text = separator.join(line.text for line in best.lines)
         return OcrOutcome(text, best, tuple(attempts))
+
+    def better(self, other: OcrAttempt, best: OcrAttempt) -> bool:
+        """A higher confidence wins (the first on ties). A fallback input (masked, mask) loses
+        thin letters of a colour mask, yet the engine is sure of what is left: 13 of 14 such
+        wins in a Cyberpunk letsplay were garbled («Слушои ч о э им людям», DECISIONS
+        2026-10-23) — so with a ``judge`` it must also read words no worse."""
+        if other.mean_confidence <= best.mean_confidence:
+            return False
+        if self._judge is None or not any(ch.isalpha() for ch in _text(best)):
+            return True
+        return self._judge(_text(other)) >= self._judge(_text(best)) - JUDGE_SLACK
+
+
+def _text(attempt: OcrAttempt) -> str:
+    return " ".join(line.text for line in attempt.lines)
 
 
 def mean_confidence(lines: Sequence[OcrLine]) -> float:

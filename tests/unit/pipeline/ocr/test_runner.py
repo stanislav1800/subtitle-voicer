@@ -87,3 +87,33 @@ def test_reading_order_groups_rows_by_vertical_overlap() -> None:
         )
     )
     assert [ln.text for ln in reading_order(result)] == ["A", "B", "C"]
+
+
+def test_a_fallback_with_worse_words_does_not_win() -> None:
+    """Cyberpunk letsplay: the mask input lost thin letters, yet the engine was sure of it."""
+    from subvoicer.pipeline.ocr.words import WordFixer
+
+    words = WordFixer({"да": 900_000, "я": 5_000_000, "подскажу": 900, "слушай": 9_000})
+    ocr = FakeOcr(
+        [
+            [line("Да я подскажу", 0.75)],  # default raw
+            [line("Да я оо кудозною", 0.93)],  # masked
+            [line("Да я подскажу", 0.78)],  # mask
+        ]
+    )
+    outcome = OcrRunner(ocr, judge=words.known_share).run(*zone(), OcrInput.RAW)
+    assert outcome.text == "Да я подскажу" and outcome.mean_confidence == 0.78
+    # an empty or junk default still loses to a confident reading
+    ocr = FakeOcr([[line("-", 0.2)], [line("Слушай", 0.9)], [line("Слушай", 0.8)]])
+    outcome = OcrRunner(ocr, judge=words.known_share).run(*zone(), OcrInput.RAW)
+    assert outcome.text == "Слушай" and outcome.input_kind is OcrInput.MASKED
+
+
+def test_known_share_counts_only_common_short_words() -> None:
+    from subvoicer.pipeline.ocr.words import WordFixer
+
+    words = WordFixer({"спо": 19, "ибо": 3_144, "ну": 400_000, "э": 14_000}, known=["Ви"])
+    assert words.known_share("Ну Ви") == 1.0
+    assert words.known_share("спо ибо") == 0.5  # «спо» is a fragment, «ибо» a word
+    assert words.known_share("э") == 0.0
+    assert words.known_share("…") == 1.0

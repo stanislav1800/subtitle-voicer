@@ -66,6 +66,17 @@ def key(word: str) -> str:
     return word.lower().replace("ё", "е")
 
 
+# the frequency list has fragments too («спо» 19, «ила» 89, «э» 14 343): a word counts as
+# real in ``known_share`` when it is frequent enough for its length (by the words of a
+# Cyberpunk letsplay, 2026-10-23: «ко» 46 404 and «ибо» 3 144 are real, «се» 3 291 is not)
+COMMON_BY_LENGTH = {1: 100_000, 2: 5_000, 3: 1_000, 4: 50}
+COMMON_LONG = 10
+
+
+def common_enough(word: str) -> int:
+    return COMMON_BY_LENGTH.get(len(word), COMMON_LONG)
+
+
 class WordFixer:
     def __init__(
         self,
@@ -84,6 +95,21 @@ class WordFixer:
 
     def count(self, word: str) -> int:
         return self._known.get(word) or self._counts.get(word, 0)
+
+    def known_share(self, text: str) -> float:
+        """Share of the letters of ``text`` that make known words, 1.0 without letters. An
+        input variant that lost thin letters reads «Да я оо кудозною» with a high confidence;
+        the words tell it from «Да я подскажу» (TZ 4.3)."""
+        letters = sum(ch.isalpha() for ch in text)
+        if not letters:
+            return 1.0
+        known = sum(
+            len(part)
+            for word in WORD.findall(text)
+            for part in word.split("-")
+            if self.count(key(part)) >= common_enough(part)
+        )
+        return known / letters
 
     def fix(self, text: str) -> str:
         text = WORD.sub(lambda m: self.fix_word(m.group(0)), text)

@@ -29,18 +29,34 @@ def allowed_errors(name: str) -> int:
     return 0
 
 
+# letters OCR confuses in a small italic name: «Ви» is read «Bu», «By», «Бу», «БИ» (Cyberpunk
+# letsplay, 2026-10-23) — a short name allows no letter errors (TZ 1.16), these are not errors
+LOOKALIKES = str.maketrans("бйу", "вии")
+
+
+def lookalike(name: str) -> str:
+    """The normalised name without spaces and with look-alike letters made one:
+    «Бу» -> «ви», «Мистер Хэндс» -> «мистерхэндс»."""
+    return normalize(name).replace(" ", "").translate(LOOKALIKES)
+
+
 def names_of(character: Character) -> list[str]:
     return [character.name, *character.aliases]
 
 
 def find_character(characters: Sequence[Character], name: str) -> int | None:
-    """Index of the character called ``name``: exact (normalised) first, then the closest
-    name or alias within its allowed number of letter errors."""
+    """Index of the character called ``name``: exact (normalised) first, then the same name
+    up to spaces and look-alike letters, then the closest name or alias within its allowed
+    number of letter errors."""
     wanted = normalize(name)
     if not wanted:
         return None
     for index, character in enumerate(characters):
         if any(normalize(n) == wanted for n in names_of(character)):
+            return index
+    alike = lookalike(name)
+    for index, character in enumerate(characters):
+        if any(lookalike(n) == alike for n in names_of(character)):
             return index
     best: tuple[int, int] | None = None  # (distance, index)
     for index, character in enumerate(characters):
