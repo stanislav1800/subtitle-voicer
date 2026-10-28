@@ -279,9 +279,9 @@ def build_speech(
         closers.insert(0, ducker.restore_all)
     starters: list[Callable[[], None]] = []
     if config.hotkeys:
-        from subvoicer.engines.system.hotkeys import PynputHotkeys
+        from subvoicer.engines.system.hotkeys import SystemHotkeys
 
-        listener = PynputHotkeys()
+        listener = SystemHotkeys()
         actions = {"pause": service.toggle_pause, "repeat": service.repeat, "skip": service.skip}
         bindings = {hotkeys[name]: action for name, action in actions.items()}
         starters.append(lambda: listener.start(bindings))

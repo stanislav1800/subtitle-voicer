@@ -141,9 +141,9 @@ def output_devices() -> list[tuple[str, str]]:
 
 
 def make_hotkeys() -> object:
-    from subvoicer.engines.system.hotkeys import PynputHotkeys
+    from subvoicer.engines.system.hotkeys import SystemHotkeys
 
-    return PynputHotkeys()
+    return SystemHotkeys()
 
 
 def monitor_device(hwnd: int) -> str | None:

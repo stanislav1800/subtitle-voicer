@@ -1,8 +1,9 @@
-"""Global hotkeys via pynput (HotkeyService). Format: ``<ctrl>+<alt>+p``.
+"""Global hotkeys registered in Windows (RegisterHotKey, TZ 4.12, 1.40). Format:
+``<ctrl>+<alt>+p``.
 
-Keys are matched by their Windows virtual key, not by the typed character: with a Russian
-layout pynput reports Ctrl+Alt+Z as «я», and its GlobalHotKeys (which compares characters)
-never fired. The action runs once per press, not on key repeat.
+Keys are Windows virtual keys, not typed characters: the same in any keyboard layout (a
+Russian layout made Ctrl+Alt+Z a «я» for a keyboard hook). The action runs once per press,
+not on key repeat.
 """
 
 from __future__ import annotations
@@ -10,7 +11,6 @@ from __future__ import annotations
 import logging
 import threading
 from collections.abc import Callable, Mapping
-from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -54,101 +54,92 @@ def parse(hotkey: str) -> Combo:
     return frozenset(modifiers), vk
 
 
-class ComboTracker:
-    """Pure part: modifiers held + the key pressed -> which combo fires (once per press)."""
+def guard(combo: str, action: Callable[[], None]) -> Callable[[], None]:
+    """The action, its errors logged: a hotkey never takes the app down."""
 
-    def __init__(self, combos: Mapping[Combo, str]) -> None:
-        self._combos = dict(combos)
-        self._held: set[str] = set()
-        self._down: set[int] = set()
+    def run() -> None:
+        try:
+            action()
+        except Exception:
+            log.exception("Ошибка обработчика горячей клавиши %s", combo)
 
-    def press(self, modifier: str | None, vk: int | None) -> str | None:
-        if modifier is not None:
-            self._held.add(modifier)
-            return None
-        if vk is None or vk in self._down:
-            return None  # key repeat
-        self._down.add(vk)
-        return self._combos.get((frozenset(self._held), vk))
-
-    def release(self, modifier: str | None, vk: int | None) -> None:
-        if modifier is not None:
-            self._held.discard(modifier)
-        elif vk is not None:
-            self._down.discard(vk)
+    return run
 
 
-def _modifier(key: Any) -> str | None:
-    from pynput.keyboard import Key
+# ---------------------------------------------------------------- RegisterHotKey
 
-    groups = {
-        "ctrl": (Key.ctrl, Key.ctrl_l, Key.ctrl_r),
-        "alt": (Key.alt, Key.alt_l, Key.alt_r, Key.alt_gr),
-        "shift": (Key.shift, Key.shift_l, Key.shift_r),
-        "cmd": (Key.cmd, Key.cmd_l, Key.cmd_r),
-    }
-    for name, keys in groups.items():
-        if key in keys:
-            return name
-    return None
+MOD_ALT, MOD_CONTROL, MOD_SHIFT, MOD_WIN, MOD_NOREPEAT = 0x1, 0x2, 0x4, 0x8, 0x4000
+MODIFIER_FLAGS = {"alt": MOD_ALT, "ctrl": MOD_CONTROL, "shift": MOD_SHIFT, "cmd": MOD_WIN}
+WM_HOTKEY, WM_QUIT = 0x0312, 0x0012
 
 
-def _vk(key: Any) -> int | None:
-    vk = getattr(key, "vk", None)
-    if vk is None:
-        value = getattr(key, "value", None)
-        vk = getattr(value, "vk", None)
-    return int(vk) if vk is not None else None
+def flags(modifiers: frozenset[str]) -> int:
+    """RegisterHotKey modifiers of a combo, without key repeat."""
+    result = MOD_NOREPEAT
+    for name in modifiers:
+        result |= MODIFIER_FLAGS[name]
+    return result
 
 
-class PynputHotkeys:
+class SystemHotkeys:
+    """Global hotkeys registered in Windows (RegisterHotKey). A keyboard hook (pynput, until
+    TZ 1.40) got nothing while a game run as administrator was in front — RDR2 from Rockstar
+    Launcher (2026-10-28: 0 of 3 presses in the game, 3 of 3 here); a registered combo does.
+    A combo another program has registered is refused: it is logged and left out (``taken``)."""
+
     def __init__(self) -> None:
-        self._listener: Any = None
-        self._lock = threading.Lock()
+        self._thread: threading.Thread | None = None
+        self._thread_id = 0
+        self.taken: list[str] = []
 
     def start(self, bindings: Mapping[str, Callable[[], None]]) -> None:
-        from pynput import keyboard
-
         self.stop()
-        actions: dict[str, Callable[[], None]] = {}
-        combos: dict[Combo, str] = {}
-        for hotkey, action in bindings.items():
+        ready = threading.Event()
+        self._thread = threading.Thread(
+            target=self._loop, args=(dict(bindings), ready), name="Hotkeys", daemon=True
+        )
+        self._thread.start()
+        ready.wait(2.0)  # registered (or refused) before start returns
+
+    def stop(self) -> None:
+        import ctypes
+
+        thread, self._thread = self._thread, None
+        if thread is None:
+            return
+        ctypes.windll.user32.PostThreadMessageW(self._thread_id, WM_QUIT, 0, 0)
+        thread.join(2.0)
+
+    def _loop(self, bindings: dict[str, Callable[[], None]], ready: threading.Event) -> None:
+        """The hotkeys belong to this thread: registered here, their messages come here."""
+        import ctypes
+        import ctypes.wintypes as wt
+
+        user32, kernel32 = ctypes.windll.user32, ctypes.windll.kernel32
+        self._thread_id = kernel32.GetCurrentThreadId()
+        msg = wt.MSG()
+        user32.PeekMessageW(ctypes.byref(msg), None, 0, 0, 0)  # make the message queue
+        actions: dict[int, tuple[str, Callable[[], None]]] = {}
+        self.taken = []
+        for number, (hotkey, action) in enumerate(bindings.items(), start=1):
             try:
-                combos[parse(hotkey)] = hotkey
+                modifiers, vk = parse(hotkey)
             except ValueError:
                 log.exception("Горячая клавиша %s пропущена", hotkey)
                 continue
-            actions[hotkey] = self._guard(hotkey, action)
-        tracker = ComboTracker(combos)
-
-        def on_press(key: Any) -> None:
-            with self._lock:
-                fired = tracker.press(_modifier(key), _vk(key))
-            if fired is not None:
-                log.info("Горячая клавиша %s", fired)
-                # never block the keyboard hook: Windows silently drops a slow one
-                threading.Thread(target=actions[fired], name="Hotkey", daemon=True).start()
-
-        def on_release(key: Any) -> None:
-            with self._lock:
-                tracker.release(_modifier(key), _vk(key))
-
-        self._listener = keyboard.Listener(on_press=on_press, on_release=on_release)
-        self._listener.daemon = True
-        self._listener.start()
-        log.info("Горячие клавиши: %s", ", ".join(bindings))
-
-    def stop(self) -> None:
-        listener, self._listener = self._listener, None
-        if listener is not None:
-            listener.stop()
-
-    @staticmethod
-    def _guard(combo: str, action: Callable[[], None]) -> Callable[[], None]:
-        def run() -> None:
-            try:
-                action()
-            except Exception:
-                log.exception("Ошибка обработчика горячей клавиши %s", combo)
-
-        return run
+            if user32.RegisterHotKey(None, number, flags(modifiers), vk):
+                actions[number] = (hotkey, guard(hotkey, action))
+            else:
+                self.taken.append(hotkey)
+                log.warning("Горячая клавиша %s занята другой программой", hotkey)
+        log.info("Горячие клавиши: %s", ", ".join(h for h, _ in actions.values()))
+        ready.set()
+        try:
+            while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
+                if msg.message == WM_HOTKEY and msg.wParam in actions:
+                    hotkey, run = actions[msg.wParam]
+                    log.info("Горячая клавиша %s", hotkey)
+                    threading.Thread(target=run, name="Hotkey", daemon=True).start()
+        finally:
+            for number in actions:
+                user32.UnregisterHotKey(None, number)

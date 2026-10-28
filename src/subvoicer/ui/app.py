@@ -25,6 +25,7 @@ from subvoicer.core.events import (
     Event,
     GameActivated,
     GameClosed,
+    HotkeysTaken,
     LayoutMissing,
     LibraryScanned,
     ProfileBound,
@@ -77,7 +78,7 @@ def tell_first_copy() -> None:
 
 
 class HotkeySignals(QObject):
-    """Hotkeys fire in the pynput thread; windows open in the Qt one."""
+    """Hotkeys fire in their own thread; windows open in the Qt one."""
 
     zone_editor = Signal()
     select_read = Signal()
@@ -366,6 +367,15 @@ class Application:
                             "зоны настраиваются при запуске игры.",
                         )
                     )
+            case HotkeysTaken(combos=combos):
+                self.notifier.show(
+                    Notification(
+                        "Горячие клавиши заняты",
+                        f"{', '.join(pretty(c) for c in combos)} — уже заняты другой программой "
+                        "и не работают. Выберите другие в «Горячих клавишах».",
+                        timeout_ms=20_000,
+                    )
+                )
             case CaptureFailed():
                 self.notifier.show(
                     Notification(

@@ -136,5 +136,12 @@ class DebugCaptured(Event):
 
 
 @dataclass(frozen=True, slots=True)
+class HotkeysTaken(Event):
+    """Combos Windows refused: another program registered them (TZ 4.12, 1.40)."""
+
+    combos: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class SettingsApplied(Event):
     """The settings changed (window, tray switch or hotkey): views refresh themselves."""

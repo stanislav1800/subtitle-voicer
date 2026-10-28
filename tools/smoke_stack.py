@@ -36,7 +36,6 @@ STACK: list[tuple[str, str]] = [
     ("comtypes", "comtypes"),
     ("psutil", "psutil"),
     ("pywin32", "win32api"),
-    ("pynput", "pynput"),
     ("PySide6", "PySide6.QtWidgets"),
     ("pydantic", "pydantic"),
     ("tomlkit", "tomlkit"),

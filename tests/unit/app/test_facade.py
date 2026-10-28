@@ -168,3 +168,23 @@ def test_the_game_is_paused_while_the_zone_editor_is_over_it(tmp_path: Path) -> 
     freezer.refuse = False
     assert facade.freeze_game() is None and freezer.frozen == set()
     facade._parts = None
+
+
+def test_combos_taken_by_another_program_are_told_once(tmp_path: Path) -> None:
+    """TZ 1.40: Windows refused a combo (RegisterHotKey) — the user is told, not on every
+    re-registration."""
+    from subvoicer.core.events import HotkeysTaken
+
+    class Keys:
+        taken = ("<ctrl>+<alt>+p",)
+
+        def start(self, bindings: dict[str, object]) -> None:
+            pass
+
+    facade = AppFacade(AppPaths(tmp_path))
+    seen: list[object] = []
+    facade.subscribe(HotkeysTaken, seen.append)
+    facade._hotkeys = Keys()
+    facade._register_hotkeys()
+    facade._register_hotkeys()
+    assert seen == [HotkeysTaken(("<ctrl>+<alt>+p",))]

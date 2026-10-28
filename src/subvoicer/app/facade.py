@@ -41,6 +41,7 @@ from subvoicer.core.events import (
     Event,
     GameActivated,
     GameClosed,
+    HotkeysTaken,
     LayoutMissing,
     LibraryScanned,
     SettingsApplied,
@@ -151,6 +152,7 @@ class AppFacade:
         self._title: str | None = None
         self._manual_ids = itertools.count(MANUAL_ID_START)
         self._hotkeys: object | None = None
+        self._taken: tuple[str, ...] = ()  # combos another program holds, told once
         self._hotkey_actions: dict[str, Callable[[], None]] = {
             "pause": self.toggle_enabled,
             "repeat": self.repeat,
@@ -314,6 +316,11 @@ class AppFacade:
             start(bindings)
         except Exception:
             log.exception("Горячие клавиши не зарегистрированы")
+            return
+        taken = tuple(getattr(self._hotkeys, "taken", ()))
+        if taken and taken != self._taken:
+            self.bus.publish(HotkeysTaken(taken))
+        self._taken = taken
 
     @property
     def ready(self) -> bool:

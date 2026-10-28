@@ -30,7 +30,6 @@ dependencies = [
     "psutil",
     "pywin32",
     # Хоткеи
-    "pynput",
     # GUI
     "PySide6",
     # Конфиги
