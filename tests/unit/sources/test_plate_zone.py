@@ -26,7 +26,7 @@ class Screen:
     """A noisy scene with plates on it; the detector reports the plates' text lines, the
     OCR tells the plates apart by their width (the crop it gets is one plate)."""
 
-    def __init__(self) -> None:
+    def __init__(self, locate_ms: int = 300, cooldown_min: float = 0) -> None:
         self.clock = FakeClock(100.0)
         self.plates: dict[Box, str] = {}
         self.hud: Box | None = None
@@ -39,8 +39,9 @@ class Screen:
             rect=Rect(0.0, 0.0, 1.0, 1.0),
             mask=MaskSpec(MaskPreset.BRIGHT_ON_DARK),
             speaker=SpeakerResolver(SpeakerMode.PREFIX, speaker_stoplist()),
-            plates=PlateSearch(self),
+            plates=PlateSearch(self, locate_ms=locate_ms),
             stabilization=plate_stabilization(StabilizationSettings()),
+            repeat_cooldown_min=cooldown_min,
         )
         self.zone = zone
         self.source = ZoneOcrSource(
@@ -61,10 +62,14 @@ class Screen:
     def recognize(self, image: np.ndarray) -> OcrResult:
         self.ocr_calls += 1
         aspect = image.shape[1] / image.shape[0]
-        _box, text = min(
+        box, text = min(
             self.plates.items(),
             key=lambda item: abs((item[0][2] - item[0][0]) / (item[0][3] - item[0][1]) - aspect),
         )
+        share = aspect / ((box[2] - box[0]) / (box[3] - box[1]))
+        if share < 0.8:  # a crop narrower than the plate: the middle of its text
+            cut = round(len(text) * (1 - share) / 2)
+            text = text[cut : len(text) - cut]
         return OcrResult((OcrLine(text, 0.97, (0, 0, 10, 10)),))
 
     @staticmethod
@@ -217,3 +222,44 @@ def test_a_name_plate_in_brackets_belongs_to_the_plate_below() -> None:
     s.plates = {(560, 200, 660, 250): "[ П-3 ]", (340, 262, 940, 322): AD}
     s.run(3)
     assert [(u.speaker, u.text) for u in s.out] == [("П-3", AD)]
+
+
+def test_a_long_line_in_place_of_a_short_one_is_read_whole() -> None:
+    """RDR2 (TZ 1.41): a long line came in place of a short one; the short one's plate was
+    still «there» under it, and its middle was voiced — «оровые молодые женщины просят».
+    Plates are looked for less often than the text holds still, as in the game's frames."""
+    s = Screen(locate_ms=900)
+    s.plates = {(540, 262, 740, 322): HELLO}
+    s.run(2.3)  # the line changes right after a search: the next one is after the read
+    s.plates = {(140, 262, 1140, 322): AD}
+    s.run(2)
+    assert [u.text for u in s.out] == [HELLO, AD]
+
+
+def test_a_plate_fading_in_is_read_once_it_is_whole() -> None:
+    """RDR2: the detector found a part of a plate fading in; it was read at once."""
+    s = Screen(locate_ms=900)
+    s.plates = {(390, 262, 890, 322): AD}  # what the detector sees first
+    s.run(0.2)
+    s.plates = {(140, 262, 1140, 322): AD}
+    s.run(2)
+    assert [u.text for u in s.out] == [AD]
+
+
+def test_a_line_voiced_a_moment_ago_is_not_voiced_again_under_another() -> None:
+    """RDR2 (TZ 1.41): «Билл: …» went, «Незнакомец: …» came, then «Билл: …» again under it —
+    the reading was the stranger's plate grown by Bill's line, and Bill's line sounded twice."""
+    bill, stranger = "Билл: Морган, иди сюда и дерись!", "Незнакомец: Черт побери, что происходит?"
+    s = Screen(cooldown_min=2)
+    s.plates = {(390, 262, 890, 322): bill}
+    s.run(1.5)
+    s.plates = {}
+    s.run(2)
+    s.plates = {(240, 262, 1040, 322): stranger}
+    s.run(1.5)
+    s.plates = {(140, 262, 1140, 322): f"{stranger} {bill}"}  # one plate, two lines
+    s.run(1.5)
+    assert [(u.speaker, u.text) for u in s.out] == [
+        ("Билл", "Морган, иди сюда и дерись!"),
+        ("Незнакомец", "Черт побери, что происходит?"),
+    ]

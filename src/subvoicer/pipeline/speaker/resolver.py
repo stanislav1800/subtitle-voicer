@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from subvoicer.pipeline.speaker.extract import DEFAULT_PREFIX_PATTERN, extract_prefix
-from subvoicer.pipeline.speaker.validate import NameValidator
+from subvoicer.pipeline.speaker.validate import NameValidator, numbered
 from subvoicer.pipeline.text.latin import TWIN_HOMOGLYPHS, TWINS
 
 # "…кто? Джеки: Вылезай." — a name after the end of a sentence starts another speaker's line
@@ -55,6 +55,15 @@ def bracket_name(candidate: str) -> str:
     return name.capitalize() if name.isupper() else name
 
 
+def _time_like(text: str, candidate: str) -> bool:
+    """«Встретимся в 22:30»: a name with a number (TZ 1.41) is followed by a space after its
+    colon, a time is not."""
+    if numbered(candidate) is None:
+        return False
+    after = text.lstrip()[len(candidate) :].lstrip()
+    return after.startswith(":") and not after[1:2].isspace()
+
+
 def _all_twins(word: str) -> bool:
     return all(ch in TWINS for ch in word)
 
@@ -91,7 +100,12 @@ class SpeakerResolver:
                 return SpeakerResult(None, text)
             case SpeakerMode.PREFIX:
                 found = extract_prefix(text, self._pattern)
-                if found is not None and found.rest and self._validator.is_name(found.candidate):
+                if (
+                    found is not None
+                    and found.rest
+                    and self._validator.is_name(found.candidate)
+                    and not _time_like(text, found.candidate)
+                ):
                     return SpeakerResult(found.candidate, found.rest)
                 # rejected candidate: the prefix stays in the text ("Совет: нажмите Q")
                 return SpeakerResult(None, text)

@@ -91,3 +91,19 @@ def test_a_change_keeps_the_page_where_it_was(qt: QApplication, tmp_path) -> Non
         qt.processEvents()
     assert bar.value() == 100
     page.close()
+
+
+def test_the_running_game_is_shown_first(qt: QApplication, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """2026-10-30: the page opened on the first game of the list (Cyberpunk) while RDR2 ran,
+    and the game's own speech settings went to Cyberpunk."""
+    from subvoicer.app.facade import AppFacade, GameStatus
+    from subvoicer.config.paths import AppPaths
+    from subvoicer.ui.settings.profiles import ProfilesPage
+
+    facade = AppFacade(AppPaths(tmp_path))
+    facade.store.save(Profile.model_validate(profile_data(exe="A.exe", title="Альфа")))
+    running = facade.store.save(Profile.model_validate(profile_data(exe="B.exe", title="Бета")))
+    monkeypatch.setattr(facade, "status", lambda: GameStatus(True, profile_path=str(running.path)))
+    page = ProfilesPage(facade, lambda *_: None)
+    page.refresh()  # the page is filled when shown
+    assert page._selected == running.path

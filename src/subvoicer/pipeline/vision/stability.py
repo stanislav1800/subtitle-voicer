@@ -132,6 +132,15 @@ class ZoneStabilizer:
             self._t_last_change = now
         return self._maybe_ocr(mask, now)
 
+    def unsettle(self, mask: Mask, now: float) -> None:
+        """Where the text is has just moved (a plates zone found its plates anew right before
+        reading them, TZ 1.41): the text there is read once it holds for ``stable_ms``. The
+        wait still counts from the first change, so ``max_wait_ms`` bounds it."""
+        self.state = ZoneState.CHANGING
+        self._previous = mask
+        self._t_last_change = now
+        self._growing = False
+
     @property
     def flickered(self) -> bool:
         """The zone was empty only for a moment (shorter than ``flicker_ms``)."""

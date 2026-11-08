@@ -60,6 +60,14 @@ def test_latin_twins_of_a_short_name() -> None:
     assert find_character([Character(name="Том")], "Tim") is None
 
 
+def test_numbered_names_are_different_characters() -> None:
+    """«Житель 3» is one letter off «Житель 2», but another person of the scene (TZ 1.41)."""
+    characters = [Character(name="Житель"), Character(name="Житель 2")]
+    assert find_character(characters, "Житель 3") is None
+    assert find_character(characters, "Житель 2") == 1
+    assert find_character(characters, "Жигель 2") == 1  # a misread letter still matches
+
+
 def test_closest_wins() -> None:
     characters = [Character(name="Мира"), Character(name="Мина")]
     assert find_character(characters, "Мина") == 1

@@ -103,6 +103,21 @@ class PlateSearch:
     recheck_ms: int = 1000
 
 
+def plates_moved(before: Sequence[Plate], after: Sequence[Plate]) -> bool:
+    """Other plates, not the same found again: a plate more or less, or an edge off by more
+    than a quarter of the plate's height (the detector jitters by a few pixels, 2026-10-30
+    RDR2 logs: 2-4 px; a plate grown while fading in: 300+ px)."""
+    if len(before) != len(after):
+        return True
+    old = sorted(p.box for p in before)
+    new = sorted(p.box for p in after)
+    for (x1, y1, x2, y2), box in zip(old, new, strict=True):
+        margin = max(4, (y2 - y1) // 4)
+        if any(abs(a - b) > margin for a, b in zip((x1, y1, x2, y2), box, strict=True)):
+            return True
+    return False
+
+
 @dataclass(frozen=True)
 class ZoneSpec:
     id: str
@@ -374,15 +389,7 @@ class ZoneOcrSource:
             zone.crop = crop(frame.image, spec.rect)
             if spec.plates is not None:
                 self._locate(zone, spec.plates, frame.timestamp)
-                zone.mask = plate_mask(zone.crop, zone.found, spec.plates.settings)
-            else:
-                zone.mask = build_mask(zone.crop, spec.mask)
-            if spec.name is not None and spec.name.rect is None:
-                zone.name_mask = build_mask(zone.crop, spec.name.mask)
-                zone.mask = without(zone.mask, zone.name_mask)
-            # patches of the scene in the text colour are not text changing (TZ 1.37)
-            colour = spec.mask.preset is MaskPreset.COLOR and spec.plates is None
-            zone.watch = letters_only(zone.mask) if colour else zone.mask
+            self._build_masks(zone)
             event_time = frame.timestamp
         else:
             event_time = now  # no new frame: only time passes
@@ -399,7 +406,51 @@ class ZoneOcrSource:
         if isinstance(decision, Emptied) or decision is None:
             return []
         assert isinstance(decision, RunOcr)
+        if spec.plates is not None and self._plates_moved(zone, spec.plates, decision, event_time):
+            return []
         return self._recognize(zone, decision)
+
+    @staticmethod
+    def _build_masks(zone: _ZoneState) -> None:
+        spec = zone.spec
+        assert zone.crop is not None
+        if spec.plates is not None:
+            zone.mask = plate_mask(zone.crop, zone.found, spec.plates.settings)
+        else:
+            zone.mask = build_mask(zone.crop, spec.mask)
+        if spec.name is not None and spec.name.rect is None:
+            zone.name_mask = build_mask(zone.crop, spec.name.mask)
+            zone.mask = without(zone.mask, zone.name_mask)
+        # patches of the scene in the text colour are not text changing (TZ 1.37)
+        colour = spec.mask.preset is MaskPreset.COLOR and spec.plates is None
+        zone.watch = letters_only(zone.mask) if colour else zone.mask
+
+    def _plates_moved(
+        self, zone: _ZoneState, search: PlateSearch, decision: RunOcr, now: float
+    ) -> bool:
+        """Plates looked for again right before they are read (TZ 1.41). The text is watched
+        only inside the plates, found up to ``locate_ms`` ago: a new long line in place of a
+        short one was read through the old plate («оровые молодые женщины просят»), a plate
+        fading in through its first found part. Moved plates: the zone waits for the text in
+        the new ones to hold (up to ``max_wait_ms`` since the change), nothing is read now."""
+        assert zone.crop is not None
+        if zone.located_at == zone.frame_ts:
+            return False  # found on this very frame
+        before = zone.found
+        zone.located_at = zone.frame_ts if zone.frame_ts is not None else now
+        found = locate(zone.crop, search)
+        if not found:
+            return False  # a miss of the detector: the plates of a moment ago are read
+        if not plates_moved(before, found):
+            return False  # the same plates, a few pixels off: read what was watched
+        zone.found, zone.seen_at = found, now
+        self._build_masks(zone)
+        if (now - decision.t_change) * 1000 >= zone.stabilizer.settings.max_wait_ms:
+            return False  # still moving after max_wait_ms: read the plates there are now
+        assert zone.mask is not None
+        zone.stabilizer.unsettle(zone.watch if zone.watch is not None else zone.mask, now)
+        log.debug("Зона %s: подложки сдвинулись %s — жду", zone.spec.id, [p.box for p in found])
+        return True
 
     def _locate(self, zone: _ZoneState, search: PlateSearch, now: float) -> None:
         """Plates again every ``locate_ms``, and sooner when a plate is gone (TZ 4.2.2)."""
@@ -566,6 +617,7 @@ class ZoneOcrSource:
                     lines.append((UtteranceKind.CONTINUATION, zone.speaker, part))
                 else:
                     lines.append((UtteranceKind.NEW, name, part))
+        split = len(lines) > 1  # its lines did not pass the recent check of dedup alone
         kept = [line for line in lines if not on_screen(line[2], previous)]
         for line in lines:
             if line not in kept:
@@ -581,10 +633,14 @@ class ZoneOcrSource:
             # the game split one line in two subtitles: the same voice, right after the first
             log.debug("Зона %s: вторая половина реплики: %r", spec.id, lines[0][2])
             lines[0] = (UtteranceKind.CONTINUATION, zone.speaker, lines[0][2])
+        if split:
+            lines = [line for line in lines if not self._voiced_recently(spec, line, now)]
         utterances = []
         for kind, speaker_name, text in lines:
             if not text or skipped(spec, text):
                 continue
+            said = f"{speaker_name}: {text}" if speaker_name else text
+            self._dedup.note_voiced(said, spec.id, now=now)
             zone.speaker = speaker_name
             zone.voiced, zone.voiced_at = text, now
             utterance_id = next(self._ids)
@@ -613,6 +669,20 @@ class ZoneOcrSource:
                 )
             )
         return utterances
+
+    def _voiced_recently(
+        self, spec: ZoneSpec, line: tuple[UtteranceKind, str | None, str], now: float
+    ) -> bool:
+        kind, name, text = line
+        if kind is not UtteranceKind.NEW:
+            return False
+        said = f"{name}: {text}" if name else text
+        if not self._dedup.voiced_recently(
+            said, spec.id, now=now, repeat_cooldown_min=spec.repeat_cooldown_min
+        ):
+            return False
+        log.debug("Зона %s: не озвучиваю — повтор (recent): %r", spec.id, said)
+        return True
 
     @staticmethod
     def _keep_prefix_name(spec: ZoneSpec, outcome: OcrOutcome, text: str) -> str:

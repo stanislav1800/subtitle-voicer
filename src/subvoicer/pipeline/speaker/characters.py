@@ -45,6 +45,10 @@ def names_of(character: Character) -> list[str]:
     return [character.name, *character.aliases]
 
 
+def _digits(name: str) -> str:
+    return "".join(ch for ch in name if ch.isdigit())
+
+
 def find_character(characters: Sequence[Character], name: str) -> int | None:
     """Index of the character called ``name``: exact (normalised) first, then the same name
     up to spaces and look-alike letters, then the closest name or alias within its allowed
@@ -64,8 +68,8 @@ def find_character(characters: Sequence[Character], name: str) -> int | None:
         for known in names_of(character):
             norm = normalize(known)
             limit = allowed_errors(norm)
-            if limit == 0:
-                continue
+            if limit == 0 or _digits(norm) != _digits(wanted):
+                continue  # «Житель 3» is not a misread «Житель 2» (TZ 1.41)
             distance = Levenshtein.distance(wanted, norm, score_cutoff=limit)
             if distance <= limit and (best is None or distance < best[0]):
                 best = (distance, index)

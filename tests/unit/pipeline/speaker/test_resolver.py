@@ -72,7 +72,21 @@ def test_validator_rules() -> None:
     assert not validator.is_name("Внимание")
     assert not validator.is_name("ВНИМАНИЕ")
     assert not validator.is_name("x" * 31)
-    assert not validator.is_name("Этап 2")
+    assert not validator.is_name("Этап2")  # a number only as a word of its own
+    assert not validator.is_name("В 22 часа")
+
+
+def test_a_name_may_end_with_a_number() -> None:
+    """RDR2 calls people of a scene «Житель 2», «Незнакомец 3» (TZ 1.41)."""
+    validator = NameValidator(["совет"])
+    assert validator.is_name("Житель 2") and validator.is_name("Хозяин гостиницы 12")
+    assert not validator.is_name("Совет 2")  # the name before the number is stop-listed
+    assert not validator.is_name("Житель 1234")
+    prefix = SpeakerResolver(SpeakerMode.PREFIX, speaker_stoplist())
+    result = prefix.resolve("Житель 2: Ну разве можно так разговаривать с леди?")
+    assert result.name == "Житель 2"
+    assert result.text == "Ну разве можно так разговаривать с леди?"
+    assert prefix.resolve("Встретимся в 22:30.").name is None  # a time: no space after «:»
 
 
 def test_stoplist_resource_matches_tz() -> None:

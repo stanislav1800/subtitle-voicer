@@ -209,6 +209,25 @@ class Deduplicator:
         self._remember(state, channel, text, norm, now)
         return DedupResult(DedupKind.NEW, text.strip())
 
+    def voiced_recently(
+        self, text: str, channel: str, *, now: float, repeat_cooldown_min: float
+    ) -> bool:
+        """One line of a reading split into several (TZ 1.41): it was voiced from ``channel``
+        within ``repeat_cooldown_min`` — alone or as a line of an earlier reading. The whole
+        reading passed step 2, its lines did not: RDR2 showed «Билл: Морган, иди сюда…»,
+        then 3 s later again under another line, and it was voiced twice."""
+        state = self._channels.get(channel)
+        if state is None or repeat_cooldown_min <= 0:
+            return False
+        horizon = now - repeat_cooldown_min * 60
+        norm = normalize(text)
+        return any(at >= horizon and self._same(norm, seen) for seen, at in state.voiced_at.items())
+
+    def note_voiced(self, text: str, channel: str, *, now: float) -> None:
+        """A line of a split reading was voiced: ``voiced_recently`` knows it on its own."""
+        state = self._channels.setdefault(channel, _Channel())
+        state.voiced_at[normalize(text)] = now
+
     def _repeats_end(self, tail: str, last: str) -> bool:
         return bool(tail) and len(tail) < len(last) and self._same(tail, last[-len(tail) :])
 

@@ -257,7 +257,10 @@ class ProfilesPage(Page):
     # ------------------------------------------------------------------ games
 
     def refresh(self) -> None:
-        selected = self._selected
+        """Nothing chosen yet: the running game's profile, not the first of the list — the
+        game's own speech settings went to Cyberpunk while RDR2 ran (2026-10-30)."""
+        running = self._facade.status().profile_path
+        selected = self._selected or (Path(running) if running else None)
         self._games.blockSignals(True)
         self._games.clear()
         stored_list = self._facade.profiles()
